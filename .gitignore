@@ -1,0 +1,35 @@
+# Node.js
+node_modules/
+dist/
+build/
+npm-debug.log
+yarn-error.log
+
+# Rust / Tauri
+client/src-tauri/target/
+client/src-tauri/gen/schemas/
+
+# Server (Go)
+server/*.exe
+server/*.test
+server/server
+
+
+# OS & Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Env
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# AI Service
+ai-service/*
+!ai-service/README.md
