@@ -33,3 +33,6 @@ Thumbs.db
 # AI Service
 ai-service/*
 !ai-service/README.md
+
+# Test results
+.test/result/

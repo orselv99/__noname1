@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package index;
+
+option go_package = "server/protos/index";
+
+// 인덱스 서비스 (IndexService) 정의
+// 문서의 벡터화, 저장, 검색 및 동기화를 담당합니다.
+service IndexService {
+  // 문서 업로드 및 인덱싱 (벡터 생성 포함)
+  rpc IndexDocument(IndexDocumentRequest) returns (IndexDocumentResponse);
+  
+  // 문서 검색 (Semantic Search / RAG)
+  rpc SearchDocuments(SearchDocumentsRequest) returns (SearchDocumentsResponse);
+  
+  // 동기화: 클라이언트의 변경 사항(Delta)을 수신하고 충돌을 해결합니다.
+  rpc SyncDocuments(stream SyncRequest) returns (stream SyncResponse);
+}
+
+// 태그와 청크 쌍
+message TagChunk {
+  string tag = 1;
+  string chunk = 2;
+}
+
+// 문서 데이터 구조
+message Document {
+  string id = 1;        // 문서 ID
+  string title = 2;     // 제목
+  string summary = 3;   // 원문 전체 요약
+  repeated TagChunk tag_chunks = 4; // 태그와 청크 목록
+  string owner_id = 5;  // 문서 소유자 ID (필수)
+  int64 updated_at = 6; // 수정 시간
+  string user_salt = 7; // 암호화용 사용자 Salt
+}
+
+// 인덱싱 요청
+message IndexDocumentRequest {
+  Document document = 1;
+}
+
+// 인덱싱 응답
+message IndexDocumentResponse {
+  bool success = 1;
+  string message = 2;
+  string document_id = 3;
+}
+
+// 검색 요청
+message SearchDocumentsRequest {
+  string query = 1;       // 검색어 (자연어)
+  int32 limit = 2;        // 최대 결과 수
+  repeated string tags = 3; // 태그 필터
+  string user_salt = 4; // 암호화용 사용자 Salt
+}
+
+// 검색 결과 항목
+message SearchResult {
+  Document document = 1;
+  float score = 2;        // 유사도 점수
+}
+
+// 검색 응답
+message SearchDocumentsResponse {
+  repeated SearchResult results = 1;
+}
+
+// 동기화 요청
+message SyncRequest {
+  string client_id = 1;
+  repeated Document changes = 2; // 변경된 문서 목록
+}
+
+// 동기화 응답
+message SyncResponse {
+  repeated Document updates = 1; // 서버에서 클라이언트로 보낼 업데이트 (충돌 해결 후)
+  bool success = 2;
+}
