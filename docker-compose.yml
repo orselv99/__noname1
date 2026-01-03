@@ -1,17 +1,105 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: ankane/pgvector:latest # pgvector가 포함된 Postgres 이미지
-    container_name: fiery_postgres
+  gateway:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: /app/gateway
+    ports:
+      - "8080:8080"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: fiery_auth # 초기 DB (Auth용)
+      - PG_HOST=postgres
+      - PG_PORT=5432
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+      - AUTH_SERVICE_ADDR=auth:50051
+      - INDEX_SERVICE_ADDR=index-service:50052
+      - SIGNALING_SERVICE_ADDR=signaling:50053
+    depends_on:
+      - postgres
+      - auth
+      - index-service
+      - signaling
+    networks:
+      - fiery-net
+
+  auth:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: /app/auth
+    ports:
+      # Expose for debugging if needed, otherwise internal
+      - "50051:50051"
+    environment:
+      - DB_DSN=host=postgres user=postgres password=postgres dbname=fiery_auth port=5432 sslmode=disable
+      - JWT_SECRET=your_secret_key_dev
+    depends_on:
+      - postgres
+    networks:
+      - fiery-net
+
+  index-service:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: /app/index-service
+    ports:
+      - "50052:50052"
+    environment:
+      - DB_DSN=host=postgres user=postgres password=postgres dbname=fiery_index port=5432 sslmode=disable
+    depends_on:
+      - postgres
+    networks:
+      - fiery-net
+
+  signaling:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: /app/signaling
+    ports:
+      - "50053:50053"
+    networks:
+      - fiery-net
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1 # Browser Access
+      - API_INTERNAL_URL=http://gateway:8080/api/v1 # SSR Access
+    networks:
+      - fiery-net
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_MULTIPLE_DATABASES=fiery_auth,fiery_index
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./server/docker/init:/docker-entrypoint-initdb.d # For init scripts if any
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - fiery-net
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - fiery-net
 
 volumes:
-  postgres_data:
+  pgdata:
+
+
+networks:
+  fiery-net:
+    driver: bridge

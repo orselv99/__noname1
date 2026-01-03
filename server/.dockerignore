@@ -1,0 +1,6 @@
+bin
+.git
+.DS_Store
+.env*
+Dockerfile
+tmp
