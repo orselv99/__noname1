@@ -1,41 +1,57 @@
-FROM golang:1.25.5-alpine AS builder
+# Builder stage
+FROM golang:alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git gcc musl-dev protobuf-dev
+
+# Install protoc-gen-go and protoc-gen-go-grpc
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+ENV PATH="$PATH:$(go env GOPATH)/bin"
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache git gcc musl-dev
-
 # Copy go mod and sum files
-COPY go.mod go.sum ./
-
-# Download dependencies
+# We accept that context is Root, so we look into server/
+COPY server/go.mod server/go.sum ./
 RUN go mod download
 
-# Copy source code
-COPY . .
+# Copy Proto definitions from Root
+COPY .protos /tmp/protos
+
+# Copy source code (this moves server/* to /app/*)
+# server/.protos (renamed from protos) containing old generated files is also copied
+COPY server .
+
+# Generate Auth Protobufs
+# We strictly use module=server to match the go.mod module name
+# This generates files into .protos/auth/ relative to /app, overwriting old ones
+# We only generate auth because index/signaling source is missing but generated files exist
+RUN protoc --proto_path=/tmp/protos \
+  --go_out=. --go_opt=module=server \
+  --go-grpc_out=. --go-grpc_opt=module=server \
+  /tmp/protos/auth/auth.proto
 
 # Build services
-# Each service specific build command
 RUN go build -o /app/bin/gateway ./gateway
 RUN go build -o /app/bin/auth ./auth
 RUN go build -o /app/bin/index-service ./index
 RUN go build -o /app/bin/signaling ./signaling
 
-# Final Stage
+# Runner stage
 FROM alpine:latest
-
 WORKDIR /app
 
-# Install runtime dependencies (if any)
-RUN apk add --no-cache ca-certificates
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata
 
-# Copy binaries from builder
-COPY --from=builder /app/bin/gateway /app/gateway
-COPY --from=builder /app/bin/auth /app/auth
-COPY --from=builder /app/bin/index-service /app/index-service
-COPY --from=builder /app/bin/signaling /app/signaling
+# Copy binaries
+COPY --from=builder /app/bin/gateway .
+COPY --from=builder /app/bin/auth .
+COPY --from=builder /app/bin/index-service .
+COPY --from=builder /app/bin/signaling .
 
-# Copy any necessary config files or assets? (Maybe .env if hardcoded but handled by docker-compose)
+# Expose ports
+EXPOSE 8080 50051 50052 50053
 
-# Create a startup script (optional, or override CMD in docker-compose)
 CMD ["/app/gateway"]

@@ -1,8 +1,8 @@
 services:
   gateway:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     command: /app/gateway
     ports:
       - "8080:8080"
@@ -24,8 +24,8 @@ services:
 
   auth:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     command: /app/auth
     ports:
       # Expose for debugging if needed, otherwise internal
@@ -40,8 +40,8 @@ services:
 
   index-service:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     command: /app/index-service
     ports:
       - "50052:50052"
@@ -54,8 +54,8 @@ services:
 
   signaling:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     command: /app/signaling
     ports:
       - "50053:50053"
