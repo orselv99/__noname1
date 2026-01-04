@@ -5,7 +5,7 @@ import (
 	"log"
 	"sync"
 
-	pb "server/protos/signaling"
+	pb "server/.protos/signaling"
 
 	"google.golang.org/grpc/metadata"
 )

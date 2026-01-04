@@ -15,11 +15,9 @@ server/*.test
 server/server
 
 
-# OS & Editors
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
+# OS &# Editor directories and files
+# .idea
+# .vscode
 *.swp
 *.swo
 
@@ -31,8 +29,8 @@ Thumbs.db
 .env.production.local
 
 # AI Service
-ai-service/*
-!ai-service/README.md
+client-ai-service/*
+!client-ai-service/README.md
 
 # Test results
 .test/result/

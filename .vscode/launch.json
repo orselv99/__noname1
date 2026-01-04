@@ -1,0 +1,65 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Gateway (Local)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/server/gateway",
+      "cwd": "${workspaceFolder}/server",
+      "env": {
+        "PG_HOST": "localhost",
+        "PG_PORT": "5432",
+        "PG_USER": "postgres",
+        "PG_PASSWORD": "postgres",
+        "AUTH_SERVICE_ADDR": "localhost:50051",
+        "INDEX_SERVICE_ADDR": "localhost:50052",
+        "SIGNALING_SERVICE_ADDR": "localhost:50053"
+      }
+    },
+    {
+      "name": "Debug Auth Service (Local)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/server/auth",
+      "cwd": "${workspaceFolder}/server",
+      "env": {
+        "DB_DSN": "host=localhost user=postgres password=postgres dbname=fiery_auth port=5432 sslmode=disable",
+        "JWT_SECRET": "your_secret_key_dev"
+      }
+    },
+    {
+      "name": "Debug Index Service (Local)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/server/index",
+      "cwd": "${workspaceFolder}/server",
+      "env": {
+        "DB_DSN": "host=localhost user=postgres password=postgres dbname=fiery_index port=5432 sslmode=disable"
+      }
+    },
+    {
+      "name": "Debug Signaling (Local)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/server/signaling",
+      "cwd": "${workspaceFolder}/server"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug All Services (Local)",
+      "configurations": [
+        "Debug Auth Service (Local)",
+        "Debug Index Service (Local)",
+        "Debug Signaling (Local)",
+        "Debug Gateway (Local)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

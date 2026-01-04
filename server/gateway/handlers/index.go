@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	pb "server/protos/index"
+	pb "server/.protos/index"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"

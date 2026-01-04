@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	pb "server/protos/auth"
+	pb "server/.protos/auth"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
@@ -22,29 +22,38 @@ func NewAuthHandler(conn *grpc.ClientConn) *AuthHandler {
 	return &AuthHandler{client: client}
 }
 
-// RegisterRequest는 회원가입 JSON 바디 구조체입니다.
-type RegisterRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
-	Username string `json:"username" binding:"required"`
+// CreateUserRequest는 사용자 생성 JSON 바디 구조체입니다.
+// CreateUserRequest는 사용자 생성 JSON 바디 구조체입니다.
+type CreateUserRequest struct {
+	Email        string `json:"email" binding:"required,email"`
+	Password     string `json:"password" binding:"required,min=6"`
+	Username     string `json:"username" binding:"required"`
+	Role         int32  `json:"role"`          // Enum Value (1: Super, 2: Admin, 3: Viewer, 4: User)
+	DepartmentID string `json:"department_id"` // Optional
 }
 
-// Register는 사용자 회원가입을 처리합니다.
-func (h *AuthHandler) Register(c *gin.Context) {
-	var req RegisterRequest
+// CreateUser는 사용자 생성을 처리합니다.
+func (h *AuthHandler) CreateUser(c *gin.Context) {
+	var req CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	// Tenant Context Extraction
+	tenantID := c.GetHeader("X-Tenant-ID")
+
 	// gRPC 요청 생성 (타임아웃 설정)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	resp, err := h.client.Register(ctx, &pb.RegisterRequest{
-		Email:    req.Email,
-		Password: req.Password,
-		Username: req.Username,
+	resp, err := h.client.CreateUser(ctx, &pb.CreateUserRequest{
+		Email:        req.Email,
+		Password:     req.Password,
+		Username:     req.Username,
+		TenantId:     tenantID,
+		Role:         pb.Role(req.Role), // Enum Mapping
+		DepartmentId: req.DepartmentID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

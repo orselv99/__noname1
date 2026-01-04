@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package signaling;
+
+option go_package = "server/.protos/signaling";
+
+// 시그널링 서비스 (SignalingService) 정의
+// WebRTC 연결을 위한 피어 간 메시지 교환을 담당합니다.
+service SignalingService {
+  // 양방향 스트리밍을 통해 시그널링 메시지를 교환합니다.
+  rpc StreamSignals(stream SignalRequest) returns (stream SignalResponse);
+}
+
+// 시그널링 메시지 유형
+enum SignalType {
+  UNKNOWN = 0;
+  OFFER = 1;     // SDP Offer
+  ANSWER = 2;    // SDP Answer
+  ICE_CANDIDATE = 3; // ICE Candidate
+  JOIN = 4;      // 방 입장 / 피어 연결 요청
+  LEAVE = 5;     // 연결 종료
+}
+
+// 시그널링 요청 메시지
+message SignalRequest {
+  SignalType type = 1;      // 메시지 유형
+  string target_peer_id = 2; // 대상 피어 ID (1:1 통신 시)
+  string sdp = 3;           // SDP 정보 (Offer/Answer 인 경우)
+  string ice_candidate = 4; // ICE Candidate 정보 (JSON string 등)
+}
+
+// 시그널링 응답 메시지 (상대방으로부터 수신)
+message SignalResponse {
+  SignalType type = 1;
+  string source_peer_id = 2; // 보낸 피어 ID
+  string sdp = 3;
+  string ice_candidate = 4;
+}

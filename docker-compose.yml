@@ -28,13 +28,13 @@ services:
       dockerfile: server/Dockerfile
     command: /app/auth
     ports:
-      # Expose for debugging if needed, otherwise internal
       - "50051:50051"
     environment:
       - DB_DSN=host=postgres user=postgres password=postgres dbname=fiery_auth port=5432 sslmode=disable
       - JWT_SECRET=your_secret_key_dev
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - fiery-net
 
@@ -48,7 +48,8 @@ services:
     environment:
       - DB_DSN=host=postgres user=postgres password=postgres dbname=fiery_index port=5432 sslmode=disable
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - fiery-net
 
@@ -80,14 +81,19 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_MULTIPLE_DATABASES=fiery_auth,fiery_index
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./server/docker/init:/docker-entrypoint-initdb.d # For init scripts if any
+      - ./server/docker/init:/docker-entrypoint-initdb.d
     ports:
       - "5432:5432"
     networks:
       - fiery-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d fiery_auth && pg_isready -U postgres -d fiery_index" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   redis:
     image: redis:alpine

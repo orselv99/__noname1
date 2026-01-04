@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	pb "server/protos/auth"
+	pb "server/.protos/auth"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
@@ -24,6 +24,12 @@ func NewAuthMiddleware(conn *grpc.ClientConn) *AuthMiddleware {
 // Handler는 JWT 토큰을 검증하고 UserID를 Context에 설정하는 Gin 미들웨어입니다.
 func (m *AuthMiddleware) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Bypass token check for OPTIONS requests (CORS Preflight)
+		if c.Request.Method == "OPTIONS" {
+			c.Next()
+			return
+		}
+
 		token := ""
 		authHeader := c.GetHeader("Authorization")
 		if authHeader != "" {
@@ -53,10 +59,8 @@ func (m *AuthMiddleware) Handler() gin.HandlerFunc {
 			return
 		}
 
-		// UserID를 Context에 저장 (키: "user_id")
+		// UserID를 Context에 저장
 		c.Set("user_id", resp.UserId)
-
-		// UserSalt를 Context에 저장 (키: "user_salt")
 		if resp.UserSalt != "" {
 			c.Set("user_salt", resp.UserSalt)
 		}

@@ -1,0 +1,172 @@
+{
+  "landing": {
+    "hero": {
+      "title": "Fiery Horizon",
+      "subtitle": "The Distributed AI Knowledge Base \n for Your Enterprise.",
+      "getStarted": "Get Started"
+    },
+    "security": {
+      "title": "Local-First & \nUncompromising Security.",
+      "description": "Your data never leaves your infrastructure unless you want it to. With military-grade HKDF encryption and local vector storage, we ensure your intellectual property remains yours.",
+      "features": [
+        "End-to-End Encryption",
+        "Local Vector Database (SQLite-vec)",
+        "Self-Hosted Options Available"
+      ]
+    },
+    "ai": {
+      "title": "AI That Understands \nYour Context.",
+      "description": "Don't just search keywords. Chat with your documents. Our local LLM integration provides semantic search and intelligent summarization without API costs or privacy leaks.",
+      "features": [
+        "RAG (Retrieval-Augmented Generation)",
+        "Zero-Latency Local Inference"
+      ]
+    },
+    "sync": {
+      "title": "True P2P \nSynchronization.",
+      "description": "Work offline, sync when connected. Our CRDT-based engine ensures your team is always on the same page, even without a central server properly."
+    },
+    "cta": {
+      "title": "Ready to dive in?",
+      "sales": "Contact Sales",
+      "docs": "Read the Docs",
+      "copyright": "© 2026 Fiery Horizon Corp. All rights reserved."
+    }
+  },
+  "admin": {
+    "login": {
+      "title": "Admin Login",
+      "subtitle": "Enter your credentials to access the dashboard",
+      "username": "Username",
+      "password": "Password",
+      "submit": "Sign In",
+      "error": "Invalid credentials"
+    },
+    "sidebar": {
+      "title": "Fiery Admin",
+      "dashboard": "Dashboard",
+      "users": "Users",
+      "departments": "Departments",
+      "accessRequests": "Access Requests",
+      "tenants": "Tenants",
+      "projects": "Projects",
+      "positions": "Positions",
+      "settings": "Settings",
+      "logout": "Logout"
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "welcome": "Welcome back, Admin. Here's what's happening today.",
+      "stats": {
+        "users": "Total Users",
+        "active": "Active Sessions",
+        "storage": "Storage Used",
+        "health": "Server Status"
+      }
+    },
+    "users": {
+      "title": "User Management",
+      "subtitle": "Manage users for tenant: ",
+      "add_user": "Add User",
+      "search_placeholder": "Search users...",
+      "table": {
+        "user": "User",
+        "role": "Role",
+        "created": "Created",
+        "actions": "Actions"
+      },
+      "create": {
+        "title": "Add New User",
+        "email": "Email",
+        "username": "Username",
+        "password": "Password",
+        "role": "Role",
+        "cancel": "Cancel",
+        "submit": "Create",
+        "success": "User created successfully."
+      }
+    },
+    "departments": {
+      "title": "Departments",
+      "subtitle": "Manage your organization's departments and teams.",
+      "add_department": "Add Department",
+      "search_placeholder": "Search departments...",
+      "delete_confirm": "Are you sure you want to delete this department? This cannot be undone.",
+      "delete_error": "Failed to delete department",
+      "table": {
+        "name": "Name",
+        "description": "Description",
+        "created": "Created At",
+        "actions": "Actions"
+      },
+      "visibility": {
+        "level_1": "Hidden",
+        "level_2": "Metadata",
+        "level_3": "Snippet",
+        "level_4": "Public"
+      },
+      "create": {
+        "title": "New Department",
+        "tabs": {
+          "single": "Single Creation",
+          "bulk": "Bulk Import (CSV)"
+        },
+        "name": "Department Name",
+        "parent": "Parent Department",
+        "visibility_level": "Default Visibility Level",
+        "cancel": "Cancel",
+        "submit": "Create Department",
+        "success": "Department created successfully.",
+        "bulk": {
+          "drag_drop": "Drag & Drop CSV file or click to upload",
+          "import_mode": {
+            "title": "Import Mode",
+            "upsert": "Add new only",
+            "upsert_desc": "(Skip existing names)",
+            "replace": "Clear & Replace",
+            "replace_desc": "(Delete all existing)",
+            "warning": "⚠️ Warning: This will delete all existing departments before importing."
+          },
+          "download_template": "Download Template",
+          "preview": "Preview",
+          "submit": "Create Departments",
+          "success": "Successfully imported {count} department(s).",
+          "error": {
+            "empty": "No valid data found in CSV."
+          }
+        }
+      }
+    },
+    "access_requests": {
+      "title": "Access Requests",
+      "subtitle": "Manage document access permissions and requests.",
+      "tabs": {
+        "to_review": "Access Requests",
+        "my_requests": "My Requests",
+        "visibility_approvals": "Visibility Approvals"
+      },
+      "table": {
+        "document": "Document",
+        "requester": "Requester",
+        "approver": "Approver",
+        "requested_level": "Requested Level",
+        "current_level": "Current Level",
+        "owner": "Owner",
+        "level": "Requested Level",
+        "status": "Status",
+        "date": "Date",
+        "actions": "Actions"
+      },
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected"
+      },
+      "level": {
+        "summary": "Summary",
+        "partial": "Partial",
+        "full": "Full"
+      }
+    }
+  }
+}

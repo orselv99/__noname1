@@ -1,0 +1,42 @@
+# Debug Dockerfile - Uses Delve for remote debugging
+FROM golang:alpine
+
+# Install build dependencies and Delve debugger
+RUN apk add --no-cache git gcc musl-dev protobuf-dev
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+ENV PATH="$PATH:$(go env GOPATH)/bin"
+
+WORKDIR /src
+
+# Copy go mod and sum files
+COPY server/go.mod server/go.sum ./
+RUN go mod download
+
+# Copy Proto definitions from Root
+COPY .protos /tmp/protos
+
+# Copy source code to /src (same structure as local)
+COPY server .
+
+# Generate Auth Protobufs
+RUN protoc --proto_path=/tmp/protos \
+  --go_out=. --go_opt=module=server \
+  --go-grpc_out=. --go-grpc_opt=module=server \
+  /tmp/protos/auth/auth.proto
+
+# Build services with debug symbols (no optimization)
+# Output binaries to /bin, source stays in /src
+RUN go build -gcflags="all=-N -l" -o /bin/gateway ./gateway
+RUN go build -gcflags="all=-N -l" -o /bin/auth ./auth
+RUN go build -gcflags="all=-N -l" -o /bin/index-service ./index
+RUN go build -gcflags="all=-N -l" -o /bin/signaling ./signaling
+
+# Expose service ports and debug ports
+EXPOSE 8080 50051 50052 50053 40000 40001 40002 40003
+
+WORKDIR /src
+
+# Default command (will be overridden by docker-compose)
+CMD ["/bin/gateway"]

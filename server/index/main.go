@@ -5,7 +5,7 @@ import (
 	"net"
 	"os"
 
-	pb "server/protos/index"
+	pb "server/.protos/index"
 
 	"google.golang.org/grpc"
 	"gorm.io/driver/postgres"

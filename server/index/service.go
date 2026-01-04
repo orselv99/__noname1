@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	pb "server/.protos/index"
 	"server/common/crypto"
-	pb "server/protos/index"
 
 	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"

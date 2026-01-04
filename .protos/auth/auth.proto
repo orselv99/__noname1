@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package auth;
+
+option go_package = "server/.protos/auth";
+
+import "auth/user.proto";
+import "auth/tenant.proto";
+import "auth/acl.proto";
+import "auth/department.proto";
+import "auth/project.proto";
+import "auth/document.proto";
+
+service AuthService {
+  //
+  // 인증 (Authentication)
+  //
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+
+  //
+  // 사용자 관리 (User Management)
+  //
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc BatchCreateUsers(BatchCreateUsersRequest) returns (BatchCreateUsersResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  
+  //
+  // 테넌트 관리 (Tenant Management)
+  //
+  rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse);
+  rpc GetTenant(GetTenantRequest) returns (GetTenantResponse);
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
+  
+  //
+  // 부서 관리 (Department Management)
+  //
+  rpc CreateDepartment(CreateDepartmentRequest) returns (CreateDepartmentResponse);
+  rpc BatchCreateDepartments(BatchCreateDepartmentsRequest) returns (BatchCreateDepartmentsResponse);
+  rpc ListDepartments(ListDepartmentsRequest) returns (ListDepartmentsResponse);
+  rpc UpdateDepartment(UpdateDepartmentRequest) returns (UpdateDepartmentResponse);
+  rpc DeleteDepartment(DeleteDepartmentRequest) returns (DeleteDepartmentResponse);
+  rpc GetDepartment(GetDepartmentRequest) returns (GetDepartmentResponse);
+  rpc ReorderDepartments(ReorderDepartmentsRequest) returns (ReorderDepartmentsResponse);
+
+  //
+  // 프로젝트 관리 (Project Management)
+  //
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+  rpc BatchCreateProjects(BatchCreateProjectsRequest) returns (BatchCreateProjectsResponse);
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse);
+  rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse);
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
+  rpc ReorderProjects(ReorderProjectsRequest) returns (ReorderProjectsResponse);
+
+  //
+  // ACL - Access Control
+  //
+  rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse);
+  rpc RequestAccess(RequestAccessRequest) returns (RequestAccessResponse);
+  rpc GrantAccess(GrantAccessRequest) returns (GrantAccessResponse);
+  rpc ListAccessRequests(ListAccessRequestsRequest) returns (ListAccessRequestsResponse);
+  
+  // 
+  // Advanced ACL - Visibility & Metadata
+  //
+  rpc CreateDocumentMetadata(CreateDocumentMetadataRequest) returns (CreateDocumentMetadataResponse);
+  rpc UpdateDocumentVisibility(UpdateDocumentVisibilityRequest) returns (UpdateDocumentVisibilityResponse);
+  rpc GetDocumentMetadata(GetDocumentMetadataRequest) returns (GetDocumentMetadataResponse);
+  
+  //
+  // Advanced ACL - Visibility Approval
+  //
+  rpc ListVisibilityApprovals(ListVisibilityApprovalsRequest) returns (ListVisibilityApprovalsResponse);
+  rpc ApproveVisibilityChange(ApproveVisibilityChangeRequest) returns (ApproveVisibilityChangeResponse);
+}
+
+// 로그인 요청
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+// 로그인 응답
+message LoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in = 3;
+  string role = 4; 
+}
+
+// 토큰 검증 요청
+message ValidateTokenRequest {
+  string access_token = 1;
+}
+
+// 토큰 검증 응답
+message ValidateTokenResponse {
+  bool valid = 1;
+  string user_id = 2;
+  string user_salt = 3;
+}
+
+// 리프레시 토큰 요청
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+// 리프레시 토큰 응답
+message RefreshTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+}

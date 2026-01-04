@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	pb "server/protos/signaling"
+	pb "server/.protos/signaling"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"

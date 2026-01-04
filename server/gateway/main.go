@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"server/gateway/handlers"
 	"server/gateway/middleware"
 
@@ -12,22 +13,33 @@ import (
 
 func main() {
 	// AuthService gRPC 연결
-	// 현재는 로컬호스트 50051 포트로 가정
-	authConn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	authAddr := os.Getenv("AUTH_SERVICE_ADDR")
+	if authAddr == "" {
+		authAddr = "localhost:50051"
+	}
+	authConn, err := grpc.NewClient(authAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect to auth service: %v", err)
 	}
 	defer authConn.Close()
 
-	// IndexService gRPC 연결 (50052)
-	indexConn, err := grpc.NewClient("localhost:50052", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// IndexService gRPC 연결
+	indexAddr := os.Getenv("INDEX_SERVICE_ADDR")
+	if indexAddr == "" {
+		indexAddr = "localhost:50052"
+	}
+	indexConn, err := grpc.NewClient(indexAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect to index service: %v", err)
 	}
 	defer indexConn.Close()
 
-	// Signaling Service gRPC 연결 (50053)
-	signalingConn, err := grpc.NewClient("localhost:50053", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// SignalingService gRPC 연결 (50053)
+	signalingAddr := os.Getenv("SIGNALING_SERVICE_ADDR")
+	if signalingAddr == "" {
+		signalingAddr = "localhost:50053"
+	}
+	signalingConn, err := grpc.NewClient(signalingAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect to signaling service: %v", err)
 	}
@@ -36,11 +48,15 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authConn)
 	indexHandler := handlers.NewIndexHandler(indexConn)
 	signalingHandler := handlers.NewSignalingHandler(signalingConn)
+	userHandler := handlers.NewUserHandler(authConn)
+	tenantHandler := handlers.NewTenantHandler(authConn)
+	aclHandler := handlers.NewACLHandler(authConn)
+	deptHandler := handlers.NewDepartmentHandler(authConn)
+	projectHandler := handlers.NewProjectHandler(authConn)
 	authMiddleware := middleware.NewAuthMiddleware(authConn)
 
 	r := gin.Default()
-
-	// CORS 설정 제거됨: Tauri Rust Main Process에서 통신하므로 불필요
+	r.Use(middleware.CORSMiddleware())
 
 	// 헬스 체크 엔드포인트
 	r.GET("/health", func(c *gin.Context) {
@@ -56,9 +72,11 @@ func main() {
 	{
 		auth := api.Group("/auth")
 		{
-			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
 		}
+
+		// Public Tenant Routes
+		api.GET("/tenants/validate", tenantHandler.ValidateTenant)
 
 		protected := api.Group("") // This group will contain authenticated routes
 		protected.Use(authMiddleware.Handler())
@@ -66,6 +84,48 @@ func main() {
 			protected.POST("/docs", indexHandler.IndexDocument)         // POST /api/v1/docs
 			protected.GET("/docs/search", indexHandler.SearchDocuments) // GET /api/v1/docs/search?query=...
 			protected.GET("/ws/signaling", signalingHandler.HandleWebSocket)
+
+			// User Management Routes
+			protected.POST("/users", authHandler.CreateUser)
+			protected.POST("/users/batch", userHandler.BatchCreateUsers)
+			protected.GET("/users", userHandler.ListUsers)
+			protected.PUT("/users/:id", userHandler.UpdateUser)
+			protected.DELETE("/users/:id", userHandler.DeleteUser)
+
+			// Tenant Management Routes (Super Only)
+			protected.POST("/tenants", tenantHandler.CreateTenant)
+			protected.GET("/tenants", tenantHandler.ListTenants)
+			protected.GET("/tenants/:domain", tenantHandler.GetTenant)
+
+			// ACL & Access Requests
+			protected.POST("/access/check", aclHandler.CheckAccess)
+			protected.POST("/access/request", aclHandler.RequestAccess)
+			protected.POST("/access/grant", aclHandler.GrantAccess)
+			protected.GET("/access/requests", aclHandler.ListAccessRequests)
+
+			// Advanced ACL - Visibility & Approvals
+			protected.POST("/documents/metadata", aclHandler.CreateDocumentMetadata)
+			protected.PUT("/documents/visibility", aclHandler.UpdateDocumentVisibility)
+			protected.GET("/access/approvals", aclHandler.ListVisibilityApprovals)
+			protected.POST("/access/approvals/review", aclHandler.ApproveVisibilityChange)
+
+			// Department Routes
+			protected.POST("/departments", deptHandler.CreateDepartment)
+			protected.POST("/departments/batch", deptHandler.BatchCreateDepartments)
+			protected.POST("/departments/reorder", deptHandler.ReorderDepartments)
+			protected.GET("/departments", deptHandler.ListDepartments)
+			protected.PUT("/departments/:id", deptHandler.UpdateDepartment)
+			protected.DELETE("/departments/:id", deptHandler.DeleteDepartment)
+			protected.GET("/departments/:id", deptHandler.GetDepartment)
+
+			// Project Routes
+			protected.POST("/projects", projectHandler.CreateProject)
+			protected.POST("/projects/batch", projectHandler.BatchCreateProjects)
+			protected.POST("/projects/reorder", projectHandler.ReorderProjects)
+			protected.GET("/projects", projectHandler.ListProjects)
+			protected.PUT("/projects/:id", projectHandler.UpdateProject)
+			protected.DELETE("/projects/:id", projectHandler.DeleteProject)
+			protected.GET("/projects/:id", projectHandler.GetProject)
 		}
 	}
 

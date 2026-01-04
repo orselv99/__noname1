@@ -5,7 +5,7 @@ import (
 	"net"
 	"os"
 
-	pb "server/protos/auth"
+	pb "server/.protos/auth"
 
 	"google.golang.org/grpc"
 	"gorm.io/driver/postgres"
@@ -27,8 +27,20 @@ func main() {
 	}
 
 	// Auto Migration
-	if err := db.AutoMigrate(&User{}); err != nil {
+	// Database Migration
+	if err := db.AutoMigrate(
+		&User{}, &Subscription{}, &Tenant{},
+		&Department{},
+		&Project{},
+		&Permission{}, &AccessRequest{}, // Legacy ACL
+		&DocumentMetadata{}, &VisibilityApproval{}, // Advanced ACL
+	); err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
+	}
+
+	// Seed Super Users
+	if err := seedSuperUsers(db); err != nil {
+		log.Printf("failed to seed super users: %v", err)
 	}
 
 	// gRPC 서버 시작
