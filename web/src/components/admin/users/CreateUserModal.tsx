@@ -352,15 +352,6 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
           if (found) deptId = found.id;
         }
 
-        // Lookup Position ID by Name
-        const posName = row.position || row.Position;
-        let posId = row.position_id || row.PositionId || '';
-
-        if (!posId && posName) {
-          const foundPos = positions.find(p => p.name.toLowerCase() === posName.toLowerCase());
-          if (foundPos) posId = foundPos.id;
-        }
-
         return {
           email: email,
           username: row.username || row.Username || email.split('@')[0],
@@ -371,7 +362,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
           phone_numbers: row.phone_numbers
             ? row.phone_numbers.split(/[|;,\s]+/).map((p: string) => p.trim()).filter(Boolean)
             : (row.phone || row.Phone ? [row.phone || row.Phone] : []),
-          position_id: posId
+          position_id: '' // Not requested in CSV headers, default empty
         };
       }).filter(Boolean);
 

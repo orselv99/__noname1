@@ -29,6 +29,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import CreateProjectModal from '@/components/admin/projects/CreateProjectModal';
 import EditProjectModal from '@/components/admin/projects/EditProjectModal';
+import AddButton from '@/components/admin/ui/AddButton';
+import TitleLabel from '@/components/admin/ui/TitleLabel';
 
 interface Project {
   id: string;
@@ -244,22 +246,12 @@ export default function ProjectsPage() {
   return (
     <div className="h-full flex flex-col gap-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-2xl font-bold bg-linear-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text">
-            {t.admin.sidebar.projects || 'Projects'}
-          </h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Manage your organization's projects.
-          </p>
-        </div>
-        <button
+      <div className="flex items-center justify-between shrink-0">
+        <TitleLabel title={t.admin.sidebar.projects || 'Projects'} subtitle={'Manage your organization\'s projects.'} />
+        <AddButton
           onClick={() => setIsCreateModalOpen(true)}
-          className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium text-sm"
-        >
-          <Plus size={18} />
-          Add Project
-        </button>
+        // label={t.admin.departments.add_department}
+        />
       </div>
 
       {/* Toolbar */}

@@ -83,7 +83,7 @@ func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.L
 		limit = 100
 	} // Default limit
 
-	result := query.Offset(int(offset)).Limit(limit).Find(&users)
+	result := query.Select("users.*").Offset(int(offset)).Limit(limit).Find(&users)
 	if result.Error != nil {
 		return nil, status.Errorf(codes.Internal, "failed to fetch users: %v", result.Error)
 	}

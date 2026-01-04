@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useLanguage } from '@/context/LanguageContext';
-import { Users, Search, UserPlus, MoreVertical, Trash2, Edit, Plus, ChevronUp, ChevronDown, Check } from 'lucide-react';
+import { Users, Search, UserPlus, MoreVertical, Trash2, Edit, Plus, ChevronUp, ChevronDown, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import CreateUserModal from '@/components/admin/users/CreateUserModal';
 import EditUserModal from '@/components/admin/users/EditUserModal';
 import OrganizationSidebar from '@/components/admin/users/OrganizationSidebar';
@@ -57,7 +58,7 @@ function buildTree(departments: Department[]): Department[] {
   return roots;
 }
 
-const PositionCell = ({
+const PositionBadge = ({
   user,
   positions,
   tenantId,
@@ -70,18 +71,58 @@ const PositionCell = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+
+  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownContentRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
+  const toggleDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isOpen && dropdownTriggerRef.current) {
+      const rect = dropdownTriggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const height = 200; // Expected max height
+      const openUpwards = spaceBelow < height;
+
+      setDropdownPosition({
+        top: openUpwards ? rect.top - height - 45 : rect.bottom + 4,
+        left: rect.left,
+      });
+    }
+    setIsOpen(!isOpen);
+  };
+
+  // Close dropdown on scroll
+  useEffect(() => {
+    if (isOpen) {
+      const handleScroll = (event: Event) => {
+        if (dropdownContentRef.current && dropdownContentRef.current.contains(event.target as Node)) {
+          return;
+        }
+        setIsOpen(false);
+      };
+      window.addEventListener('scroll', handleScroll, true);
+      return () => window.removeEventListener('scroll', handleScroll, true);
+    }
+  }, [isOpen]);
+
+  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        dropdownTriggerRef.current && !dropdownTriggerRef.current.contains(target) &&
+        dropdownContentRef.current && !dropdownContentRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   const handleUpdate = async (positionId: string) => {
     if (positionId === user.position_id) {
@@ -91,7 +132,7 @@ const PositionCell = ({
 
     setIsUpdating(true);
     try {
-      const response = await fetch('/api/v1/users', {
+      const response = await fetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -99,8 +140,7 @@ const PositionCell = ({
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
         body: JSON.stringify({
-          id: user.id,
-          positionId: positionId,
+          position_id: positionId,
         }),
       });
 
@@ -118,9 +158,10 @@ const PositionCell = ({
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={dropdownTriggerRef}
+        onClick={toggleDropdown}
         disabled={isUpdating}
         className={`text-sm px-2 py-1 rounded flex items-center gap-1.5 transition-colors bg-zinc-800 text-gray-300 hover:bg-zinc-700 hover:text-white cursor-pointer 
         ${isUpdating ? 'opacity-50 cursor-wait' : ''}`}
@@ -129,8 +170,18 @@ const PositionCell = ({
         <ChevronDown size={10} className="opacity-50" />
       </button>
 
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto">
+      {isOpen && createPortal(
+        <div
+          ref={dropdownContentRef}
+          style={{
+            position: 'fixed',
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            width: '192px', // w-48
+            zIndex: 99999,
+          }}
+          className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-y-auto max-h-60"
+        >
           {positions.length === 0 ? (
             <div className="px-3 py-2 text-xs text-gray-500">No positions found</div>
           ) : (
@@ -145,9 +196,10 @@ const PositionCell = ({
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 };
 
@@ -188,7 +240,7 @@ const DepartmentTreeItem = ({
   );
 };
 
-const DepartmentCell = ({
+const DepartmentBadge = ({
   user,
   departments,
   tenantId,
@@ -201,18 +253,58 @@ const DepartmentCell = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+
+  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownContentRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
+  const toggleDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isOpen && dropdownTriggerRef.current) {
+      const rect = dropdownTriggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const height = 300;
+      const openUpwards = spaceBelow < height;
+
+      setDropdownPosition({
+        top: openUpwards ? rect.top - height - 25 : rect.bottom + 4,
+        left: rect.left,
+      });
+    }
+    setIsOpen(!isOpen);
+  };
+
+  // Close dropdown on scroll
+  useEffect(() => {
+    if (isOpen) {
+      const handleScroll = (event: Event) => {
+        if (dropdownContentRef.current && dropdownContentRef.current.contains(event.target as Node)) {
+          return;
+        }
+        setIsOpen(false);
+      };
+      window.addEventListener('scroll', handleScroll, true);
+      return () => window.removeEventListener('scroll', handleScroll, true);
+    }
+  }, [isOpen]);
+
+  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        dropdownTriggerRef.current && !dropdownTriggerRef.current.contains(target) &&
+        dropdownContentRef.current && !dropdownContentRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   const handleUpdate = async (deptId: string) => {
     if (deptId === user.department_id) {
@@ -222,7 +314,7 @@ const DepartmentCell = ({
 
     setIsUpdating(true);
     try {
-      const response = await fetch('/api/v1/users', {
+      const response = await fetch(`/api/v1/users/${user.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -230,8 +322,7 @@ const DepartmentCell = ({
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
         body: JSON.stringify({
-          id: user.id,
-          departmentId: deptId,
+          department_id: deptId,
         }),
       });
 
@@ -251,9 +342,10 @@ const DepartmentCell = ({
   const tree = buildTree(departments);
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={dropdownTriggerRef}
+        onClick={toggleDropdown}
         disabled={isUpdating}
         className={`text-sm px-2 py-1 rounded flex items-center gap-1.5 transition-colors cursor-pointer 
         ${user.department_name
@@ -265,8 +357,18 @@ const DepartmentCell = ({
         <ChevronDown size={10} className="opacity-50" />
       </button>
 
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-64 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto custom-scrollbar">
+      {isOpen && createPortal(
+        <div
+          ref={dropdownContentRef}
+          style={{
+            position: 'fixed',
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            width: '256px',
+            zIndex: 99999,
+          }}
+          className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-y-auto custom-scrollbar max-h-80"
+        >
           {departments.length === 0 ? (
             <div className="px-3 py-2 text-xs text-gray-500">No departments found</div>
           ) : (
@@ -279,9 +381,10 @@ const DepartmentCell = ({
               />
             ))
           )}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 };
 
@@ -294,6 +397,11 @@ export default function UsersPage() {
   const [tenantId, setTenantId] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortDesc, setSortDesc] = useState(true);
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -312,7 +420,7 @@ export default function UsersPage() {
     // Ignore non-tenant domains or special dev domains if needed
     if (subdomain !== 'localhost' && subdomain !== 'lvh' && subdomain !== 'www') {
       setTenantId(subdomain);
-      fetchUsers(subdomain);
+      fetchUsers(subdomain, 1); // Fetch page 1 on mount
       fetchPositions(subdomain);
       fetchDepartments(subdomain);
     } else {
@@ -320,11 +428,13 @@ export default function UsersPage() {
     }
   }, []);
 
-  const fetchUsers = async (tid: string, sort = sortBy, desc = sortDesc) => {
+  const fetchUsers = async (tid: string, pageNum = page, sort = sortBy, desc = sortDesc) => {
     try {
       const searchParams = new URLSearchParams();
       if (sort) searchParams.set('sort_by', sort);
       if (desc !== undefined) searchParams.set('sort_desc', desc.toString());
+      searchParams.set('page', pageNum.toString());
+      searchParams.set('page_size', pageSize.toString());
 
       const res = await fetch(`/api/v1/users?${searchParams.toString()}`, {
         headers: {
@@ -335,6 +445,8 @@ export default function UsersPage() {
       if (res.ok) {
         const data = await res.json();
         setUsers(data.users || []);
+        setTotalCount(data.total_count || 0);
+        setPage(pageNum);
       }
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -386,7 +498,7 @@ export default function UsersPage() {
     }
     setSortBy(column);
     setSortDesc(newDesc);
-    fetchUsers(tenantId, column, newDesc);
+    fetchUsers(tenantId, 1, column, newDesc); // Reset to page 1 on sort
   };
 
   const handleEditClick = (user: User) => {
@@ -428,7 +540,7 @@ export default function UsersPage() {
           <TitleLabel title={t.admin.users.title} subtitle={t.admin.users.subtitle} />
           <AddButton
             onClick={() => setIsCreateModalOpen(true)}
-            label={t.admin.users.add_user}
+          // label={t.admin.users.add_user}
           />
         </div>
 
@@ -452,9 +564,11 @@ export default function UsersPage() {
             <table className="w-full text-left text-gray-400">
               <thead className="bg-zinc-900/50 sticky top-0 z-10 backdrop-blur-sm">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[30%]">
+                    User
+                  </th>
                   <th
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-white transition-colors select-none"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-white transition-colors select-none w-[25%]"
                     onClick={() => handleSort('position')}
                   >
                     <div className="flex items-center gap-1">
@@ -467,7 +581,7 @@ export default function UsersPage() {
                     </div>
                   </th>
                   <th
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-white transition-colors select-none"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-white transition-colors select-none w-[30%]"
                     onClick={() => handleSort('department')}
                   >
                     <div className="flex items-center gap-1">
@@ -479,7 +593,7 @@ export default function UsersPage() {
                       )}
                     </div>
                   </th>
-                  <th></th>
+                  <th className="w-[15%]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
@@ -514,7 +628,7 @@ export default function UsersPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <PositionCell
+                        <PositionBadge
                           user={user}
                           positions={positions}
                           tenantId={tenantId}
@@ -522,7 +636,7 @@ export default function UsersPage() {
                         />
                       </td>
                       <td className="px-6 py-4">
-                        <DepartmentCell
+                        <DepartmentBadge
                           user={user}
                           departments={departments}
                           tenantId={tenantId}
@@ -548,6 +662,32 @@ export default function UsersPage() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="px-6 py-4 border-t border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+            <div className="text-sm text-gray-400">
+              Showing {Math.min((page - 1) * pageSize + 1, totalCount)} to {Math.min(page * pageSize, totalCount)} of {totalCount} users
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => fetchUsers(tenantId, page - 1)}
+                disabled={page === 1}
+                className="p-1 rounded hover:bg-zinc-800 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div className="text-sm text-gray-300 font-medium px-2">
+                Page {page} of {Math.max(1, Math.ceil(totalCount / pageSize))}
+              </div>
+              <button
+                onClick={() => fetchUsers(tenantId, page + 1)}
+                disabled={page * pageSize >= totalCount}
+                className="p-1 rounded hover:bg-zinc-800 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
           </div>
         </div>
       </div>

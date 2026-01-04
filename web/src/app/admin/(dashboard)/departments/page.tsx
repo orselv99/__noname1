@@ -563,7 +563,7 @@ export default function DepartmentsPage() {
         <TitleLabel title={t.admin.departments.title} subtitle={t.admin.departments.subtitle} />
         <AddButton
           onClick={() => setIsCreateModalOpen(true)}
-          label={t.admin.departments.add_department}
+        // label={t.admin.departments.add_department}
         />
       </div>
 

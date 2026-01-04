@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	pb "server/.protos/auth"
 
@@ -21,9 +22,21 @@ func main() {
 		log.Println("DB_DSN not set, using default for local development. Please ensure Postgres contains this DB/User.")
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	var db *gorm.DB
+	var err error
+
+	// Retry connection loop
+	for i := 0; i < 30; i++ {
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err == nil {
+			break
+		}
+		log.Printf("failed to connect database (attempt %d/30): %v", i+1, err)
+		time.Sleep(1 * time.Second)
+	}
+
 	if err != nil {
-		log.Fatalf("failed to connect database: %v", err)
+		log.Fatalf("failed to connect database after retries: %v", err)
 	}
 
 	// Auto Migration

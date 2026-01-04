@@ -239,14 +239,14 @@ export default function PositionsPage() {
   return (
     <div className="h-full flex flex-col gap-6">
       {/* Header */}
-      <div className="flex justify-between items-end shrink-0">
+      <div className="flex items-center justify-between shrink-0">
         <TitleLabel
           title={t.admin.settings.positions.position.title}
           subtitle={t.admin.settings.positions.position.description}
         />
         <AddButton
           onClick={handleCreate}
-          label={t.admin.settings.positions.position.add_button}
+        // label={t.admin.settings.positions.position.add_button}
         />
       </div>
 

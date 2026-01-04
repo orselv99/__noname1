@@ -11,6 +11,8 @@ import {
   Eye,
   Lock
 } from 'lucide-react';
+import AddButton from '@/components/admin/ui/AddButton';
+import TitleLabel from '@/components/admin/ui/TitleLabel';
 
 interface DocumentMetadata {
   id: string;
@@ -33,22 +35,13 @@ export default function DocumentsPage() {
   return (
     <div className="h-full flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text">
-            Documents
-          </h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Manage knowledge base documents and visibility.
-          </p>
-        </div>
-        <button
-          className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
-          onClick={() => alert('Create Document Modal - To Be Implemented')}
-        >
-          <Plus size={18} />
-          Create Document
-        </button>
+      <div className="h-14 flex items-center justify-between shrink-0">
+        <TitleLabel title={'Documents'} subtitle={'Manage knowledge base documents and visibility.'} />
+        <AddButton
+          onClick={() => { }}
+        // onClick={() => setIsCreateModalOpen(true)}
+        // label={t.admin.departments.add_department}
+        />
       </div>
 
       {/* Content */}
