@@ -10,6 +10,7 @@ import "auth/acl.proto";
 import "auth/department.proto";
 import "auth/project.proto";
 import "auth/document.proto";
+import "auth/position.proto";
 
 service AuthService {
   //
@@ -57,6 +58,19 @@ service AuthService {
   rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse);
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
   rpc ReorderProjects(ReorderProjectsRequest) returns (ReorderProjectsResponse);
+
+  //
+  // Position & Job Management
+  //
+  rpc CreatePosition(CreatePositionRequest) returns (CreatePositionResponse);
+  rpc ListPositions(ListPositionsRequest) returns (ListPositionsResponse);
+  rpc UpdatePosition(UpdatePositionRequest) returns (UpdatePositionResponse);
+  rpc DeletePosition(DeletePositionRequest) returns (DeletePositionResponse);
+  rpc ReorderPositions(ReorderPositionsRequest) returns (ReorderPositionsResponse);
+  rpc BatchCreatePositions(BatchCreatePositionsRequest) returns (BatchCreatePositionsResponse);
+
+
+
 
   //
   // ACL - Access Control

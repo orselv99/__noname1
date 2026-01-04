@@ -78,24 +78,23 @@ func (Role) EnumDescriptor() ([]byte, []int) {
 }
 
 type User struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	Username      string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
-	TenantId      string                 `protobuf:"bytes,4,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	Role          Role                   `protobuf:"varint,5,opt,name=role,proto3,enum=auth.Role" json:"role,omitempty"`
-	DepartmentId  string                 `protobuf:"bytes,6,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     string                 `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Contact       string                 `protobuf:"bytes,9,opt,name=contact,proto3" json:"contact,omitempty"` // Deprecated or mapped to phone_numbers? Let's use new fields.
-	FirstName     string                 `protobuf:"bytes,10,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"`
-	LastName      string                 `protobuf:"bytes,11,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
-	Birthday      string                 `protobuf:"bytes,12,opt,name=birthday,proto3" json:"birthday,omitempty"`
-	PhoneNumbers  []string               `protobuf:"bytes,13,rep,name=phone_numbers,json=phoneNumbers,proto3" json:"phone_numbers,omitempty"`
-	Position      string                 `protobuf:"bytes,14,opt,name=position,proto3" json:"position,omitempty"`
-	Memo          string                 `protobuf:"bytes,15,opt,name=memo,proto3" json:"memo,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Email          string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Username       string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	TenantId       string                 `protobuf:"bytes,4,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Role           Role                   `protobuf:"varint,5,opt,name=role,proto3,enum=auth.Role" json:"role,omitempty"`
+	DepartmentId   string                 `protobuf:"bytes,6,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"`
+	CreatedAt      string                 `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt      string                 `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Contact        string                 `protobuf:"bytes,9,opt,name=contact,proto3" json:"contact,omitempty"`
+	Birthday       string                 `protobuf:"bytes,12,opt,name=birthday,proto3" json:"birthday,omitempty"`
+	PhoneNumbers   []string               `protobuf:"bytes,13,rep,name=phone_numbers,json=phoneNumbers,proto3" json:"phone_numbers,omitempty"`
+	PositionId     string                 `protobuf:"bytes,14,opt,name=position_id,json=positionId,proto3" json:"position_id,omitempty"`
+	PositionName   string                 `protobuf:"bytes,16,opt,name=position_name,json=positionName,proto3" json:"position_name,omitempty"`
+	DepartmentName string                 `protobuf:"bytes,17,opt,name=department_name,json=departmentName,proto3" json:"department_name,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *User) Reset() {
@@ -191,20 +190,6 @@ func (x *User) GetContact() string {
 	return ""
 }
 
-func (x *User) GetFirstName() string {
-	if x != nil {
-		return x.FirstName
-	}
-	return ""
-}
-
-func (x *User) GetLastName() string {
-	if x != nil {
-		return x.LastName
-	}
-	return ""
-}
-
 func (x *User) GetBirthday() string {
 	if x != nil {
 		return x.Birthday
@@ -219,16 +204,23 @@ func (x *User) GetPhoneNumbers() []string {
 	return nil
 }
 
-func (x *User) GetPosition() string {
+func (x *User) GetPositionId() string {
 	if x != nil {
-		return x.Position
+		return x.PositionId
 	}
 	return ""
 }
 
-func (x *User) GetMemo() string {
+func (x *User) GetPositionName() string {
 	if x != nil {
-		return x.Memo
+		return x.PositionName
+	}
+	return ""
+}
+
+func (x *User) GetDepartmentName() string {
+	if x != nil {
+		return x.DepartmentName
 	}
 	return ""
 }
@@ -238,16 +230,13 @@ type CreateUserRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
 	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	Username      string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"` // Optional/Auto-generated
+	Username      string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
 	TenantId      string                 `protobuf:"bytes,4,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	Role          Role                   `protobuf:"varint,5,opt,name=role,proto3,enum=auth.Role" json:"role,omitempty"`
 	DepartmentId  string                 `protobuf:"bytes,6,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"`
-	FirstName     string                 `protobuf:"bytes,7,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"`
-	LastName      string                 `protobuf:"bytes,8,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
 	Birthday      string                 `protobuf:"bytes,9,opt,name=birthday,proto3" json:"birthday,omitempty"`
 	PhoneNumbers  []string               `protobuf:"bytes,10,rep,name=phone_numbers,json=phoneNumbers,proto3" json:"phone_numbers,omitempty"`
-	Position      string                 `protobuf:"bytes,11,opt,name=position,proto3" json:"position,omitempty"`
-	Memo          string                 `protobuf:"bytes,12,opt,name=memo,proto3" json:"memo,omitempty"`
+	PositionId    string                 `protobuf:"bytes,11,opt,name=position_id,json=positionId,proto3" json:"position_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -324,20 +313,6 @@ func (x *CreateUserRequest) GetDepartmentId() string {
 	return ""
 }
 
-func (x *CreateUserRequest) GetFirstName() string {
-	if x != nil {
-		return x.FirstName
-	}
-	return ""
-}
-
-func (x *CreateUserRequest) GetLastName() string {
-	if x != nil {
-		return x.LastName
-	}
-	return ""
-}
-
 func (x *CreateUserRequest) GetBirthday() string {
 	if x != nil {
 		return x.Birthday
@@ -352,16 +327,9 @@ func (x *CreateUserRequest) GetPhoneNumbers() []string {
 	return nil
 }
 
-func (x *CreateUserRequest) GetPosition() string {
+func (x *CreateUserRequest) GetPositionId() string {
 	if x != nil {
-		return x.Position
-	}
-	return ""
-}
-
-func (x *CreateUserRequest) GetMemo() string {
-	if x != nil {
-		return x.Memo
+		return x.PositionId
 	}
 	return ""
 }
@@ -373,12 +341,10 @@ type CreateUserRequestItem struct {
 	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	Role          Role                   `protobuf:"varint,3,opt,name=role,proto3,enum=auth.Role" json:"role,omitempty"`
 	DepartmentId  string                 `protobuf:"bytes,4,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"`
-	FirstName     string                 `protobuf:"bytes,5,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"`
-	LastName      string                 `protobuf:"bytes,6,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
 	Birthday      string                 `protobuf:"bytes,7,opt,name=birthday,proto3" json:"birthday,omitempty"`
 	PhoneNumbers  []string               `protobuf:"bytes,8,rep,name=phone_numbers,json=phoneNumbers,proto3" json:"phone_numbers,omitempty"`
-	Position      string                 `protobuf:"bytes,9,opt,name=position,proto3" json:"position,omitempty"`
-	Memo          string                 `protobuf:"bytes,10,opt,name=memo,proto3" json:"memo,omitempty"`
+	PositionId    string                 `protobuf:"bytes,9,opt,name=position_id,json=positionId,proto3" json:"position_id,omitempty"`
+	Password      string                 `protobuf:"bytes,11,opt,name=password,proto3" json:"password,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -441,20 +407,6 @@ func (x *CreateUserRequestItem) GetDepartmentId() string {
 	return ""
 }
 
-func (x *CreateUserRequestItem) GetFirstName() string {
-	if x != nil {
-		return x.FirstName
-	}
-	return ""
-}
-
-func (x *CreateUserRequestItem) GetLastName() string {
-	if x != nil {
-		return x.LastName
-	}
-	return ""
-}
-
 func (x *CreateUserRequestItem) GetBirthday() string {
 	if x != nil {
 		return x.Birthday
@@ -469,16 +421,16 @@ func (x *CreateUserRequestItem) GetPhoneNumbers() []string {
 	return nil
 }
 
-func (x *CreateUserRequestItem) GetPosition() string {
+func (x *CreateUserRequestItem) GetPositionId() string {
 	if x != nil {
-		return x.Position
+		return x.PositionId
 	}
 	return ""
 }
 
-func (x *CreateUserRequestItem) GetMemo() string {
+func (x *CreateUserRequestItem) GetPassword() string {
 	if x != nil {
-		return x.Memo
+		return x.Password
 	}
 	return ""
 }
@@ -531,6 +483,7 @@ type BatchCreateUsersRequest struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
 	TenantId      string                   `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	Requests      []*CreateUserRequestItem `protobuf:"bytes,2,rep,name=requests,proto3" json:"requests,omitempty"`
+	ImportMode    string                   `protobuf:"bytes,3,opt,name=import_mode,json=importMode,proto3" json:"import_mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -577,6 +530,13 @@ func (x *BatchCreateUsersRequest) GetRequests() []*CreateUserRequestItem {
 		return x.Requests
 	}
 	return nil
+}
+
+func (x *BatchCreateUsersRequest) GetImportMode() string {
+	if x != nil {
+		return x.ImportMode
+	}
+	return ""
 }
 
 type BatchCreateUsersResponse struct {
@@ -741,6 +701,8 @@ type ListUsersRequest struct {
 	Page          int32                  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
 	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	Query         string                 `protobuf:"bytes,4,opt,name=query,proto3" json:"query,omitempty"`
+	SortBy        string                 `protobuf:"bytes,5,opt,name=sort_by,json=sortBy,proto3" json:"sort_by,omitempty"`
+	SortDesc      bool                   `protobuf:"varint,6,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -803,6 +765,20 @@ func (x *ListUsersRequest) GetQuery() string {
 	return ""
 }
 
+func (x *ListUsersRequest) GetSortBy() string {
+	if x != nil {
+		return x.SortBy
+	}
+	return ""
+}
+
+func (x *ListUsersRequest) GetSortDesc() bool {
+	if x != nil {
+		return x.SortDesc
+	}
+	return false
+}
+
 type ListUsersResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Users         []*User                `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
@@ -863,12 +839,9 @@ type UpdateUserRequest struct {
 	Role          Role                   `protobuf:"varint,3,opt,name=role,proto3,enum=auth.Role" json:"role,omitempty"`
 	TenantId      string                 `protobuf:"bytes,4,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	DepartmentId  string                 `protobuf:"bytes,5,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"`
-	FirstName     string                 `protobuf:"bytes,6,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"`
-	LastName      string                 `protobuf:"bytes,7,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
 	Birthday      string                 `protobuf:"bytes,8,opt,name=birthday,proto3" json:"birthday,omitempty"`
 	PhoneNumbers  []string               `protobuf:"bytes,9,rep,name=phone_numbers,json=phoneNumbers,proto3" json:"phone_numbers,omitempty"`
-	Position      string                 `protobuf:"bytes,10,opt,name=position,proto3" json:"position,omitempty"`
-	Memo          string                 `protobuf:"bytes,11,opt,name=memo,proto3" json:"memo,omitempty"`
+	PositionId    string                 `protobuf:"bytes,10,opt,name=position_id,json=positionId,proto3" json:"position_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -938,20 +911,6 @@ func (x *UpdateUserRequest) GetDepartmentId() string {
 	return ""
 }
 
-func (x *UpdateUserRequest) GetFirstName() string {
-	if x != nil {
-		return x.FirstName
-	}
-	return ""
-}
-
-func (x *UpdateUserRequest) GetLastName() string {
-	if x != nil {
-		return x.LastName
-	}
-	return ""
-}
-
 func (x *UpdateUserRequest) GetBirthday() string {
 	if x != nil {
 		return x.Birthday
@@ -966,16 +925,9 @@ func (x *UpdateUserRequest) GetPhoneNumbers() []string {
 	return nil
 }
 
-func (x *UpdateUserRequest) GetPosition() string {
+func (x *UpdateUserRequest) GetPositionId() string {
 	if x != nil {
-		return x.Position
-	}
-	return ""
-}
-
-func (x *UpdateUserRequest) GetMemo() string {
-	if x != nil {
-		return x.Memo
+		return x.PositionId
 	}
 	return ""
 }
@@ -1029,7 +981,7 @@ func (x *UpdateUserResponse) GetUser() *User {
 type DeleteUserRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	TenantId      string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"` // 검증용
+	TenantId      string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1127,7 +1079,7 @@ var File_auth_user_proto protoreflect.FileDescriptor
 
 const file_auth_user_proto_rawDesc = "" +
 	"\n" +
-	"\x0fauth/user.proto\x12\x04auth\"\xaf\x03\n" +
+	"\x0fauth/user.proto\x12\x04auth\"\xb2\x03\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x1a\n" +
@@ -1140,15 +1092,13 @@ const file_auth_user_proto_rawDesc = "" +
 	"created_at\x18\a \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"updated_at\x18\b \x01(\tR\tupdatedAt\x12\x18\n" +
-	"\acontact\x18\t \x01(\tR\acontact\x12\x1d\n" +
-	"\n" +
-	"first_name\x18\n" +
-	" \x01(\tR\tfirstName\x12\x1b\n" +
-	"\tlast_name\x18\v \x01(\tR\blastName\x12\x1a\n" +
+	"\acontact\x18\t \x01(\tR\acontact\x12\x1a\n" +
 	"\bbirthday\x18\f \x01(\tR\bbirthday\x12#\n" +
-	"\rphone_numbers\x18\r \x03(\tR\fphoneNumbers\x12\x1a\n" +
-	"\bposition\x18\x0e \x01(\tR\bposition\x12\x12\n" +
-	"\x04memo\x18\x0f \x01(\tR\x04memo\"\xf0\x02\n" +
+	"\rphone_numbers\x18\r \x03(\tR\fphoneNumbers\x12\x1f\n" +
+	"\vposition_id\x18\x0e \x01(\tR\n" +
+	"positionId\x12#\n" +
+	"\rposition_name\x18\x10 \x01(\tR\fpositionName\x12'\n" +
+	"\x0fdepartment_name\x18\x11 \x01(\tR\x0edepartmentName\"\xa5\x02\n" +
 	"\x11CreateUserRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x1a\n" +
@@ -1156,35 +1106,31 @@ const file_auth_user_proto_rawDesc = "" +
 	"\ttenant_id\x18\x04 \x01(\tR\btenantId\x12\x1e\n" +
 	"\x04role\x18\x05 \x01(\x0e2\n" +
 	".auth.RoleR\x04role\x12#\n" +
-	"\rdepartment_id\x18\x06 \x01(\tR\fdepartmentId\x12\x1d\n" +
-	"\n" +
-	"first_name\x18\a \x01(\tR\tfirstName\x12\x1b\n" +
-	"\tlast_name\x18\b \x01(\tR\blastName\x12\x1a\n" +
+	"\rdepartment_id\x18\x06 \x01(\tR\fdepartmentId\x12\x1a\n" +
 	"\bbirthday\x18\t \x01(\tR\bbirthday\x12#\n" +
 	"\rphone_numbers\x18\n" +
-	" \x03(\tR\fphoneNumbers\x12\x1a\n" +
-	"\bposition\x18\v \x01(\tR\bposition\x12\x12\n" +
-	"\x04memo\x18\f \x01(\tR\x04memo\"\xbb\x02\n" +
+	" \x03(\tR\fphoneNumbers\x12\x1f\n" +
+	"\vposition_id\x18\v \x01(\tR\n" +
+	"positionId\"\x8c\x02\n" +
 	"\x15CreateUserRequestItem\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x1e\n" +
 	"\x04role\x18\x03 \x01(\x0e2\n" +
 	".auth.RoleR\x04role\x12#\n" +
-	"\rdepartment_id\x18\x04 \x01(\tR\fdepartmentId\x12\x1d\n" +
-	"\n" +
-	"first_name\x18\x05 \x01(\tR\tfirstName\x12\x1b\n" +
-	"\tlast_name\x18\x06 \x01(\tR\blastName\x12\x1a\n" +
+	"\rdepartment_id\x18\x04 \x01(\tR\fdepartmentId\x12\x1a\n" +
 	"\bbirthday\x18\a \x01(\tR\bbirthday\x12#\n" +
-	"\rphone_numbers\x18\b \x03(\tR\fphoneNumbers\x12\x1a\n" +
-	"\bposition\x18\t \x01(\tR\bposition\x12\x12\n" +
-	"\x04memo\x18\n" +
-	" \x01(\tR\x04memo\"4\n" +
+	"\rphone_numbers\x18\b \x03(\tR\fphoneNumbers\x12\x1f\n" +
+	"\vposition_id\x18\t \x01(\tR\n" +
+	"positionId\x12\x1a\n" +
+	"\bpassword\x18\v \x01(\tR\bpassword\"4\n" +
 	"\x12CreateUserResponse\x12\x1e\n" +
 	"\x04user\x18\x01 \x01(\v2\n" +
-	".auth.UserR\x04user\"o\n" +
+	".auth.UserR\x04user\"\x90\x01\n" +
 	"\x17BatchCreateUsersRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x127\n" +
-	"\brequests\x18\x02 \x03(\v2\x1b.auth.CreateUserRequestItemR\brequests\"\x8d\x01\n" +
+	"\brequests\x18\x02 \x03(\v2\x1b.auth.CreateUserRequestItemR\brequests\x12\x1f\n" +
+	"\vimport_mode\x18\x03 \x01(\tR\n" +
+	"importMode\"\x8d\x01\n" +
 	"\x18BatchCreateUsersResponse\x12#\n" +
 	"\rsuccess_count\x18\x01 \x01(\x05R\fsuccessCount\x12#\n" +
 	"\rfailure_count\x18\x02 \x01(\x05R\ffailureCount\x12'\n" +
@@ -1194,32 +1140,31 @@ const file_auth_user_proto_rawDesc = "" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\"1\n" +
 	"\x0fGetUserResponse\x12\x1e\n" +
 	"\x04user\x18\x01 \x01(\v2\n" +
-	".auth.UserR\x04user\"v\n" +
+	".auth.UserR\x04user\"\xac\x01\n" +
 	"\x10ListUsersRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x14\n" +
-	"\x05query\x18\x04 \x01(\tR\x05query\"V\n" +
+	"\x05query\x18\x04 \x01(\tR\x05query\x12\x17\n" +
+	"\asort_by\x18\x05 \x01(\tR\x06sortBy\x12\x1b\n" +
+	"\tsort_desc\x18\x06 \x01(\bR\bsortDesc\"V\n" +
 	"\x11ListUsersResponse\x12 \n" +
 	"\x05users\x18\x01 \x03(\v2\n" +
 	".auth.UserR\x05users\x12\x1f\n" +
 	"\vtotal_count\x18\x02 \x01(\x05R\n" +
-	"totalCount\"\xce\x02\n" +
+	"totalCount\"\x83\x02\n" +
 	"\x11UpdateUserRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x1e\n" +
 	"\x04role\x18\x03 \x01(\x0e2\n" +
 	".auth.RoleR\x04role\x12\x1b\n" +
 	"\ttenant_id\x18\x04 \x01(\tR\btenantId\x12#\n" +
-	"\rdepartment_id\x18\x05 \x01(\tR\fdepartmentId\x12\x1d\n" +
-	"\n" +
-	"first_name\x18\x06 \x01(\tR\tfirstName\x12\x1b\n" +
-	"\tlast_name\x18\a \x01(\tR\blastName\x12\x1a\n" +
+	"\rdepartment_id\x18\x05 \x01(\tR\fdepartmentId\x12\x1a\n" +
 	"\bbirthday\x18\b \x01(\tR\bbirthday\x12#\n" +
-	"\rphone_numbers\x18\t \x03(\tR\fphoneNumbers\x12\x1a\n" +
-	"\bposition\x18\n" +
-	" \x01(\tR\bposition\x12\x12\n" +
-	"\x04memo\x18\v \x01(\tR\x04memo\"4\n" +
+	"\rphone_numbers\x18\t \x03(\tR\fphoneNumbers\x12\x1f\n" +
+	"\vposition_id\x18\n" +
+	" \x01(\tR\n" +
+	"positionId\"4\n" +
 	"\x12UpdateUserResponse\x12\x1e\n" +
 	"\x04user\x18\x01 \x01(\v2\n" +
 	".auth.UserR\x04user\"@\n" +

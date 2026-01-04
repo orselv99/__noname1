@@ -16,6 +16,49 @@ interface CreateDepartmentModalProps {
 interface Department {
   id: string;
   name: string;
+  parent_department_id?: string;
+  sort_order?: number;
+  children?: Department[];
+  depth?: number;
+}
+
+function flattenDepartments(departments: Department[]): Department[] {
+  const map = new Map<string, Department>();
+  const roots: Department[] = [];
+
+  // 1. Build Map & Initialize Children
+  departments.forEach(d => {
+    map.set(d.id, { ...d, children: [] });
+  });
+
+  // 2. Build Hierarchy
+  departments.forEach(d => {
+    const node = map.get(d.id)!;
+    if (d.parent_department_id && map.has(d.parent_department_id)) {
+      map.get(d.parent_department_id)!.children?.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  // 3. Sort & Flatten (DFS)
+  const result: Department[] = [];
+
+  function traverse(nodes: Department[], depth: number) {
+    // Sort siblings by sort_order
+    nodes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    for (const node of nodes) {
+      node.depth = depth;
+      result.push(node);
+      if (node.children && node.children.length > 0) {
+        traverse(node.children, depth + 1);
+      }
+    }
+  }
+
+  traverse(roots, 0);
+  return result;
 }
 
 export default function CreateDepartmentModal({ isOpen, onClose, onSuccess }: CreateDepartmentModalProps) {
@@ -96,27 +139,31 @@ export default function CreateDepartmentModal({ isOpen, onClose, onSuccess }: Cr
       // Transform CSV Data to API Payload
       // Backend will handle parent_name lookup
       const requests = csvPreview.map(row => {
-        const rowName = row.name || row.Name;
-        if (!rowName) return null; // Filter out later
+        let rowName = row['name'] || row['Name'];
+        let rowParentName = row['parent_name'] || row['parent_name']; // fallback keys
 
-        const getVisibilityValue = (val: string | number) => {
-          if (typeof val === 'number') return val;
-          if (!val) return 1;
-          const v = val.toLowerCase().trim();
-          if (v === 'hidden') return 1;
-          if (v === 'metadata') return 2;
-          if (v === 'snippet') return 3;
-          if (v === 'public') return 4;
-          return 1;
-        };
+        // Handle "Single Column" edge case where the entire line is quoted "name,parent_name"
+        // This results in one key: "name,parent_name"
+        const compositeKey = Object.keys(row).find(k => k.includes('name') && k.includes('parent'));
+        if (!rowName && compositeKey) {
+          const val = row[compositeKey];
+          if (typeof val === 'string') {
+            // naive split by comma (assuming names don't have commas for now)
+            // If names have commas, this is ambiguous without a proper parser, but for this specific malformed CSV case:
+            const parts = val.split(',');
+            if (parts.length >= 1) rowName = parts[0].trim();
+            if (parts.length >= 2) rowParentName = parts[1].trim();
+          }
+        }
+
+        if (!rowName) return null;
 
         return {
-          id: row.id || row.Id || undefined,
+          id: undefined,
           name: rowName,
-          description: row.description || row.Description || '',
-          default_visibility_level: Number(getVisibilityValue(row.visibility || row.Visibility)),
-          parent_department_id: row.parent_id || row.ParentId || '',
-          parent_name: row.parent_name || row.ParentName || ''
+          description: '',
+          parent_department_id: '',
+          parent_name: rowParentName || ''
         };
       }).filter(Boolean); // Remove nulls
 
@@ -192,6 +239,7 @@ export default function CreateDepartmentModal({ isOpen, onClose, onSuccess }: Cr
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (h) => h.trim().toLowerCase().replace(/^[\uFEFF\u200B"']+|["']+$/g, ''), // Remove BOM, quotes, whitespace
       complete: (results) => {
         setCsvPreview(results.data);
         setError('');
@@ -219,7 +267,7 @@ export default function CreateDepartmentModal({ isOpen, onClose, onSuccess }: Cr
     setImportMode('upsert');
     setActiveTab('single');
   };
-  console.log(departments)
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -293,8 +341,10 @@ export default function CreateDepartmentModal({ isOpen, onClose, onSuccess }: Cr
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                     >
                       <option value="">None (Top Level)</option>
-                      {departments.map(d => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
+                      {flattenDepartments(departments).map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.depth ? '\u00A0'.repeat(d.depth * 4) + '└ ' : ''}{d.name}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -380,7 +430,7 @@ export default function CreateDepartmentModal({ isOpen, onClose, onSuccess }: Cr
                     <button
                       type="button"
                       onClick={() => {
-                        const csvContent = "id,name,parent_id,parent_name,visibility\n,Sales,,Sales Dept,metadata\n,Engineering,,Engineering Dept,public\n";
+                        const csvContent = "name,parent_name\nSales,Sales Dept\nEngineering,Engineering Dept\n";
                         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                         const link = document.createElement("a");
                         const url = URL.createObjectURL(blob);
@@ -430,7 +480,7 @@ export default function CreateDepartmentModal({ isOpen, onClose, onSuccess }: Cr
                     <label htmlFor="csv-upload" className="cursor-pointer flex flex-col items-center w-full h-full">
                       <Upload size={32} className="mb-2" />
                       <span className="text-sm font-medium">{t.admin.departments.create.bulk.drag_drop}</span>
-                      <span className="text-xs text-gray-500 mt-1 center text-center">Headers: id, name, parent_id, parent_name, visibility<br />(parent_name used if parent_id empty)</span>
+                      <span className="text-xs text-gray-500 mt-1 center text-center">Headers: name, parent_name</span>
                     </label>
                   </div>
 

@@ -53,6 +53,7 @@ func main() {
 	aclHandler := handlers.NewACLHandler(authConn)
 	deptHandler := handlers.NewDepartmentHandler(authConn)
 	projectHandler := handlers.NewProjectHandler(authConn)
+	positionHandler := handlers.NewPositionHandler(authConn)
 	authMiddleware := middleware.NewAuthMiddleware(authConn)
 
 	r := gin.Default()
@@ -126,6 +127,17 @@ func main() {
 			protected.PUT("/projects/:id", projectHandler.UpdateProject)
 			protected.DELETE("/projects/:id", projectHandler.DeleteProject)
 			protected.GET("/projects/:id", projectHandler.GetProject)
+
+			// Position Routes
+			protected.POST("/positions", positionHandler.CreatePosition)
+			protected.POST("/positions/batch", positionHandler.BatchCreatePositions)
+			protected.GET("/positions", positionHandler.ListPositions)
+			protected.PUT("/positions/:id", positionHandler.UpdatePosition)
+			protected.DELETE("/positions/:id", positionHandler.DeletePosition)
+			protected.POST("/positions/reorder", positionHandler.ReorderPositions)
+
+			// Job Routes
+
 		}
 	}
 

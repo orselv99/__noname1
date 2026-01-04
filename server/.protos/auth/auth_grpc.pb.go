@@ -45,6 +45,12 @@ const (
 	AuthService_DeleteProject_FullMethodName            = "/auth.AuthService/DeleteProject"
 	AuthService_GetProject_FullMethodName               = "/auth.AuthService/GetProject"
 	AuthService_ReorderProjects_FullMethodName          = "/auth.AuthService/ReorderProjects"
+	AuthService_CreatePosition_FullMethodName           = "/auth.AuthService/CreatePosition"
+	AuthService_ListPositions_FullMethodName            = "/auth.AuthService/ListPositions"
+	AuthService_UpdatePosition_FullMethodName           = "/auth.AuthService/UpdatePosition"
+	AuthService_DeletePosition_FullMethodName           = "/auth.AuthService/DeletePosition"
+	AuthService_ReorderPositions_FullMethodName         = "/auth.AuthService/ReorderPositions"
+	AuthService_BatchCreatePositions_FullMethodName     = "/auth.AuthService/BatchCreatePositions"
 	AuthService_CheckAccess_FullMethodName              = "/auth.AuthService/CheckAccess"
 	AuthService_RequestAccess_FullMethodName            = "/auth.AuthService/RequestAccess"
 	AuthService_GrantAccess_FullMethodName              = "/auth.AuthService/GrantAccess"
@@ -101,6 +107,15 @@ type AuthServiceClient interface {
 	DeleteProject(ctx context.Context, in *DeleteProjectRequest, opts ...grpc.CallOption) (*DeleteProjectResponse, error)
 	GetProject(ctx context.Context, in *GetProjectRequest, opts ...grpc.CallOption) (*GetProjectResponse, error)
 	ReorderProjects(ctx context.Context, in *ReorderProjectsRequest, opts ...grpc.CallOption) (*ReorderProjectsResponse, error)
+	//
+	// Position & Job Management
+	//
+	CreatePosition(ctx context.Context, in *CreatePositionRequest, opts ...grpc.CallOption) (*CreatePositionResponse, error)
+	ListPositions(ctx context.Context, in *ListPositionsRequest, opts ...grpc.CallOption) (*ListPositionsResponse, error)
+	UpdatePosition(ctx context.Context, in *UpdatePositionRequest, opts ...grpc.CallOption) (*UpdatePositionResponse, error)
+	DeletePosition(ctx context.Context, in *DeletePositionRequest, opts ...grpc.CallOption) (*DeletePositionResponse, error)
+	ReorderPositions(ctx context.Context, in *ReorderPositionsRequest, opts ...grpc.CallOption) (*ReorderPositionsResponse, error)
+	BatchCreatePositions(ctx context.Context, in *BatchCreatePositionsRequest, opts ...grpc.CallOption) (*BatchCreatePositionsResponse, error)
 	//
 	// ACL - Access Control
 	//
@@ -389,6 +404,66 @@ func (c *authServiceClient) ReorderProjects(ctx context.Context, in *ReorderProj
 	return out, nil
 }
 
+func (c *authServiceClient) CreatePosition(ctx context.Context, in *CreatePositionRequest, opts ...grpc.CallOption) (*CreatePositionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreatePositionResponse)
+	err := c.cc.Invoke(ctx, AuthService_CreatePosition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ListPositions(ctx context.Context, in *ListPositionsRequest, opts ...grpc.CallOption) (*ListPositionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPositionsResponse)
+	err := c.cc.Invoke(ctx, AuthService_ListPositions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) UpdatePosition(ctx context.Context, in *UpdatePositionRequest, opts ...grpc.CallOption) (*UpdatePositionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdatePositionResponse)
+	err := c.cc.Invoke(ctx, AuthService_UpdatePosition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) DeletePosition(ctx context.Context, in *DeletePositionRequest, opts ...grpc.CallOption) (*DeletePositionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeletePositionResponse)
+	err := c.cc.Invoke(ctx, AuthService_DeletePosition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ReorderPositions(ctx context.Context, in *ReorderPositionsRequest, opts ...grpc.CallOption) (*ReorderPositionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReorderPositionsResponse)
+	err := c.cc.Invoke(ctx, AuthService_ReorderPositions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) BatchCreatePositions(ctx context.Context, in *BatchCreatePositionsRequest, opts ...grpc.CallOption) (*BatchCreatePositionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BatchCreatePositionsResponse)
+	err := c.cc.Invoke(ctx, AuthService_BatchCreatePositions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authServiceClient) CheckAccess(ctx context.Context, in *CheckAccessRequest, opts ...grpc.CallOption) (*CheckAccessResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CheckAccessResponse)
@@ -525,6 +600,15 @@ type AuthServiceServer interface {
 	GetProject(context.Context, *GetProjectRequest) (*GetProjectResponse, error)
 	ReorderProjects(context.Context, *ReorderProjectsRequest) (*ReorderProjectsResponse, error)
 	//
+	// Position & Job Management
+	//
+	CreatePosition(context.Context, *CreatePositionRequest) (*CreatePositionResponse, error)
+	ListPositions(context.Context, *ListPositionsRequest) (*ListPositionsResponse, error)
+	UpdatePosition(context.Context, *UpdatePositionRequest) (*UpdatePositionResponse, error)
+	DeletePosition(context.Context, *DeletePositionRequest) (*DeletePositionResponse, error)
+	ReorderPositions(context.Context, *ReorderPositionsRequest) (*ReorderPositionsResponse, error)
+	BatchCreatePositions(context.Context, *BatchCreatePositionsRequest) (*BatchCreatePositionsResponse, error)
+	//
 	// ACL - Access Control
 	//
 	CheckAccess(context.Context, *CheckAccessRequest) (*CheckAccessResponse, error)
@@ -629,6 +713,24 @@ func (UnimplementedAuthServiceServer) GetProject(context.Context, *GetProjectReq
 }
 func (UnimplementedAuthServiceServer) ReorderProjects(context.Context, *ReorderProjectsRequest) (*ReorderProjectsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReorderProjects not implemented")
+}
+func (UnimplementedAuthServiceServer) CreatePosition(context.Context, *CreatePositionRequest) (*CreatePositionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreatePosition not implemented")
+}
+func (UnimplementedAuthServiceServer) ListPositions(context.Context, *ListPositionsRequest) (*ListPositionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPositions not implemented")
+}
+func (UnimplementedAuthServiceServer) UpdatePosition(context.Context, *UpdatePositionRequest) (*UpdatePositionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdatePosition not implemented")
+}
+func (UnimplementedAuthServiceServer) DeletePosition(context.Context, *DeletePositionRequest) (*DeletePositionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeletePosition not implemented")
+}
+func (UnimplementedAuthServiceServer) ReorderPositions(context.Context, *ReorderPositionsRequest) (*ReorderPositionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReorderPositions not implemented")
+}
+func (UnimplementedAuthServiceServer) BatchCreatePositions(context.Context, *BatchCreatePositionsRequest) (*BatchCreatePositionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BatchCreatePositions not implemented")
 }
 func (UnimplementedAuthServiceServer) CheckAccess(context.Context, *CheckAccessRequest) (*CheckAccessResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckAccess not implemented")
@@ -1146,6 +1248,114 @@ func _AuthService_ReorderProjects_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_CreatePosition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreatePositionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).CreatePosition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_CreatePosition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).CreatePosition(ctx, req.(*CreatePositionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ListPositions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPositionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ListPositions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ListPositions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ListPositions(ctx, req.(*ListPositionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_UpdatePosition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdatePositionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).UpdatePosition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_UpdatePosition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).UpdatePosition(ctx, req.(*UpdatePositionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_DeletePosition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeletePositionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).DeletePosition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_DeletePosition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).DeletePosition(ctx, req.(*DeletePositionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ReorderPositions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReorderPositionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ReorderPositions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ReorderPositions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ReorderPositions(ctx, req.(*ReorderPositionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_BatchCreatePositions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchCreatePositionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).BatchCreatePositions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_BatchCreatePositions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).BatchCreatePositions(ctx, req.(*BatchCreatePositionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthService_CheckAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckAccessRequest)
 	if err := dec(in); err != nil {
@@ -1418,6 +1628,30 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReorderProjects",
 			Handler:    _AuthService_ReorderProjects_Handler,
+		},
+		{
+			MethodName: "CreatePosition",
+			Handler:    _AuthService_CreatePosition_Handler,
+		},
+		{
+			MethodName: "ListPositions",
+			Handler:    _AuthService_ListPositions_Handler,
+		},
+		{
+			MethodName: "UpdatePosition",
+			Handler:    _AuthService_UpdatePosition_Handler,
+		},
+		{
+			MethodName: "DeletePosition",
+			Handler:    _AuthService_DeletePosition_Handler,
+		},
+		{
+			MethodName: "ReorderPositions",
+			Handler:    _AuthService_ReorderPositions_Handler,
+		},
+		{
+			MethodName: "BatchCreatePositions",
+			Handler:    _AuthService_BatchCreatePositions_Handler,
 		},
 		{
 			MethodName: "CheckAccess",

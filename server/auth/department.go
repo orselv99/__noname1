@@ -1,5 +1,7 @@
 package main
 
+// Force Rebuild 2026-01-04
+
 import (
 	"context"
 	"strings"
@@ -283,10 +285,16 @@ func (s *server) UpdateDepartment(ctx context.Context, req *pb.UpdateDepartmentR
 		return nil, status.Errorf(codes.NotFound, "department not found")
 	}
 
-	dept.Name = req.Name
-	dept.ManagerID = stringPtr(req.ManagerId)
-	dept.ParentDepartmentID = stringPtr(req.ParentDepartmentId)
-	dept.DefaultVisibilityLevel = int(req.DefaultVisibilityLevel)
+	if req.Name != "" {
+		dept.Name = req.Name
+		dept.ManagerID = stringPtr(req.ManagerId)
+		dept.ParentDepartmentID = stringPtr(req.ParentDepartmentId)
+	}
+
+	if req.DefaultVisibilityLevel != 0 {
+		dept.DefaultVisibilityLevel = int(req.DefaultVisibilityLevel)
+	}
+
 	dept.UpdatedAt = time.Now()
 
 	if err := s.db.Save(&dept).Error; err != nil {

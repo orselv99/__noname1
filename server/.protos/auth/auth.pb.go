@@ -351,7 +351,7 @@ var File_auth_auth_proto protoreflect.FileDescriptor
 
 const file_auth_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x0fauth/auth.proto\x12\x04auth\x1a\x0fauth/user.proto\x1a\x11auth/tenant.proto\x1a\x0eauth/acl.proto\x1a\x15auth/department.proto\x1a\x12auth/project.proto\x1a\x13auth/document.proto\"@\n" +
+	"\x0fauth/auth.proto\x12\x04auth\x1a\x0fauth/user.proto\x1a\x11auth/tenant.proto\x1a\x0eauth/acl.proto\x1a\x15auth/department.proto\x1a\x12auth/project.proto\x1a\x13auth/document.proto\x1a\x13auth/position.proto\"@\n" +
 	"\fLoginRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x8a\x01\n" +
@@ -371,7 +371,7 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"^\n" +
 	"\x14RefreshTokenResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
-	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken2\xaf\x15\n" +
+	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken2\x92\x19\n" +
 	"\vAuthService\x120\n" +
 	"\x05Login\x12\x12.auth.LoginRequest\x1a\x13.auth.LoginResponse\x12H\n" +
 	"\rValidateToken\x12\x1a.auth.ValidateTokenRequest\x1a\x1b.auth.ValidateTokenResponse\x12E\n" +
@@ -402,7 +402,13 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\rDeleteProject\x12\x1a.auth.DeleteProjectRequest\x1a\x1b.auth.DeleteProjectResponse\x12?\n" +
 	"\n" +
 	"GetProject\x12\x17.auth.GetProjectRequest\x1a\x18.auth.GetProjectResponse\x12N\n" +
-	"\x0fReorderProjects\x12\x1c.auth.ReorderProjectsRequest\x1a\x1d.auth.ReorderProjectsResponse\x12B\n" +
+	"\x0fReorderProjects\x12\x1c.auth.ReorderProjectsRequest\x1a\x1d.auth.ReorderProjectsResponse\x12K\n" +
+	"\x0eCreatePosition\x12\x1b.auth.CreatePositionRequest\x1a\x1c.auth.CreatePositionResponse\x12H\n" +
+	"\rListPositions\x12\x1a.auth.ListPositionsRequest\x1a\x1b.auth.ListPositionsResponse\x12K\n" +
+	"\x0eUpdatePosition\x12\x1b.auth.UpdatePositionRequest\x1a\x1c.auth.UpdatePositionResponse\x12K\n" +
+	"\x0eDeletePosition\x12\x1b.auth.DeletePositionRequest\x1a\x1c.auth.DeletePositionResponse\x12Q\n" +
+	"\x10ReorderPositions\x12\x1d.auth.ReorderPositionsRequest\x1a\x1e.auth.ReorderPositionsResponse\x12]\n" +
+	"\x14BatchCreatePositions\x12!.auth.BatchCreatePositionsRequest\x1a\".auth.BatchCreatePositionsResponse\x12B\n" +
 	"\vCheckAccess\x12\x18.auth.CheckAccessRequest\x1a\x19.auth.CheckAccessResponse\x12H\n" +
 	"\rRequestAccess\x12\x1a.auth.RequestAccessRequest\x1a\x1b.auth.RequestAccessResponse\x12B\n" +
 	"\vGrantAccess\x12\x18.auth.GrantAccessRequest\x1a\x19.auth.GrantAccessResponse\x12W\n" +
@@ -456,47 +462,59 @@ var file_auth_auth_proto_goTypes = []any{
 	(*DeleteProjectRequest)(nil),             // 26: auth.DeleteProjectRequest
 	(*GetProjectRequest)(nil),                // 27: auth.GetProjectRequest
 	(*ReorderProjectsRequest)(nil),           // 28: auth.ReorderProjectsRequest
-	(*CheckAccessRequest)(nil),               // 29: auth.CheckAccessRequest
-	(*RequestAccessRequest)(nil),             // 30: auth.RequestAccessRequest
-	(*GrantAccessRequest)(nil),               // 31: auth.GrantAccessRequest
-	(*ListAccessRequestsRequest)(nil),        // 32: auth.ListAccessRequestsRequest
-	(*CreateDocumentMetadataRequest)(nil),    // 33: auth.CreateDocumentMetadataRequest
-	(*UpdateDocumentVisibilityRequest)(nil),  // 34: auth.UpdateDocumentVisibilityRequest
-	(*GetDocumentMetadataRequest)(nil),       // 35: auth.GetDocumentMetadataRequest
-	(*ListVisibilityApprovalsRequest)(nil),   // 36: auth.ListVisibilityApprovalsRequest
-	(*ApproveVisibilityChangeRequest)(nil),   // 37: auth.ApproveVisibilityChangeRequest
-	(*CreateUserResponse)(nil),               // 38: auth.CreateUserResponse
-	(*BatchCreateUsersResponse)(nil),         // 39: auth.BatchCreateUsersResponse
-	(*GetUserResponse)(nil),                  // 40: auth.GetUserResponse
-	(*ListUsersResponse)(nil),                // 41: auth.ListUsersResponse
-	(*UpdateUserResponse)(nil),               // 42: auth.UpdateUserResponse
-	(*DeleteUserResponse)(nil),               // 43: auth.DeleteUserResponse
-	(*CreateTenantResponse)(nil),             // 44: auth.CreateTenantResponse
-	(*GetTenantResponse)(nil),                // 45: auth.GetTenantResponse
-	(*ListTenantsResponse)(nil),              // 46: auth.ListTenantsResponse
-	(*CreateDepartmentResponse)(nil),         // 47: auth.CreateDepartmentResponse
-	(*BatchCreateDepartmentsResponse)(nil),   // 48: auth.BatchCreateDepartmentsResponse
-	(*ListDepartmentsResponse)(nil),          // 49: auth.ListDepartmentsResponse
-	(*UpdateDepartmentResponse)(nil),         // 50: auth.UpdateDepartmentResponse
-	(*DeleteDepartmentResponse)(nil),         // 51: auth.DeleteDepartmentResponse
-	(*GetDepartmentResponse)(nil),            // 52: auth.GetDepartmentResponse
-	(*ReorderDepartmentsResponse)(nil),       // 53: auth.ReorderDepartmentsResponse
-	(*CreateProjectResponse)(nil),            // 54: auth.CreateProjectResponse
-	(*BatchCreateProjectsResponse)(nil),      // 55: auth.BatchCreateProjectsResponse
-	(*ListProjectsResponse)(nil),             // 56: auth.ListProjectsResponse
-	(*UpdateProjectResponse)(nil),            // 57: auth.UpdateProjectResponse
-	(*DeleteProjectResponse)(nil),            // 58: auth.DeleteProjectResponse
-	(*GetProjectResponse)(nil),               // 59: auth.GetProjectResponse
-	(*ReorderProjectsResponse)(nil),          // 60: auth.ReorderProjectsResponse
-	(*CheckAccessResponse)(nil),              // 61: auth.CheckAccessResponse
-	(*RequestAccessResponse)(nil),            // 62: auth.RequestAccessResponse
-	(*GrantAccessResponse)(nil),              // 63: auth.GrantAccessResponse
-	(*ListAccessRequestsResponse)(nil),       // 64: auth.ListAccessRequestsResponse
-	(*CreateDocumentMetadataResponse)(nil),   // 65: auth.CreateDocumentMetadataResponse
-	(*UpdateDocumentVisibilityResponse)(nil), // 66: auth.UpdateDocumentVisibilityResponse
-	(*GetDocumentMetadataResponse)(nil),      // 67: auth.GetDocumentMetadataResponse
-	(*ListVisibilityApprovalsResponse)(nil),  // 68: auth.ListVisibilityApprovalsResponse
-	(*ApproveVisibilityChangeResponse)(nil),  // 69: auth.ApproveVisibilityChangeResponse
+	(*CreatePositionRequest)(nil),            // 29: auth.CreatePositionRequest
+	(*ListPositionsRequest)(nil),             // 30: auth.ListPositionsRequest
+	(*UpdatePositionRequest)(nil),            // 31: auth.UpdatePositionRequest
+	(*DeletePositionRequest)(nil),            // 32: auth.DeletePositionRequest
+	(*ReorderPositionsRequest)(nil),          // 33: auth.ReorderPositionsRequest
+	(*BatchCreatePositionsRequest)(nil),      // 34: auth.BatchCreatePositionsRequest
+	(*CheckAccessRequest)(nil),               // 35: auth.CheckAccessRequest
+	(*RequestAccessRequest)(nil),             // 36: auth.RequestAccessRequest
+	(*GrantAccessRequest)(nil),               // 37: auth.GrantAccessRequest
+	(*ListAccessRequestsRequest)(nil),        // 38: auth.ListAccessRequestsRequest
+	(*CreateDocumentMetadataRequest)(nil),    // 39: auth.CreateDocumentMetadataRequest
+	(*UpdateDocumentVisibilityRequest)(nil),  // 40: auth.UpdateDocumentVisibilityRequest
+	(*GetDocumentMetadataRequest)(nil),       // 41: auth.GetDocumentMetadataRequest
+	(*ListVisibilityApprovalsRequest)(nil),   // 42: auth.ListVisibilityApprovalsRequest
+	(*ApproveVisibilityChangeRequest)(nil),   // 43: auth.ApproveVisibilityChangeRequest
+	(*CreateUserResponse)(nil),               // 44: auth.CreateUserResponse
+	(*BatchCreateUsersResponse)(nil),         // 45: auth.BatchCreateUsersResponse
+	(*GetUserResponse)(nil),                  // 46: auth.GetUserResponse
+	(*ListUsersResponse)(nil),                // 47: auth.ListUsersResponse
+	(*UpdateUserResponse)(nil),               // 48: auth.UpdateUserResponse
+	(*DeleteUserResponse)(nil),               // 49: auth.DeleteUserResponse
+	(*CreateTenantResponse)(nil),             // 50: auth.CreateTenantResponse
+	(*GetTenantResponse)(nil),                // 51: auth.GetTenantResponse
+	(*ListTenantsResponse)(nil),              // 52: auth.ListTenantsResponse
+	(*CreateDepartmentResponse)(nil),         // 53: auth.CreateDepartmentResponse
+	(*BatchCreateDepartmentsResponse)(nil),   // 54: auth.BatchCreateDepartmentsResponse
+	(*ListDepartmentsResponse)(nil),          // 55: auth.ListDepartmentsResponse
+	(*UpdateDepartmentResponse)(nil),         // 56: auth.UpdateDepartmentResponse
+	(*DeleteDepartmentResponse)(nil),         // 57: auth.DeleteDepartmentResponse
+	(*GetDepartmentResponse)(nil),            // 58: auth.GetDepartmentResponse
+	(*ReorderDepartmentsResponse)(nil),       // 59: auth.ReorderDepartmentsResponse
+	(*CreateProjectResponse)(nil),            // 60: auth.CreateProjectResponse
+	(*BatchCreateProjectsResponse)(nil),      // 61: auth.BatchCreateProjectsResponse
+	(*ListProjectsResponse)(nil),             // 62: auth.ListProjectsResponse
+	(*UpdateProjectResponse)(nil),            // 63: auth.UpdateProjectResponse
+	(*DeleteProjectResponse)(nil),            // 64: auth.DeleteProjectResponse
+	(*GetProjectResponse)(nil),               // 65: auth.GetProjectResponse
+	(*ReorderProjectsResponse)(nil),          // 66: auth.ReorderProjectsResponse
+	(*CreatePositionResponse)(nil),           // 67: auth.CreatePositionResponse
+	(*ListPositionsResponse)(nil),            // 68: auth.ListPositionsResponse
+	(*UpdatePositionResponse)(nil),           // 69: auth.UpdatePositionResponse
+	(*DeletePositionResponse)(nil),           // 70: auth.DeletePositionResponse
+	(*ReorderPositionsResponse)(nil),         // 71: auth.ReorderPositionsResponse
+	(*BatchCreatePositionsResponse)(nil),     // 72: auth.BatchCreatePositionsResponse
+	(*CheckAccessResponse)(nil),              // 73: auth.CheckAccessResponse
+	(*RequestAccessResponse)(nil),            // 74: auth.RequestAccessResponse
+	(*GrantAccessResponse)(nil),              // 75: auth.GrantAccessResponse
+	(*ListAccessRequestsResponse)(nil),       // 76: auth.ListAccessRequestsResponse
+	(*CreateDocumentMetadataResponse)(nil),   // 77: auth.CreateDocumentMetadataResponse
+	(*UpdateDocumentVisibilityResponse)(nil), // 78: auth.UpdateDocumentVisibilityResponse
+	(*GetDocumentMetadataResponse)(nil),      // 79: auth.GetDocumentMetadataResponse
+	(*ListVisibilityApprovalsResponse)(nil),  // 80: auth.ListVisibilityApprovalsResponse
+	(*ApproveVisibilityChangeResponse)(nil),  // 81: auth.ApproveVisibilityChangeResponse
 }
 var file_auth_auth_proto_depIdxs = []int32{
 	0,  // 0: auth.AuthService.Login:input_type -> auth.LoginRequest
@@ -525,52 +543,64 @@ var file_auth_auth_proto_depIdxs = []int32{
 	26, // 23: auth.AuthService.DeleteProject:input_type -> auth.DeleteProjectRequest
 	27, // 24: auth.AuthService.GetProject:input_type -> auth.GetProjectRequest
 	28, // 25: auth.AuthService.ReorderProjects:input_type -> auth.ReorderProjectsRequest
-	29, // 26: auth.AuthService.CheckAccess:input_type -> auth.CheckAccessRequest
-	30, // 27: auth.AuthService.RequestAccess:input_type -> auth.RequestAccessRequest
-	31, // 28: auth.AuthService.GrantAccess:input_type -> auth.GrantAccessRequest
-	32, // 29: auth.AuthService.ListAccessRequests:input_type -> auth.ListAccessRequestsRequest
-	33, // 30: auth.AuthService.CreateDocumentMetadata:input_type -> auth.CreateDocumentMetadataRequest
-	34, // 31: auth.AuthService.UpdateDocumentVisibility:input_type -> auth.UpdateDocumentVisibilityRequest
-	35, // 32: auth.AuthService.GetDocumentMetadata:input_type -> auth.GetDocumentMetadataRequest
-	36, // 33: auth.AuthService.ListVisibilityApprovals:input_type -> auth.ListVisibilityApprovalsRequest
-	37, // 34: auth.AuthService.ApproveVisibilityChange:input_type -> auth.ApproveVisibilityChangeRequest
-	1,  // 35: auth.AuthService.Login:output_type -> auth.LoginResponse
-	3,  // 36: auth.AuthService.ValidateToken:output_type -> auth.ValidateTokenResponse
-	5,  // 37: auth.AuthService.RefreshToken:output_type -> auth.RefreshTokenResponse
-	38, // 38: auth.AuthService.CreateUser:output_type -> auth.CreateUserResponse
-	39, // 39: auth.AuthService.BatchCreateUsers:output_type -> auth.BatchCreateUsersResponse
-	40, // 40: auth.AuthService.GetUser:output_type -> auth.GetUserResponse
-	41, // 41: auth.AuthService.ListUsers:output_type -> auth.ListUsersResponse
-	42, // 42: auth.AuthService.UpdateUser:output_type -> auth.UpdateUserResponse
-	43, // 43: auth.AuthService.DeleteUser:output_type -> auth.DeleteUserResponse
-	44, // 44: auth.AuthService.CreateTenant:output_type -> auth.CreateTenantResponse
-	45, // 45: auth.AuthService.GetTenant:output_type -> auth.GetTenantResponse
-	46, // 46: auth.AuthService.ListTenants:output_type -> auth.ListTenantsResponse
-	47, // 47: auth.AuthService.CreateDepartment:output_type -> auth.CreateDepartmentResponse
-	48, // 48: auth.AuthService.BatchCreateDepartments:output_type -> auth.BatchCreateDepartmentsResponse
-	49, // 49: auth.AuthService.ListDepartments:output_type -> auth.ListDepartmentsResponse
-	50, // 50: auth.AuthService.UpdateDepartment:output_type -> auth.UpdateDepartmentResponse
-	51, // 51: auth.AuthService.DeleteDepartment:output_type -> auth.DeleteDepartmentResponse
-	52, // 52: auth.AuthService.GetDepartment:output_type -> auth.GetDepartmentResponse
-	53, // 53: auth.AuthService.ReorderDepartments:output_type -> auth.ReorderDepartmentsResponse
-	54, // 54: auth.AuthService.CreateProject:output_type -> auth.CreateProjectResponse
-	55, // 55: auth.AuthService.BatchCreateProjects:output_type -> auth.BatchCreateProjectsResponse
-	56, // 56: auth.AuthService.ListProjects:output_type -> auth.ListProjectsResponse
-	57, // 57: auth.AuthService.UpdateProject:output_type -> auth.UpdateProjectResponse
-	58, // 58: auth.AuthService.DeleteProject:output_type -> auth.DeleteProjectResponse
-	59, // 59: auth.AuthService.GetProject:output_type -> auth.GetProjectResponse
-	60, // 60: auth.AuthService.ReorderProjects:output_type -> auth.ReorderProjectsResponse
-	61, // 61: auth.AuthService.CheckAccess:output_type -> auth.CheckAccessResponse
-	62, // 62: auth.AuthService.RequestAccess:output_type -> auth.RequestAccessResponse
-	63, // 63: auth.AuthService.GrantAccess:output_type -> auth.GrantAccessResponse
-	64, // 64: auth.AuthService.ListAccessRequests:output_type -> auth.ListAccessRequestsResponse
-	65, // 65: auth.AuthService.CreateDocumentMetadata:output_type -> auth.CreateDocumentMetadataResponse
-	66, // 66: auth.AuthService.UpdateDocumentVisibility:output_type -> auth.UpdateDocumentVisibilityResponse
-	67, // 67: auth.AuthService.GetDocumentMetadata:output_type -> auth.GetDocumentMetadataResponse
-	68, // 68: auth.AuthService.ListVisibilityApprovals:output_type -> auth.ListVisibilityApprovalsResponse
-	69, // 69: auth.AuthService.ApproveVisibilityChange:output_type -> auth.ApproveVisibilityChangeResponse
-	35, // [35:70] is the sub-list for method output_type
-	0,  // [0:35] is the sub-list for method input_type
+	29, // 26: auth.AuthService.CreatePosition:input_type -> auth.CreatePositionRequest
+	30, // 27: auth.AuthService.ListPositions:input_type -> auth.ListPositionsRequest
+	31, // 28: auth.AuthService.UpdatePosition:input_type -> auth.UpdatePositionRequest
+	32, // 29: auth.AuthService.DeletePosition:input_type -> auth.DeletePositionRequest
+	33, // 30: auth.AuthService.ReorderPositions:input_type -> auth.ReorderPositionsRequest
+	34, // 31: auth.AuthService.BatchCreatePositions:input_type -> auth.BatchCreatePositionsRequest
+	35, // 32: auth.AuthService.CheckAccess:input_type -> auth.CheckAccessRequest
+	36, // 33: auth.AuthService.RequestAccess:input_type -> auth.RequestAccessRequest
+	37, // 34: auth.AuthService.GrantAccess:input_type -> auth.GrantAccessRequest
+	38, // 35: auth.AuthService.ListAccessRequests:input_type -> auth.ListAccessRequestsRequest
+	39, // 36: auth.AuthService.CreateDocumentMetadata:input_type -> auth.CreateDocumentMetadataRequest
+	40, // 37: auth.AuthService.UpdateDocumentVisibility:input_type -> auth.UpdateDocumentVisibilityRequest
+	41, // 38: auth.AuthService.GetDocumentMetadata:input_type -> auth.GetDocumentMetadataRequest
+	42, // 39: auth.AuthService.ListVisibilityApprovals:input_type -> auth.ListVisibilityApprovalsRequest
+	43, // 40: auth.AuthService.ApproveVisibilityChange:input_type -> auth.ApproveVisibilityChangeRequest
+	1,  // 41: auth.AuthService.Login:output_type -> auth.LoginResponse
+	3,  // 42: auth.AuthService.ValidateToken:output_type -> auth.ValidateTokenResponse
+	5,  // 43: auth.AuthService.RefreshToken:output_type -> auth.RefreshTokenResponse
+	44, // 44: auth.AuthService.CreateUser:output_type -> auth.CreateUserResponse
+	45, // 45: auth.AuthService.BatchCreateUsers:output_type -> auth.BatchCreateUsersResponse
+	46, // 46: auth.AuthService.GetUser:output_type -> auth.GetUserResponse
+	47, // 47: auth.AuthService.ListUsers:output_type -> auth.ListUsersResponse
+	48, // 48: auth.AuthService.UpdateUser:output_type -> auth.UpdateUserResponse
+	49, // 49: auth.AuthService.DeleteUser:output_type -> auth.DeleteUserResponse
+	50, // 50: auth.AuthService.CreateTenant:output_type -> auth.CreateTenantResponse
+	51, // 51: auth.AuthService.GetTenant:output_type -> auth.GetTenantResponse
+	52, // 52: auth.AuthService.ListTenants:output_type -> auth.ListTenantsResponse
+	53, // 53: auth.AuthService.CreateDepartment:output_type -> auth.CreateDepartmentResponse
+	54, // 54: auth.AuthService.BatchCreateDepartments:output_type -> auth.BatchCreateDepartmentsResponse
+	55, // 55: auth.AuthService.ListDepartments:output_type -> auth.ListDepartmentsResponse
+	56, // 56: auth.AuthService.UpdateDepartment:output_type -> auth.UpdateDepartmentResponse
+	57, // 57: auth.AuthService.DeleteDepartment:output_type -> auth.DeleteDepartmentResponse
+	58, // 58: auth.AuthService.GetDepartment:output_type -> auth.GetDepartmentResponse
+	59, // 59: auth.AuthService.ReorderDepartments:output_type -> auth.ReorderDepartmentsResponse
+	60, // 60: auth.AuthService.CreateProject:output_type -> auth.CreateProjectResponse
+	61, // 61: auth.AuthService.BatchCreateProjects:output_type -> auth.BatchCreateProjectsResponse
+	62, // 62: auth.AuthService.ListProjects:output_type -> auth.ListProjectsResponse
+	63, // 63: auth.AuthService.UpdateProject:output_type -> auth.UpdateProjectResponse
+	64, // 64: auth.AuthService.DeleteProject:output_type -> auth.DeleteProjectResponse
+	65, // 65: auth.AuthService.GetProject:output_type -> auth.GetProjectResponse
+	66, // 66: auth.AuthService.ReorderProjects:output_type -> auth.ReorderProjectsResponse
+	67, // 67: auth.AuthService.CreatePosition:output_type -> auth.CreatePositionResponse
+	68, // 68: auth.AuthService.ListPositions:output_type -> auth.ListPositionsResponse
+	69, // 69: auth.AuthService.UpdatePosition:output_type -> auth.UpdatePositionResponse
+	70, // 70: auth.AuthService.DeletePosition:output_type -> auth.DeletePositionResponse
+	71, // 71: auth.AuthService.ReorderPositions:output_type -> auth.ReorderPositionsResponse
+	72, // 72: auth.AuthService.BatchCreatePositions:output_type -> auth.BatchCreatePositionsResponse
+	73, // 73: auth.AuthService.CheckAccess:output_type -> auth.CheckAccessResponse
+	74, // 74: auth.AuthService.RequestAccess:output_type -> auth.RequestAccessResponse
+	75, // 75: auth.AuthService.GrantAccess:output_type -> auth.GrantAccessResponse
+	76, // 76: auth.AuthService.ListAccessRequests:output_type -> auth.ListAccessRequestsResponse
+	77, // 77: auth.AuthService.CreateDocumentMetadata:output_type -> auth.CreateDocumentMetadataResponse
+	78, // 78: auth.AuthService.UpdateDocumentVisibility:output_type -> auth.UpdateDocumentVisibilityResponse
+	79, // 79: auth.AuthService.GetDocumentMetadata:output_type -> auth.GetDocumentMetadataResponse
+	80, // 80: auth.AuthService.ListVisibilityApprovals:output_type -> auth.ListVisibilityApprovalsResponse
+	81, // 81: auth.AuthService.ApproveVisibilityChange:output_type -> auth.ApproveVisibilityChangeResponse
+	41, // [41:82] is the sub-list for method output_type
+	0,  // [0:41] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -587,6 +617,7 @@ func file_auth_auth_proto_init() {
 	file_auth_department_proto_init()
 	file_auth_project_proto_init()
 	file_auth_document_proto_init()
+	file_auth_position_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

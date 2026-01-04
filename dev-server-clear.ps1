@@ -6,9 +6,37 @@ Write-Host "   (Clears all database data and volumes)" -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan
 
 # ---------------------------------------------------------
-# Step 1: Stop all running containers
+# Step 1: Generate Protos (Local Reflection)
 # ---------------------------------------------------------
-Write-Host "`n>>> [1/3] Stopping all running containers..." -ForegroundColor Yellow
+Write-Host "`n>>> [1/3] Generating Local Protos for IDE Support..." -ForegroundColor Yellow
+
+$protoCmd = "apk add --no-cache protobuf-dev && " +
+            "go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && " +
+            "go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && " +
+            "export PATH=`$PATH:`$(go env GOPATH)/bin && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/user.proto && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/tenant.proto && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/acl.proto && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/document.proto && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/department.proto && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/project.proto && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/auth.proto && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/index/index.proto && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/signaling/signaling.proto && " +
+            "echo '   -> Proto compilation successful.'"
+
+try {
+    docker run --rm -v "${PWD}:/app" -w /app golang:alpine sh -c "$protoCmd"
+    if ($LASTEXITCODE -ne 0) { throw "Docker command failed" }
+} catch {
+    Write-Host "   [!] Failed to generate protos. Check Docker status." -ForegroundColor Red
+    exit 1
+}
+
+# ---------------------------------------------------------
+# Step 2: Stop all running containers
+# ---------------------------------------------------------
+Write-Host "`n>>> [2/3] Stopping all running containers..." -ForegroundColor Yellow
 
 docker-compose down
 
@@ -17,7 +45,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # ---------------------------------------------------------
-# Step 2: Remove the PostgreSQL volume to clear all data
+# Step 3: Remove the PostgreSQL volume to clear all data
 # ---------------------------------------------------------
 Write-Host "`n>>> [2/3] Removing PostgreSQL volume (pgdata)..." -ForegroundColor Yellow
 
@@ -37,7 +65,7 @@ if ($volumeName) {
 }
 
 # ---------------------------------------------------------
-# Step 3: Restart services (fresh DB will be created)
+# Step 4: Restart services (fresh DB will be created)
 # ---------------------------------------------------------
 Write-Host "`n>>> [3/3] Restarting backend services with fresh database..." -ForegroundColor Yellow
 

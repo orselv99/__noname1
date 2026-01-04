@@ -1,29 +1,35 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef
+} from 'react';
+import { createPortal } from 'react-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import {
-  Building,
-  Plus,
   Search,
   Trash2,
   ChevronRight,
   ChevronDown,
-  ChevronUp,
   FolderTree,
   GripVertical,
   Eye,
   EyeOff,
   FileText,
-  Globe
+  Globe,
+  Layers
 } from 'lucide-react';
 import CreateDepartmentModal from '@/components/admin/departments/CreateDepartmentModal';
 import { useToast } from '@/components/admin/Toast';
-import { motion, AnimatePresence } from 'framer-motion';
+import AddButton from '@/components/admin/ui/AddButton';
+import {
+  motion,
+  AnimatePresence
+} from 'framer-motion';
 import {
   DndContext,
   DragEndEvent,
-  DragOverlay,
   DragStartEvent,
   PointerSensor,
   useSensor,
@@ -36,6 +42,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import TitleLabel from '@/components/admin/ui/TitleLabel';
 
 interface Department {
   id: string;
@@ -90,8 +97,6 @@ function getFlattenedIds(nodes: DepartmentNode[], expandedIds: Set<string>): str
   return ids;
 }
 
-
-
 // Sortable tree item component
 function SortableDepartmentItem({
   node,
@@ -114,12 +119,49 @@ function SortableDepartmentItem({
   const isExpanded = expandedIds.has(node.id);
   const isHighlighted = highlightedId === node.id;
   const [showVisibilityDropdown, setShowVisibilityDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownContentRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const toggleDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!showVisibilityDropdown && dropdownTriggerRef.current) {
+      const rect = dropdownTriggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const height = 150; // Increased safety margin
+      const openUpwards = spaceBelow < height;
+
+      setDropdownPosition({
+        top: openUpwards ? rect.top - height + 15 /* padding 추가 */ : rect.bottom + 4,
+        left: Math.max(10, rect.right - 140), // Prevent going off-screen left
+      });
+    }
+    setShowVisibilityDropdown(!showVisibilityDropdown);
+  };
+
+
+  // Close dropdown on scroll
+  useEffect(() => {
+    if (showVisibilityDropdown) {
+      const handleScroll = () => setShowVisibilityDropdown(false);
+      window.addEventListener('scroll', handleScroll, true);
+      return () => window.removeEventListener('scroll', handleScroll, true);
+    }
+  }, [showVisibilityDropdown]);
 
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        dropdownTriggerRef.current && !dropdownTriggerRef.current.contains(target) &&
+        dropdownContentRef.current && !dropdownContentRef.current.contains(target)
+      ) {
         setShowVisibilityDropdown(false);
       }
     };
@@ -184,7 +226,7 @@ function SortableDepartmentItem({
           {/* <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${hasChildren ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}`}> */}
           <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-500/10 text-blue-400">
             {/* {hasChildren ? <FolderTree size={16} /> : <Building size={16} />} */}
-            <Building size={16} />
+            <Layers size={16} />
           </div>
 
           {/* Name */}
@@ -203,52 +245,57 @@ function SortableDepartmentItem({
           </div>
 
           {/* Visibility Level Badge with Dropdown */}
-          <div className="relative" ref={dropdownRef}>
+          <div className="relative">
             {(() => {
               const currentLevel = VISIBILITY_LEVELS.find(v => v.value === (node.default_visibility_level || 4)) || VISIBILITY_LEVELS[3];
               const Icon = currentLevel.icon;
               return (
                 <button
-                  onClick={() => setShowVisibilityDropdown(!showVisibilityDropdown)}
+                  ref={dropdownTriggerRef}
+                  onClick={toggleDropdown}
                   className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full transition-all ${currentLevel.color} ${currentLevel.hoverColor} cursor-pointer`}
                 >
                   <Icon size={12} />
                   {currentLevel.label}
-                  {/* {showVisibilityDropdown ? <ChevronUp size={12} /> : <ChevronDown size={12} />} */}
+                  <ChevronDown size={10} className="opacity-50" />
                 </button>
               );
             })()}
 
-            <AnimatePresence>
-              {showVisibilityDropdown && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -4, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden min-w-[140px]"
-                >
-                  {VISIBILITY_LEVELS.map((level) => {
-                    const Icon = level.icon;
-                    const isSelected = (node.default_visibility_level || 4) === level.value;
-                    return (
-                      <button
-                        key={level.value}
-                        onClick={() => {
-                          onVisibilityChange(node.id, level.value);
-                          setShowVisibilityDropdown(false);
-                        }}
-                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${isSelected ? level.color : 'text-gray-300 hover:bg-zinc-700'
-                          }`}
-                      >
-                        <Icon size={14} />
-                        {level.label}
-                      </button>
-                    );
-                  })}
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {showVisibilityDropdown && isMounted && createPortal(
+              <div
+                ref={dropdownContentRef}
+                style={{
+                  position: 'fixed',
+                  top: dropdownPosition.top,
+                  left: dropdownPosition.left,
+                  width: '140px',
+                  zIndex: 99999,
+                }}
+                className="bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
+              >
+                {VISIBILITY_LEVELS.map((level) => {
+                  const Icon = level.icon;
+                  const isSelected = (node.default_visibility_level || 4) === level.value;
+                  return (
+                    <button
+                      key={level.value}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onVisibilityChange(node.id, level.value);
+                        setShowVisibilityDropdown(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${isSelected ? level.color : 'text-gray-300 hover:bg-zinc-700'
+                        }`}
+                    >
+                      <Icon size={14} />
+                      {level.label}
+                    </button>
+                  );
+                })}
+              </div>,
+              document.body
+            )}
           </div>
 
           {/* Actions - Delete only */}
@@ -512,22 +559,12 @@ export default function DepartmentsPage() {
   return (
     <div className="h-full flex flex-col gap-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-2xl font-bold bg-linear-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text">
-            {t.admin.departments.title}
-          </h1>
-          <p className="text-gray-400 text-sm mt-1">
-            {t.admin.departments.subtitle}
-          </p>
-        </div>
-        <button
+      <div className="h-14 flex items-center justify-between shrink-0">
+        <TitleLabel title={t.admin.departments.title} subtitle={t.admin.departments.subtitle} />
+        <AddButton
           onClick={() => setIsCreateModalOpen(true)}
-          className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium text-sm"
-        >
-          <Plus size={18} />
-          {t.admin.departments.add_department}
-        </button>
+          label={t.admin.departments.add_department}
+        />
       </div>
 
       {/* Toolbar */}
@@ -551,7 +588,7 @@ export default function DepartmentsPage() {
             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
-          <div className="overflow-y-auto custom-scrollbar flex-1">
+          <div className="overflow-y-auto custom-scrollbar flex-1 pb-40">
             {departments.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center py-16 text-gray-500">
                 <FolderTree size={48} className="mb-4 opacity-50" />
@@ -570,7 +607,7 @@ export default function DepartmentsPage() {
                     className="flex items-center gap-3 py-3 px-4 hover:bg-white/5 transition-colors group border-b border-zinc-800/50"
                   >
                     <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
-                      <Building size={16} />
+                      <Layers size={16} />
                     </div>
                     <div className="flex-1">
                       <span className="font-medium text-white">{dept.name}</span>
@@ -641,9 +678,9 @@ export default function DepartmentsPage() {
           }
 
           // Show toast for bulk import
-          if (options?.bulkCount) {
-            showToast(t.admin.departments.create.bulk.success.replace('{count}', options.bulkCount.toString()));
-          }
+          showToast(t.admin.departments.create.bulk.success.replace(
+            '{count}',
+            (options?.bulkCount) ? options.bulkCount.toString() : '1'));
         }}
       />
     </div>

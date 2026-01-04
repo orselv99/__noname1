@@ -50,8 +50,7 @@
       "accessRequests": "접근 요청",
       "tenants": "테넌트",
       "projects": "프로젝트",
-      "positions": "직위/직책",
-      "settings": "설정",
+      "positions": "직위",
       "logout": "로그아웃"
     },
     "dashboard": {
@@ -66,7 +65,7 @@
     },
     "users": {
       "title": "사용자 관리",
-      "subtitle": "테넌트 관리자: ",
+      "subtitle": "조직의 사용자를 관리하세요.",
       "add_user": "사용자 추가",
       "search_placeholder": "사용자 검색...",
       "table": {
@@ -78,12 +77,36 @@
       "create": {
         "title": "새 사용자 추가",
         "email": "이메일",
-        "username": "사용자명",
+        "username": "이름",
         "password": "비밀번호",
         "role": "역할",
         "cancel": "취소",
         "submit": "생성",
-        "success": "사용자가 생성되었습니다."
+        "success": "사용자가 생성되었습니다.",
+        "tabs": {
+          "single": "단일 추가",
+          "bulk": "일괄 추가 (CSV)"
+        },
+        "bulk": {
+          "drag_drop": "CSV 파일을 드래그하거나 클릭하여 업로드하세요",
+          "import_mode": {
+            "title": "가져오기 모드",
+            "upsert": "업데이트 및 추가 (Merge)",
+            "upsert_desc": "(기존 사용자 업데이트, 새 사용자 추가)",
+            "replace": "전체 교체 (Replace All)",
+            "replace_desc": "(기존 사용자 전체 삭제 후 추가)",
+            "warning": "⚠️ 경고: 이 작업은 최고 관리자를 제외한 모든 사용자를 삭제합니다."
+          },
+          "password": {
+            "title": "임의 비밀번호",
+            "description": "생성되는 사용자는 임의의 10자리 비밀번호를 가지게 됩니다."
+          },
+          "csv_helper": {
+            "delimiters": "지원하는 전화번호 구분자: "
+          },
+          "download_template": "템플릿 다운로드",
+          "submit": "사용자 가져오기"
+        }
       }
     },
     "departments": {
@@ -130,10 +153,25 @@
           "download_template": "템플릿 다운로드",
           "preview": "미리보기",
           "submit": "부서 생성",
-          "success": "{count}개 부서를 성공적으로 가져왔습니다.",
+          "success": "{count}개 부서를 성공적으로 저장했습니다.",
           "error": {
             "empty": "CSV에 유효한 데이터가 없습니다."
           }
+        }
+      }
+    },
+    "settings": {
+      "positions": {
+        "position": {
+          "title": "직위 관리",
+          "description": "조직의 직위 체계를 관리하세요. 드래그 앤 드롭으로 순서를 변경할 수 있습니다.",
+          "add_button": "직위 추가",
+          "modal": {
+            "name": "직위명"
+          }
+        },
+        "common": {
+          "delete_confirm": "정말로 삭제하시겠습니까?"
         }
       }
     },

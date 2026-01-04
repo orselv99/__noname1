@@ -51,7 +51,6 @@
       "tenants": "Tenants",
       "projects": "Projects",
       "positions": "Positions",
-      "settings": "Settings",
       "logout": "Logout"
     },
     "dashboard": {
@@ -66,7 +65,7 @@
     },
     "users": {
       "title": "User Management",
-      "subtitle": "Manage users for tenant: ",
+      "subtitle": "Manage your organization's users.",
       "add_user": "Add User",
       "search_placeholder": "Search users...",
       "table": {
@@ -83,7 +82,31 @@
         "role": "Role",
         "cancel": "Cancel",
         "submit": "Create",
-        "success": "User created successfully."
+        "success": "User created successfully.",
+        "tabs": {
+          "single": "Single Creation",
+          "bulk": "Bulk Import (CSV)"
+        },
+        "bulk": {
+          "drag_drop": "Drag & Drop CSV file or click to upload",
+          "import_mode": {
+            "title": "Import Mode",
+            "upsert": "Upsert (Merge)",
+            "upsert_desc": "(Update existing users, add new ones)",
+            "replace": "Replace All",
+            "replace_desc": "(Delete all existing users and import)",
+            "warning": "⚠️ Warning: This will delete ALL users in this tenant (except Super Admins)."
+          },
+          "password": {
+            "title": "Random Password",
+            "description": "Users will be created with a random 10-char password."
+          },
+          "csv_helper": {
+            "delimiters": "Supported phone delimiters: "
+          },
+          "download_template": "Download Template",
+          "submit": "Import Users"
+        }
       }
     },
     "departments": {
@@ -130,10 +153,39 @@
           "download_template": "Download Template",
           "preview": "Preview",
           "submit": "Create Departments",
-          "success": "Successfully imported {count} department(s).",
+          "success": "Successfully added {count} department(s).",
           "error": {
             "empty": "No valid data found in CSV."
           }
+        }
+      }
+    },
+    "settings": {
+      "positions": {
+        "position": {
+          "title": "Positions",
+          "description": "Define hierarchical levels. Drag and drop to reorder.",
+          "add_button": "Add Position",
+          "modal": {
+            "name": "Position Name"
+          },
+          "create": {
+            "title": "Create Position",
+            "tabs": {
+              "single": "Single Creation",
+              "bulk": "Bulk Import (CSV)"
+            },
+            "name": "Position Name",
+            "submit": "Create Position",
+            "bulk": {
+              "drag_drop": "Drag & Drop CSV file or click to upload",
+              "download_template": "Download Template",
+              "submit": "Import Positions"
+            }
+          }
+        },
+        "common": {
+          "delete_confirm": "Are you sure you want to delete this item?"
         }
       }
     },

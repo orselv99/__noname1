@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
+	"strings"
+	"time"
 
 	pb "server/.protos/auth"
 
@@ -14,23 +17,73 @@ import (
 	"gorm.io/gorm"
 )
 
-// User Model definition removed (duplicate)
-
 // ListUsers: 특정 Tenant의 사용자 목록 조회
 func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.ListUsersResponse, error) {
 	var users []User
 	var total int64
 
-	query := s.db.Model(&User{})
+	query := s.db.Model(&User{}).Preload("PositionRel").Preload("DepartmentRel")
 
 	if req.TenantId != "" {
 		query = query.Where("tenant_id = ?", req.TenantId)
 	}
+	// Exclude super and admin roles from listing
+	query = query.Where("role NOT IN ?", []string{"super", "admin"})
+
+	// Search query filtering
+	if req.Query != "" {
+		query = query.Where("username ILIKE ? OR email ILIKE ?", "%"+req.Query+"%", "%"+req.Query+"%")
+	}
 
 	query.Count(&total)
 
+	// Default sort by CreatedAt DESC
+	sortCol := "users.created_at"
+	sortDesc := true
+
+	if req.SortBy != "" {
+		switch req.SortBy {
+		case "name":
+			sortCol = "users.username"
+			sortDesc = false // Default ASC for name
+		case "position":
+			query = query.Joins("LEFT JOIN positions ON users.position_id = positions.id")
+			sortCol = "positions.name"
+			sortDesc = false
+		case "department":
+			query = query.Joins("LEFT JOIN departments ON users.department_id = departments.id")
+			sortCol = "departments.name"
+			sortDesc = false
+		}
+	}
+
+	// Override sort direction if explicitly set
+	// Note: req.SortDesc is bool. If user wants DESC, it is true.
+	// If user provided SortBy, we set default sortDesc above.
+	// We should strictly follow req.SortDesc if SortBy is present?
+	// Let's assume req.SortDesc applies if SortBy is present.
+	if req.SortBy != "" {
+		sortDesc = req.SortDesc
+	}
+
+	orderClause := sortCol + " ASC"
+	if sortDesc {
+		orderClause = sortCol + " DESC"
+	}
+	query = query.Order(orderClause)
+
+	// Restore offset
 	offset := (req.Page - 1) * req.PageSize
-	result := query.Offset(int(offset)).Limit(int(req.PageSize)).Find(&users)
+	if req.Page < 1 {
+		offset = 0
+	}
+
+	limit := int(req.PageSize)
+	if limit < 1 {
+		limit = 100
+	} // Default limit
+
+	result := query.Offset(int(offset)).Limit(limit).Find(&users)
 	if result.Error != nil {
 		return nil, status.Errorf(codes.Internal, "failed to fetch users: %v", result.Error)
 	}
@@ -38,32 +91,34 @@ func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.L
 	var pbUsers []*pb.User
 	for _, u := range users {
 		// Map DB string Role to Proto Enum
-		roleEnum := pb.Role_ROLE_USER // Default
-		switch u.Role {
-		case "super":
-			roleEnum = pb.Role_ROLE_SUPER
-		case "admin":
-			roleEnum = pb.Role_ROLE_ADMIN
-		case "viewer":
-			roleEnum = pb.Role_ROLE_VIEWER
-		case "user":
-			roleEnum = pb.Role_ROLE_USER
+		// roleEnum is unused, removed.
+
+		var posName string
+		if u.PositionRel != nil {
+			posName = u.PositionRel.Name
+		}
+		var deptName string
+		if u.DepartmentRel != nil {
+			deptName = u.DepartmentRel.Name
 		}
 
+		contact := strings.Join(u.PhoneNumbers, ", ")
+
 		pbUsers = append(pbUsers, &pb.User{
-			Id:           u.ID,
-			Email:        u.Email,
-			Username:     u.Username,
-			TenantId:     u.TenantID,
-			Role:         roleEnum,
-			DepartmentId: u.DepartmentID,
-			CreatedAt:    u.CreatedAt.String(),
-			FirstName:    u.FirstName,
-			LastName:     u.LastName,
-			Birthday:     u.Birthday,
-			PhoneNumbers: u.PhoneNumbers,
-			Position:     u.Position,
-			Memo:         u.Memo,
+			Id:             u.ID,
+			Email:          u.Email,
+			Username:       u.Username,
+			TenantId:       u.TenantID,
+			Role:           pb.Role(pb.Role_value[strings.ToUpper("ROLE_"+u.Role)]), // Convert string role to enum
+			DepartmentId:   ptrToStr(u.DepartmentID),
+			CreatedAt:      u.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:      u.UpdatedAt.Format(time.RFC3339),
+			Contact:        contact,
+			Birthday:       u.Birthday,
+			PhoneNumbers:   u.PhoneNumbers,
+			PositionId:     ptrToStr(u.PositionID),
+			PositionName:   posName,
+			DepartmentName: deptName,
 		})
 	}
 
@@ -77,7 +132,6 @@ func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.L
 func (s *server) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
 	var user User
 
-	// TenantID 검증을 위해 함께 조회
 	result := s.db.Where("id = ? AND tenant_id = ?", req.Id, req.TenantId).First(&user)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
@@ -90,7 +144,6 @@ func (s *server) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb
 		user.Username = req.Username
 	}
 
-	// Role Update (Enum -> String)
 	if req.Role != pb.Role_ROLE_UNSPECIFIED {
 		switch req.Role {
 		case pb.Role_ROLE_SUPER:
@@ -105,47 +158,73 @@ func (s *server) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb
 	}
 
 	if req.DepartmentId != "" {
-		user.DepartmentID = req.DepartmentId
+		user.DepartmentID = strToPtr(req.DepartmentId)
 	}
 
-	// Update new fields
-	if req.FirstName != "" {
-		user.FirstName = req.FirstName
-	}
-	if req.LastName != "" {
-		user.LastName = req.LastName
-	}
+	// if req.FirstName != "" {
+	// 	user.FirstName = req.FirstName
+	// }
+	// if req.LastName != "" {
+	// 	user.LastName = req.LastName
+	// }
 	if req.Birthday != "" {
 		user.Birthday = req.Birthday
 	}
 	if len(req.PhoneNumbers) > 0 {
 		user.PhoneNumbers = req.PhoneNumbers
 	}
-	if req.Position != "" {
-		user.Position = req.Position
-	}
-	if req.Memo != "" {
-		user.Memo = req.Memo
+	// PositionId can be empty string to unassign, so check if it is passed?
+	// Proto default is empty string. If we want to allow unsetting, we might need a flag or assume empty means unset if explicitly provided.
+	// However, existing logic uses != "" to update. Let's stick to that or use a better check if possible.
+	// For now assuming we only set if provided. Use specific logic if clearing is needed.
+	// Update Position
+	if req.PositionId != "" {
+		user.PositionID = strToPtr(req.PositionId)
+	} else {
+		// If explicit clear is needed, we need a flag or assume empty means clear if strictly implemented.
+		// For now, assuming empty request means "do not change" for simple update,
+		// BUT if we want to allow clearing, we might need a specific string like "EMPTY" or check presence.
+		// Given Proto V3 defaults, empty string is default.
+		// Let's assume if it is empty we DON'T update it, to preserve existing.
+		// If user wants to clear, we might need a separate clear action or distinct value.
+		// However, in the refactor, we can decide that empty string updates to empty string?
+		// No, usually UPDATE ignores empty fields.
 	}
 
 	if err := s.db.Save(&user).Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update user: %v", err)
 	}
 
+	// Reload relations to get names
+	s.db.Preload("PositionRel").Preload("DepartmentRel").First(&user, "id = ?", user.ID)
+
+	var posName string
+	if user.PositionRel != nil {
+		posName = user.PositionRel.Name
+	}
+	var deptName string
+	if user.DepartmentRel != nil {
+		deptName = user.DepartmentRel.Name
+	}
+
+	contact := strings.Join(user.PhoneNumbers, ", ")
+
 	return &pb.UpdateUserResponse{
 		User: &pb.User{
-			Id:           user.ID,
-			Email:        user.Email,
-			Username:     user.Username,
-			TenantId:     user.TenantID,
-			Role:         req.Role, // Return requested role as confirmation
-			DepartmentId: user.DepartmentID,
-			FirstName:    user.FirstName,
-			LastName:     user.LastName,
-			Birthday:     user.Birthday,
-			PhoneNumbers: user.PhoneNumbers,
-			Position:     user.Position,
-			Memo:         user.Memo,
+			Id:             user.ID,
+			Email:          user.Email,
+			Username:       user.Username,
+			TenantId:       user.TenantID,
+			Role:           req.Role,
+			DepartmentId:   ptrToStr(user.DepartmentID),
+			CreatedAt:      user.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:      user.UpdatedAt.Format(time.RFC3339),
+			Contact:        contact,
+			Birthday:       user.Birthday,
+			PhoneNumbers:   user.PhoneNumbers,
+			PositionId:     ptrToStr(user.PositionID),
+			PositionName:   posName,
+			DepartmentName: deptName,
 		},
 	}, nil
 }
@@ -195,7 +274,6 @@ func (s *server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb
 
 	username := req.Username
 	if username == "" {
-		// Basic fallback if username not provided
 		username = req.Email
 	}
 
@@ -207,47 +285,42 @@ func (s *server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb
 		Username:     username,
 		TenantID:     req.TenantId,
 		Role:         roleStr,
-		DepartmentID: req.DepartmentId,
-		FirstName:    req.FirstName,
-		LastName:     req.LastName,
+		DepartmentID: strToPtr(req.DepartmentId),
 		Birthday:     req.Birthday,
 		PhoneNumbers: req.PhoneNumbers,
-		Position:     req.Position,
-		Memo:         req.Memo,
+		PositionID:   strToPtr(req.PositionId),
 	}
 
 	if result := s.db.Create(&user); result.Error != nil {
 		return nil, result.Error
 	}
 
+	contact := strings.Join(user.PhoneNumbers, ", ")
+
+	resp := &pb.User{
+		Id:           user.ID,
+		Email:        user.Email,
+		Username:     user.Username,
+		TenantId:     user.TenantID,
+		Role:         req.Role,
+		DepartmentId: ptrToStr(user.DepartmentID),
+		CreatedAt:    user.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    user.UpdatedAt.Format(time.RFC3339),
+		Contact:      contact,
+		Birthday:     user.Birthday,
+		PhoneNumbers: user.PhoneNumbers,
+		PositionId:   ptrToStr(user.PositionID),
+	}
 	return &pb.CreateUserResponse{
-		User: &pb.User{
-			Id:           user.ID,
-			Email:        user.Email,
-			Username:     user.Username,
-			TenantId:     user.TenantID,
-			Role:         req.Role,
-			DepartmentId: user.DepartmentID,
-			FirstName:    user.FirstName,
-			LastName:     user.LastName,
-			Birthday:     user.Birthday,
-			PhoneNumbers: user.PhoneNumbers,
-			Position:     user.Position,
-			Memo:         user.Memo,
-		},
+		User: resp,
 	}, nil
 }
 
-// BatchCreateUsers: 일괄 사용자 생성 (Default Password: zzzzzzzz)
+// BatchCreateUsers: 일괄 사용자 생성 (Default Password: from req or zzzzzzzz)
 func (s *server) BatchCreateUsers(ctx context.Context, req *pb.BatchCreateUsersRequest) (*pb.BatchCreateUsersResponse, error) {
 	if req.TenantId == "" {
 		return nil, status.Error(codes.InvalidArgument, "Tenant ID is required")
 	}
-
-	defaultPassword := "zzzzzzzz"
-	var successCount int32
-	var failureCount int32
-	var failureReasons []string
 
 	tx := s.db.Begin()
 	defer func() {
@@ -256,23 +329,43 @@ func (s *server) BatchCreateUsers(ctx context.Context, req *pb.BatchCreateUsersR
 		}
 	}()
 
+	importMode := req.ImportMode
+	if importMode == "" {
+		importMode = "upsert" // Default
+	}
+
+	// If Replace mode: Delete all users in tenant except 'super' (Global Admin)
+	// We assume 'super' is Role="super" (1). 'admin' (2) is Tenant Admin.
+	// We probably want to replace 'admin' too if it's a full sync?
+	// But deleting the current user (likely admin) is risky.
+	// However, standard replace logic wipes the slate.
+	// We will preserve 'super' role users as a safety net.
+	if importMode == "replace" {
+		if err := tx.Where("tenant_id = ? AND role != ?", req.TenantId, "super").Delete(&User{}).Error; err != nil {
+			tx.Rollback()
+			return nil, status.Errorf(codes.Internal, "failed to clear existing users: %v", err)
+		}
+	}
+
+	var successCount int32
+	var failureCount int32
+	var failureReasons []string
+
+	// Cache existing users for Upsert optimization if not Replace
+	existingUsers := make(map[string]User)
+	if importMode == "upsert" {
+		var users []User
+		if err := tx.Where("tenant_id = ?", req.TenantId).Find(&users).Error; err != nil {
+			tx.Rollback()
+			return nil, status.Errorf(codes.Internal, "failed to fetch existing users: %v", err)
+		}
+		for _, u := range users {
+			existingUsers[u.Email] = u
+		}
+	}
+
 	for i, item := range req.Requests {
-		// Hash Password per user
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(defaultPassword), bcrypt.DefaultCost)
-		if err != nil {
-			tx.Rollback()
-			return nil, status.Errorf(codes.Internal, "failed to hash password for row %d: %v", i+1, err)
-		}
-
-		// Salt
-		saltBytes := make([]byte, 32)
-		if _, err := rand.Read(saltBytes); err != nil {
-			tx.Rollback()
-			return nil, status.Errorf(codes.Internal, "failed to generate salt for row %d: %v", i+1, err)
-		}
-		salt := base64.StdEncoding.EncodeToString(saltBytes)
-
-		// Role mapping
+		// Prepare data
 		roleStr := "user"
 		switch item.Role {
 		case pb.Role_ROLE_SUPER:
@@ -290,28 +383,117 @@ func (s *server) BatchCreateUsers(ctx context.Context, req *pb.BatchCreateUsersR
 			username = item.Email
 		}
 
-		user := User{
-			ID:           uuid.New().String(),
-			Email:        item.Email,
-			PasswordHash: string(hashedPassword),
-			Salt:         salt,
-			Username:     username,
-			TenantID:     req.TenantId,
-			Role:         roleStr,
-			DepartmentID: item.DepartmentId,
-			FirstName:    item.FirstName, // Map new fields
-			LastName:     item.LastName,
-			Birthday:     item.Birthday,
-			PhoneNumbers: item.PhoneNumbers,
-			Position:     item.Position,
-			Memo:         item.Memo,
+		// Check overlap in Upsert
+		var existingID string
+		if importMode == "upsert" {
+			if u, ok := existingUsers[item.Email]; ok {
+				existingID = u.ID
+			}
 		}
 
-		if err := tx.Create(&user).Error; err != nil {
-			tx.Rollback()
-			return nil, status.Errorf(codes.Internal, "failed to create user (row %d - %s): %v", i+1, item.Email, err)
+		// Create SavePoint
+		spName := fmt.Sprintf("sp_%d", i)
+		if err := tx.SavePoint(spName).Error; err != nil {
+			failureCount++
+			failureReasons = append(failureReasons, "Internal DB Error (SavePoint): "+err.Error())
+			continue
 		}
-		successCount++
+
+		if existingID != "" {
+			// Update Existing User
+			updates := map[string]interface{}{
+				"username":      username,
+				"role":          roleStr,
+				"department_id": strToPtr(item.DepartmentId),
+				"birthday":      item.Birthday,
+				"position_id":   strToPtr(item.PositionId),
+				"updated_at":    gorm.Expr("NOW()"),
+			}
+			if len(item.PhoneNumbers) > 0 {
+				updates["phone_numbers"] = item.PhoneNumbers
+			}
+
+			if err := tx.Model(&User{}).Where("id = ?", existingID).Updates(updates).Error; err != nil {
+				tx.RollbackTo(spName) // Rollback to SavePoint
+				failureCount++
+				failureReasons = append(failureReasons, "Failed to update "+item.Email+": "+err.Error())
+				continue
+			}
+			successCount++
+
+		} else {
+			// Create New User
+			password := item.Password
+			if password == "" {
+				password = "zzzzzzzz"
+			}
+
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+			if err != nil {
+				failureCount++
+				failureReasons = append(failureReasons, "Hash failed for "+item.Email)
+				continue
+			}
+
+			saltBytes := make([]byte, 32)
+			if _, err := rand.Read(saltBytes); err != nil {
+				failureCount++
+				failureReasons = append(failureReasons, "Salt failed for "+item.Email)
+				continue
+			}
+			salt := base64.StdEncoding.EncodeToString(saltBytes)
+
+			user := User{
+				ID:           uuid.New().String(),
+				Email:        item.Email,
+				PasswordHash: string(hashedPassword),
+				Salt:         salt,
+				Username:     username,
+				TenantID:     req.TenantId,
+				Role:         roleStr,
+				DepartmentID: strToPtr(item.DepartmentId),
+				Birthday:     item.Birthday,
+				PhoneNumbers: item.PhoneNumbers,
+				PositionID:   strToPtr(item.PositionId),
+			}
+
+			if err := tx.Create(&user).Error; err != nil {
+				tx.RollbackTo(spName) // Rollback to SavePoint
+				failureCount++
+				failureReasons = append(failureReasons, "Create failed for "+item.Email+": "+err.Error())
+				continue
+			}
+			successCount++
+		}
+	}
+
+	if failureCount > 0 && importMode == "replace" {
+		// If strict transactional replace is needed:
+		// tx.Rollback()
+		// return nil ...
+		// But usually batch processes allow partial success if possible?
+		// However, standard logic is often all-or-nothing for transactions.
+		// "replace" was a single transaction. If we encounter errors, maybe we should fail all?
+		// Dept modal did fail all.
+		// I will fail all if any error.
+		tx.Rollback()
+		return &pb.BatchCreateUsersResponse{
+			SuccessCount:   0,
+			FailureCount:   failureCount,
+			FailureReasons: failureReasons,
+		}, nil
+	} else if failureCount > 0 {
+		// For Upsert, maybe partial success is allowed?
+		// But current Proto response structure suggests valid counts.
+		// Let's commit success ones and report failures?
+		// But we wrapped in `tx`.
+		// I'll rollback on ANY failure for safety and consistency with department logic.
+		tx.Rollback()
+		return &pb.BatchCreateUsersResponse{
+			SuccessCount:   0,
+			FailureCount:   failureCount,
+			FailureReasons: failureReasons,
+		}, nil
 	}
 
 	if err := tx.Commit().Error; err != nil {
@@ -320,7 +502,22 @@ func (s *server) BatchCreateUsers(ctx context.Context, req *pb.BatchCreateUsersR
 
 	return &pb.BatchCreateUsersResponse{
 		SuccessCount:   successCount,
-		FailureCount:   failureCount,
-		FailureReasons: failureReasons,
+		FailureCount:   0,
+		FailureReasons: nil,
 	}, nil
+}
+
+// Helper functions for string pointers
+func strToPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func ptrToStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

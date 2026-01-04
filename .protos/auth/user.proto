@@ -22,29 +22,30 @@ message User {
   string department_id = 6;
   string created_at = 7;
   string updated_at = 8;
-  string contact = 9; // Deprecated or mapped to phone_numbers? Let's use new fields.
-  string first_name = 10;
-  string last_name = 11;
+  string contact = 9;
+
   string birthday = 12;
   repeated string phone_numbers = 13;
-  string position = 14;
-  string memo = 15;
+  string position_id = 14; 
+
+  string position_name = 16;
+  string department_name = 17;
 }
 
 // 사용자 추가 요청
 message CreateUserRequest {
   string email = 1;
   string password = 2;
-  string username = 3; // Optional/Auto-generated
+  string username = 3;
   string tenant_id = 4;
   Role role = 5;
   string department_id = 6;
-  string first_name = 7;
-  string last_name = 8;
+
   string birthday = 9;
   repeated string phone_numbers = 10;
-  string position = 11;
-  string memo = 12;
+  string position_id = 11;
+
+
 }
 
 // 일괄 사용자 추가 요청 항목
@@ -53,12 +54,13 @@ message CreateUserRequestItem {
   string username = 2;
   Role role = 3;
   string department_id = 4;
-  string first_name = 5;
-  string last_name = 6;
+
   string birthday = 7;
   repeated string phone_numbers = 8;
-  string position = 9;
-  string memo = 10;
+  string position_id = 9;
+
+  string password = 11;
+
 }
 
 message CreateUserResponse {
@@ -68,6 +70,7 @@ message CreateUserResponse {
 message BatchCreateUsersRequest {
   string tenant_id = 1;
   repeated CreateUserRequestItem requests = 2;
+  string import_mode = 3;
 }
 
 message BatchCreateUsersResponse {
@@ -90,6 +93,8 @@ message ListUsersRequest {
   int32 page = 2;
   int32 page_size = 3;
   string query = 4;
+  string sort_by = 5;
+  bool sort_desc = 6;
 }
 
 message ListUsersResponse {
@@ -104,12 +109,12 @@ message UpdateUserRequest {
   Role role = 3;
   string tenant_id = 4;
   string department_id = 5;
-  string first_name = 6;
-  string last_name = 7;
+
   string birthday = 8;
   repeated string phone_numbers = 9;
-  string position = 10;
-  string memo = 11;
+  string position_id = 10;
+
+
 }
 
 // 사용자 수정 응답
@@ -120,7 +125,7 @@ message UpdateUserResponse {
 // 사용자 삭제 요청
 message DeleteUserRequest {
   string id = 1;
-  string tenant_id = 2; // 검증용
+  string tenant_id = 2;
 }
 
 // 사용자 삭제 응답

@@ -18,6 +18,7 @@ $protoCmd = "apk add --no-cache protobuf-dev && " +
             "export PATH=`$PATH:`$(go env GOPATH)/bin && " +
             "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/user.proto && " +
             "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/tenant.proto && " +
+            "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/position.proto && " +
             "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/auth/auth.proto && " +
             "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/index/index.proto && " +
             "protoc --proto_path=.protos --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import .protos/signaling/signaling.proto && " +

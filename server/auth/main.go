@@ -29,7 +29,7 @@ func main() {
 	// Auto Migration
 	// Database Migration
 	if err := db.AutoMigrate(
-		&User{}, &Subscription{}, &Tenant{},
+		&User{}, &Subscription{}, &Tenant{}, &Position{},
 		&Department{},
 		&Project{},
 		&Permission{}, &AccessRequest{}, // Legacy ACL

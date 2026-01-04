@@ -63,7 +63,7 @@ func (s *server) CheckAccess(ctx context.Context, req *pb.CheckAccessRequest) (*
 		// Department Check
 		// If User has no DepartmentID or Document has no DepartmentID, we fall back to strict mode (Deny)
 		// Or if they match, we allow.
-		if user.DepartmentID != "" && req.DocumentDepartmentId != "" && user.DepartmentID == req.DocumentDepartmentId {
+		if user.DepartmentID != nil && req.DocumentDepartmentId != "" && *user.DepartmentID == req.DocumentDepartmentId {
 			// **Role-specific refinement could go here**
 			// e.g. Viewers get Full, Users get Full (or Read-Only)
 			return &pb.CheckAccessResponse{

@@ -5,10 +5,18 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+)
+
+const (
+	SUPER_TENANT_ID     = "a831330a-84f8-4712-9704-71bc8b92c682"
+	SUPER_TENANT_DOMAIN = "super"
+	SUPER_TENANT_NAME   = "Super Admin Console"
+	SUPER_DEPARTMENT_ID = "2f060282-6540-48fb-a273-71f8024a6076"
 )
 
 func seedSuperUsers(db *gorm.DB) error {
@@ -21,18 +29,18 @@ func seedSuperUsers(db *gorm.DB) error {
 
 	// Password and Tenant for all
 	password := "password"
-	tenantID := "super"
+
 	role := "super"
 
 	// Ensure 'super' tenant exists
 	var superTenant Tenant
-	if err := db.Where("domain = ?", tenantID).First(&superTenant).Error; err != nil {
+	if err := db.Where("domain = ?", SUPER_TENANT_DOMAIN).First(&superTenant).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			log.Printf("Creating super tenant...")
 			superTenant = Tenant{
-				ID:     uuid.New().String(),
-				Domain: tenantID,
-				Name:   "Super Admin Console",
+				ID:     SUPER_TENANT_ID,
+				Domain: SUPER_TENANT_DOMAIN,
+				Name:   SUPER_TENANT_NAME,
 				Status: "active",
 			}
 			if err := db.Create(&superTenant).Error; err != nil {
@@ -43,6 +51,31 @@ func seedSuperUsers(db *gorm.DB) error {
 		}
 	} else {
 		log.Printf("Super tenant already exists.")
+	}
+
+	// Ensure 'super' departement exists
+	var superDept Department
+	if err := db.Where("tenant_id = ?", SUPER_TENANT_DOMAIN).First(&superDept).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			log.Printf("Creating super department...")
+			superDept = Department{
+				ID:                 SUPER_DEPARTMENT_ID,
+				TenantID:           SUPER_TENANT_DOMAIN,
+				Name:               SUPER_TENANT_NAME,
+				Description:        SUPER_TENANT_NAME,
+				ManagerID:          nil,
+				ParentDepartmentID: nil,
+				CreatedAt:          time.Now(),
+				UpdatedAt:          time.Now(),
+			}
+			if err := db.Create(&superDept).Error; err != nil {
+				return fmt.Errorf("failed to create super department: %w", err)
+			}
+		} else {
+			return fmt.Errorf("failed to query super department: %w", err)
+		}
+	} else {
+		log.Printf("Super department already exist.")
 	}
 
 	for _, u := range superUsers {
@@ -65,9 +98,9 @@ func seedSuperUsers(db *gorm.DB) error {
 			Username:     u.Username,
 			PasswordHash: string(hashedPassword),
 			Salt:         salt,
-			TenantID:     tenantID,
+			TenantID:     SUPER_TENANT_DOMAIN,
 			Role:         role,
-			DepartmentID: "Management",
+			DepartmentID: strToPtr(SUPER_DEPARTMENT_ID),
 		}
 
 		// Upsert (Update if exists) based on Email

@@ -88,6 +88,68 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, res)
 }
 
+// CreateUserRequest는 사용자 생성 JSON 바디 구조체입니다.
+// CreateUserRequest는 사용자 생성 JSON 바디 구조체입니다.
+type CreateUserRequest struct {
+	Email        string `json:"email" binding:"required,email"`
+	Password     string `json:"password" binding:"required,min=6"`
+	Username     string `json:"username" binding:"required"`
+	Role         int32  `json:"role"`          // Enum Value
+	DepartmentID string `json:"department_id"` // Optional
+
+	Birthday     string   `json:"birthday"`
+	PhoneNumbers []string `json:"phone_numbers"`
+	PositionID   string   `json:"position_id"`
+
+	Memo string `json:"memo"`
+}
+
+// CreateUser는 사용자 생성을 처리합니다.
+func (h *AuthHandler) CreateUser(c *gin.Context) {
+	var req CreateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Tenant Context Extraction
+	tenantID := c.GetHeader("X-Tenant-ID")
+
+	// gRPC 요청 생성 (타임아웃 설정)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.client.CreateUser(ctx, &pb.CreateUserRequest{
+		Email:        req.Email,
+		Password:     req.Password,
+		Username:     req.Username,
+		TenantId:     tenantID,
+		Role:         pb.Role(req.Role), // Enum Mapping
+		DepartmentId: req.DepartmentID,
+
+		Birthday:     req.Birthday,
+		PhoneNumbers: req.PhoneNumbers,
+		PositionId:   req.PositionID,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// UpdateUserRequest defines the structure for updating user information
+type UpdateUserRequest struct {
+	Username     string `json:"username"`
+	Role         int32  `json:"role"`
+	DepartmentID string `json:"department_id"`
+
+	Birthday     string   `json:"birthday"`
+	PhoneNumbers []string `json:"phone_numbers"`
+	PositionID   string   `json:"position_id"`
+}
+
 // UpdateUser: 사용자 정보 수정
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	tenantID := c.GetHeader("X-Tenant-ID")
@@ -97,11 +159,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	}
 
 	userID := c.Param("id")
-	var req struct {
-		Username     string `json:"username"`
-		Role         int32  `json:"role"` // Changed to int32 to receive Enum value
-		DepartmentID string `json:"department_id"`
-	}
+	var req UpdateUserRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -117,6 +175,10 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		Username:     req.Username,
 		Role:         pb.Role(req.Role),
 		DepartmentId: req.DepartmentID,
+
+		Birthday:     req.Birthday,
+		PhoneNumbers: req.PhoneNumbers,
+		PositionId:   req.PositionID,
 	})
 
 	if err != nil {
@@ -171,21 +233,18 @@ func (h *UserHandler) BatchCreateUsers(c *gin.Context) {
 		return
 	}
 
-	var items []*pb.CreateUserRequestItem
-	if err := c.ShouldBindJSON(&items); err != nil {
+	var req pb.BatchCreateUsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	req := &pb.BatchCreateUsersRequest{
-		TenantId: tenantID,
-		Requests: items,
-	}
+	req.TenantId = tenantID
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	res, err := h.authClient.BatchCreateUsers(ctx, req)
+	res, err := h.authClient.BatchCreateUsers(ctx, &req)
 	if err != nil {
 		st, _ := status.FromError(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": st.Message()})

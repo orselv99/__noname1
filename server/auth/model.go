@@ -10,24 +10,27 @@ import (
 
 // User 모델 정의
 type User struct {
-	ID           string         `gorm:"type:uuid;primary_key;"`
-	Email        string         `gorm:"type:varchar(100);uniqueIndex;not null"`
-	PasswordHash string         `gorm:"not null"`
-	Salt         string         `gorm:"default:'';not null"` // 암호화 키 파생용 소금
-	Username     string         `gorm:"type:varchar(50);not null"`
-	TenantID     string         `gorm:"type:varchar(50);index;not null"`          // 멀티테넌트 식별자
-	Role         string         `gorm:"type:varchar(20);default:'user';not null"` // 권한 (admin, user 등)
-	DepartmentID string         `gorm:"type:varchar(50);index"`                   // 부서 식별자 (Optional)
-	Contact      string         `gorm:"type:varchar(100)"`                        // 연락처
-	FirstName    string         `gorm:"type:varchar(50)"`
-	LastName     string         `gorm:"type:varchar(50)"`
-	Birthday     string         `gorm:"type:varchar(20)"`
-	PhoneNumbers pq.StringArray `gorm:"type:text[]"`
-	Position     string         `gorm:"type:varchar(100)"`
-	Memo         string         `gorm:"type:text"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	DeletedAt    gorm.DeletedAt `gorm:"index"`
+	ID             string         `gorm:"type:uuid;primary_key;"`
+	Email          string         `gorm:"type:varchar(100);uniqueIndex;not null"`
+	PasswordHash   string         `gorm:"not null"`
+	Salt           string         `gorm:"default:'';not null"` // 암호화 키 파생용 소금
+	Username       string         `gorm:"type:varchar(50);not null"`
+	TenantID       string         `gorm:"type:varchar(50);index;not null"`          // 멀티테넌트 식별자
+	Role           string         `gorm:"type:varchar(20);default:'user';not null"` // 권한 (admin, user 등)
+	DepartmentID   *string        `gorm:"type:varchar(50);index"`                   // 부서 식별자 (Optional)
+	DepartmentRel  *Department    `gorm:"foreignKey:DepartmentID;references:ID"`
+	Contact        string         `gorm:"type:varchar(100)"` // 연락처
+	FirstName      string         `gorm:"type:varchar(50)"`
+	LastName       string         `gorm:"type:varchar(50)"`
+	Birthday       string         `gorm:"type:varchar(20)"`
+	PhoneNumbers   pq.StringArray `gorm:"type:text[]"`
+	PositionID     *string        `gorm:"type:uuid;index"`
+	PositionRel    *Position      `gorm:"foreignKey:PositionID;references:ID"`
+	PositionName   string         `gorm:"-"` // Join
+	DepartmentName string         `gorm:"-"` // Join
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	DeletedAt      gorm.DeletedAt `gorm:"index"`
 }
 
 // Subscription 모델 정의
@@ -172,6 +175,23 @@ type VisibilityApproval struct {
 func (va *VisibilityApproval) BeforeCreate(tx *gorm.DB) (err error) {
 	if va.ID == "" {
 		va.ID = uuid.New().String()
+	}
+	return
+}
+
+// Position Model
+type Position struct {
+	ID        string `gorm:"type:uuid;primaryKey"`
+	TenantID  string `gorm:"type:varchar(50);not null;index"`
+	Name      string `gorm:"type:varchar(100);not null"`
+	SortOrder int    `gorm:"default:0"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (p *Position) BeforeCreate(tx *gorm.DB) (err error) {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
 	}
 	return
 }

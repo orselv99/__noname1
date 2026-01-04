@@ -59,7 +59,7 @@ func (s *server) CreateTenant(ctx context.Context, req *pb.CreateTenantRequest) 
 			Salt:         salt,
 			TenantID:     req.Domain, // TenantID is Domain
 			Role:         "admin",    // Role: Admin
-			DepartmentID: "Management",
+			DepartmentID: strToPtr(SUPER_DEPARTMENT_ID),
 		}
 		if adminUser.Username == "" {
 			adminUser.Username = "Admin"

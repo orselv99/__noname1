@@ -13,6 +13,7 @@ import {
   Users,
   Building,
   Building2,
+  Layers,
   Shield,
   Network,
   FileText,
@@ -78,15 +79,16 @@ export default function AdminLayout({
   } else {
     menuItems.push(
       { icon: Network, label: t.admin.sidebar.departments, href: '/admin/departments' },
+      { icon: Layers, label: t.admin.sidebar.positions || 'Positions', href: '/admin/positions' },
       { icon: Users, label: t.admin.sidebar.users, href: '/admin/users' },
       { icon: Briefcase, label: t.admin.sidebar.projects || 'Projects', href: '/admin/projects' },
-      { icon: Award, label: t.admin.sidebar.positions || 'Positions', href: '/admin/positions' },
       { icon: FileText, label: 'Documents', href: '/admin/documents' },
       { icon: Shield, label: t.admin.sidebar.accessRequests, href: '/admin/access-requests' },
     );
   }
 
-  menuItems.push({ icon: Settings, label: t.admin.sidebar.settings, href: '/admin/settings' });
+  // Settings removed
+  // menuItems.push({ icon: Settings, label: t.admin.sidebar.settings, href: '/admin/settings' });
 
   return (
     <ToastProvider>
