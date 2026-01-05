@@ -8,7 +8,21 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "shell:allow-execute",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "bin/llama-server",
+          "args": true,
+          "sidecar": true
+        },
+        {
+          "name": "llama-server",
+          "args": true,
+          "sidecar": true
+        }
+      ]
+    },
     "shell:allow-open"
   ]
 }

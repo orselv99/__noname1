@@ -1,4 +1,5 @@
 import { useEditor, EditorContent } from '@tiptap/react';
+import { invoke } from '@tauri-apps/api/core';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
@@ -136,6 +137,28 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
     ],
   });
 
+  const [aiResult, setAiResult] = useState<any>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+
+  const handleAiExtraction = async () => {
+    if (!editor) return;
+    const text = editor.getText();
+    if (!text.trim()) return;
+
+    setIsExtracting(true);
+    setAiResult(null);
+
+    try {
+      const result = await invoke('extract_info', { text });
+      setAiResult(result);
+    } catch (error) {
+      console.error('AI Extraction Failed:', error);
+      setAiResult({ error: `Failed to extract info: ${error}` });
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
       <div className="flex items-center gap-2 p-2 bg-zinc-900 border-b border-zinc-800">
@@ -163,10 +186,31 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
         >
           <s>S</s>
         </button>
+
+        <div className="h-4 w-px bg-zinc-800 mx-2" />
+
+        <button
+          onClick={handleAiExtraction}
+          disabled={isExtracting}
+          className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${isExtracting
+            ? 'bg-zinc-800 text-zinc-500 cursor-wait'
+            : 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30'
+            }`}
+        >
+          {isExtracting ? 'Extracting...' : '✨ Extract Info'}
+        </button>
       </div>
       <div className="flex-1 p-4 bg-black/50 overflow-y-auto">
         <EditorContent editor={editor} className="prose prose-invert max-w-none h-full outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[200px]" />
       </div>
+
+      {aiResult && (
+        <div className="p-4 bg-zinc-950 border-t border-zinc-800 text-xs font-mono text-zinc-400 max-h-40 overflow-auto">
+          <h4 className="text-zinc-500 font-bold mb-2">AI Extraction Result:</h4>
+          <pre className="whitespace-pre-wrap">{JSON.stringify(aiResult, null, 2)}</pre>
+        </div>
+      )}
+
       <div className="p-2 bg-zinc-900 border-t border-zinc-800 text-xs text-zinc-500 flex justify-between">
         <span>{editor?.storage.characterCount?.characters() ?? 0} characters</span>
         <div className="flex gap-2 items-center">
