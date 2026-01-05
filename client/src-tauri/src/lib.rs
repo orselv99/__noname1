@@ -1,4 +1,12 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use std::sync::Mutex;
+use tauri::Manager;
+use tauri_plugin_shell::ShellExt;
+use std::os::windows::process::CommandExt;
+use std::process::{Command, Stdio};
+
+pub mod commands;
+
 #[tauri::command]
 fn greet(name: &str) -> String {
   format!("Hello, {}! You've been greeted from Rust!", name)
@@ -92,12 +100,6 @@ async fn extract_info(text: String) -> Result<AiResult, String> {
   })
 }
 
-use tauri::Manager;
-use tauri_plugin_shell::ShellExt;
-
-use std::os::windows::process::CommandExt;
-use std::process::{Command, Stdio};
-
 fn kill_orphans() {
   let _ = Command::new("taskkill")
     .args(["/F", "/IM", "llama-server-x86_64-pc-windows-msvc.exe", "/T"])
@@ -115,7 +117,14 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
-    .invoke_handler(tauri::generate_handler![greet, extract_info])
+    .manage(Mutex::new(commands::auth::AuthState::default()))
+    .invoke_handler(tauri::generate_handler![
+        greet, 
+        extract_info, 
+        commands::auth::login, 
+        commands::auth::change_password, 
+        commands::auth::logout
+    ])
     .setup(|app| {
       // Kill any existing sidecar processes to prevent orphans
       kill_orphans();

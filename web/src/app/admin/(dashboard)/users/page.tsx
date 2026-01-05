@@ -614,10 +614,15 @@ export default function UsersPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleBatchReset}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors"
+              disabled={totalCount === 0}
+              className={`flex w-9 h-9 p-2 text-sm font-medium rounded-lg transition-colors border 
+                ${totalCount === 0
+                  ? 'text-gray-600 bg-zinc-800/50 border-zinc-800 cursor-not-allowed opacity-50'
+                  : 'text-red-400 bg-red-500/10 hover:bg-red-500/20 border-red-500/20'
+                }`}
+              title={totalCount === 0 ? "No users available" : "Reset all passwords"}
             >
-              <Mail size={16} />
-              <span>Send All Passwords</span>
+              <Mail size={18} />
             </button>
             <AddButton
               onClick={() => setIsCreateModalOpen(true)}
@@ -730,15 +735,13 @@ export default function UsersPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {user.force_change_password && (
-                            <button
-                              onClick={() => handleResetAndSendPassword(user)}
-                              className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors text-gray-400 hover:text-purple-400"
-                              title="Reset & Send Password"
-                            >
-                              <Mail size={16} />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleResetAndSendPassword(user)}
+                            className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors text-gray-400 hover:text-purple-400"
+                            title="Reset & Send Password"
+                          >
+                            <Mail size={16} />
+                          </button>
                           <button
                             onClick={() => handleEditClick(user)}
                             className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors text-gray-400 hover:text-blue-400"

@@ -23,35 +23,21 @@ func seedSuperUsers(db *gorm.DB) error {
 	superUsers := []struct {
 		Email    string
 		Username string
+		Password string
+		TenantID string
+		Role     string
 	}{
-		{"super1@wizvera.com", "Super User 1"},
+		{"super1@wizvera.com", "Super User 1", "password", SUPER_TENANT_DOMAIN, "super"},
 	}
-
-	// Password and Tenant for all
-	password := "password"
-
-	role := "super"
 
 	// Ensure 'super' tenant exists
-	var superTenant Tenant
-	if err := db.Where("domain = ?", SUPER_TENANT_DOMAIN).First(&superTenant).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			log.Printf("Creating super tenant...")
-			superTenant = Tenant{
-				ID:     SUPER_TENANT_ID,
-				Domain: SUPER_TENANT_DOMAIN,
-				Name:   SUPER_TENANT_NAME,
-				Status: "active",
-			}
-			if err := db.Create(&superTenant).Error; err != nil {
-				return fmt.Errorf("failed to create super tenant: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to query super tenant: %w", err)
-		}
-	} else {
-		log.Printf("Super tenant already exists.")
+	if err := ensureTenant(db, SUPER_TENANT_ID, SUPER_TENANT_DOMAIN, SUPER_TENANT_NAME); err != nil {
+		return err
 	}
+	// Ensure 'wizvera' tenant exists
+	// if err := ensureTenant(db, "w-1", "wizvera", "Wizvera Inc."); err != nil {
+	// 	return err
+	// }
 
 	// Ensure 'super' departement exists
 	var superDept Department
@@ -74,13 +60,11 @@ func seedSuperUsers(db *gorm.DB) error {
 		} else {
 			return fmt.Errorf("failed to query super department: %w", err)
 		}
-	} else {
-		log.Printf("Super department already exist.")
 	}
 
 	for _, u := range superUsers {
 		// Hashing
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
 		if err != nil {
 			return fmt.Errorf("failed to hash password: %w", err)
 		}
@@ -97,37 +81,64 @@ func seedSuperUsers(db *gorm.DB) error {
 			Email:        u.Email,
 			Username:     u.Username,
 			PasswordHash: string(hashedPassword),
-			TenantID:     SUPER_TENANT_DOMAIN,
-			Role:         role,
-			DepartmentID: strToPtr(SUPER_DEPARTMENT_ID),
+			TenantID:     u.TenantID,
+			Role:         u.Role,
+		}
+
+		// Link to dept only for super
+		if u.TenantID == SUPER_TENANT_DOMAIN {
+			user.DepartmentID = strToPtr(SUPER_DEPARTMENT_ID)
 		}
 
 		// Upsert (Update if exists) based on Email
 		var existing User
 		if err := db.Where("email = ?", u.Email).First(&existing).Error; err == nil {
 			// Update existing
-			log.Printf("Updating super user %s...", u.Email)
+			log.Printf("Updating user %s...", u.Email)
 			existing.PasswordHash = string(hashedPassword)
 			existing.Salt = salt
+			existing.TenantID = u.TenantID
+			existing.Role = u.Role
 			// Explicitly set ForceChangePassword to false (Update handles zero values)
 			existing.ForceChangePassword = false
 			// Re-save
 			if err := db.Save(&existing).Error; err != nil {
-				return fmt.Errorf("failed to update super user %s: %w", u.Email, err)
+				return fmt.Errorf("failed to update user %s: %w", u.Email, err)
 			}
 		} else {
 			// Create new
-			log.Printf("Creating super user %s...", u.Email)
+			log.Printf("Creating user %s...", u.Email)
 			if err := db.Create(&user).Error; err != nil {
-				return fmt.Errorf("failed to create super user %s: %w", u.Email, err)
+				return fmt.Errorf("failed to create user %s: %w", u.Email, err)
 			}
 			// FORCE Update to false (because Create ignores zero value 'false' when default is 'true')
 			if err := db.Model(&user).Update("force_change_password", false).Error; err != nil {
 				return fmt.Errorf("failed to set force_change_password for %s: %w", u.Email, err)
 			}
 		}
-		log.Printf("Super user %s seeded successfully.", u.Email)
+		log.Printf("User %s seeded successfully.", u.Email)
 	}
 
+	return nil
+}
+
+func ensureTenant(db *gorm.DB, id, domain, name string) error {
+	var t Tenant
+	if err := db.Where("domain = ?", domain).First(&t).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			log.Printf("Creating tenant %s...", domain)
+			t = Tenant{
+				ID:     id,
+				Domain: domain,
+				Name:   name,
+				Status: "active",
+			}
+			if err := db.Create(&t).Error; err != nil {
+				return fmt.Errorf("failed to create tenant %s: %w", domain, err)
+			}
+		} else {
+			return fmt.Errorf("failed to query tenant %s: %w", domain, err)
+		}
+	}
 	return nil
 }

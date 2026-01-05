@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package auth;
+
+option go_package = "server/.protos/auth";
+
+import "auth/user.proto";
+
+// Tenant Management Messages
+message Tenant {
+  string id = 1;
+  string domain = 2; // subdomain (e.g. 'wizvera')
+  string name = 3;   // display name (e.g. 'Wizvera Inc.')
+  string status = 4; // 'active', 'suspended'
+  int32 user_count = 5; // Aggregated stat
+  string created_at = 6;
+}
+
+message CreateTenantRequest {
+  string domain = 1;
+  string name = 2;
+  string admin_email = 3;
+  string admin_password = 4;
+  string admin_username = 5;
+}
+
+message CreateTenantResponse {
+  Tenant tenant = 1;
+}
+
+message ListTenantsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+}
+
+message ListTenantsResponse {
+  repeated Tenant tenants = 1;
+  int32 total_count = 2;
+}
+
+message GetTenantRequest {
+  string domain = 1; // Search by domain
+}
+
+message GetTenantResponse {
+  Tenant tenant = 1;
+  User admin_user = 2;
+  Subscription subscription = 3;
+}
+
+message Subscription {
+  string id = 1;
+  string tenant_id = 2;
+  string plan_name = 3;   // e.g. "Basic", "Pro", "Enterprise"
+  string status = 4;      // "active", "expired", "cancelled"
+  string start_date = 5;
+  string end_date = 6;
+  string payment_method = 7; // e.g. "Credit Card (...1234)"
+  string next_billing_date = 8;
+}

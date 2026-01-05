@@ -61,6 +61,7 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		ExpiresIn:           int64(exp - time.Now().Unix()),
 		Role:                user.Role,
 		ForceChangePassword: user.ForceChangePassword,
+		TenantId:            user.TenantID,
 	}, nil
 }
 
@@ -113,4 +114,11 @@ func (s *server) RefreshToken(ctx context.Context, req *pb.RefreshTokenRequest) 
 		AccessToken:  newAccess,
 		RefreshToken: newRefresh, // Rotation
 	}, nil
+}
+
+func (s *server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
+	// In a real implementation, we should blacklist the refresh token here.
+	// For now, we just log the logout event.
+	log.Printf("[INFO] User logged out. AccessToken: %s...", req.AccessToken[:10])
+	return &pb.LogoutResponse{Success: true}, nil
 }

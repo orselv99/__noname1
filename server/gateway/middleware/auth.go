@@ -65,6 +65,12 @@ func (m *AuthMiddleware) Handler() gin.HandlerFunc {
 			c.Set("user_salt", resp.UserSalt)
 		}
 
+		// TenantID from Header
+		tenantId := c.GetHeader("X-Tenant-ID")
+		if tenantId != "" {
+			c.Set("tenant_id", tenantId)
+		}
+
 		c.Next()
 
 	}

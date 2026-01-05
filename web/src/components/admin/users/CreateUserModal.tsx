@@ -17,6 +17,8 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useToast } from '@/components/admin/Toast';
 import Papa from 'papaparse';
 
+const MotionDiv = motion.div as any;
+
 interface CreateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -76,7 +78,7 @@ const DepartmentItem = ({ node, level = 0, expandedIds, onToggle, selectedId, on
       </div>
       <AnimatePresence>
         {isExpanded && hasChildren && (
-          <motion.div
+          <MotionDiv
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -93,7 +95,7 @@ const DepartmentItem = ({ node, level = 0, expandedIds, onToggle, selectedId, on
                 onSelect={onSelect}
               />
             ))}
-          </motion.div>
+          </MotionDiv>
         )}
       </AnimatePresence>
     </div>
@@ -422,13 +424,13 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div
+        <MotionDiv
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         >
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -765,14 +767,34 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
                     </div>
                   )}
                   <div className="flex justify-end pt-4 border-t border-zinc-800 gap-3">
-                    <button type="button" onClick={() => { onClose(); resetForm(); }} className="px-4 py-2 text-gray-400">{t.admin.users.create.cancel}</button>
-                    <button onClick={handleBulkSubmit} disabled={isLoading || !csvPreview.length} className="px-6 py-2 bg-blue-600 text-white rounded-lg">{t.admin.users.create.bulk.submit}</button>
+                    <button
+                      type="button"
+                      onClick={() => { onClose(); resetForm(); }}
+                      disabled={isLoading}
+                      className="px-4 py-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {t.admin.users.create.cancel}
+                    </button>
+                    <button
+                      onClick={handleBulkSubmit}
+                      disabled={isLoading || !csvPreview.length}
+                      className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="animate-spin" size={16} />
+                          <span>Processing ({csvPreview.length})...</span>
+                        </>
+                      ) : (
+                        t.admin.users.create.bulk.submit
+                      )}
+                    </button>
                   </div>
                 </div>
               )}
             </div>
-          </motion.div>
-        </motion.div>
+          </MotionDiv>
+        </MotionDiv>
       )}
     </AnimatePresence>
   );

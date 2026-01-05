@@ -80,18 +80,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {/* Toast Container */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2">
         <AnimatePresence>
-          {toasts.map(toast => (
-            <motion.div
-              key={toast.id}
-              initial={{ opacity: 0, y: 50, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.9 }}
-              className={`${toastStyles[toast.type].bg} text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[200px]`}
-            >
-              {toastStyles[toast.type].icon}
-              <span className="font-medium">{toast.message}</span>
-            </motion.div>
-          ))}
+          {toasts.map(toast => {
+            const MotionDiv = motion.div as any;
+            return (
+              <MotionDiv
+                key={toast.id}
+                initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                className={`${toastStyles[toast.type].bg} text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[200px]`}
+              >
+                {toastStyles[toast.type].icon}
+                <span className="font-medium">{toast.message}</span>
+              </MotionDiv>
+            );
+          })}
         </AnimatePresence>
       </div>
     </ToastContext.Provider>

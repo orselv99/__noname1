@@ -1187,6 +1187,118 @@ func (x *BatchResetPasswordResponse) GetFailureCount() int32 {
 	return 0
 }
 
+type ChangePasswordRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	UserId          string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	TenantId        string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	CurrentPassword string                 `protobuf:"bytes,3,opt,name=current_password,json=currentPassword,proto3" json:"current_password,omitempty"`
+	NewPassword     string                 `protobuf:"bytes,4,opt,name=new_password,json=newPassword,proto3" json:"new_password,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ChangePasswordRequest) Reset() {
+	*x = ChangePasswordRequest{}
+	mi := &file_auth_user_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangePasswordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangePasswordRequest) ProtoMessage() {}
+
+func (x *ChangePasswordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_user_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangePasswordRequest.ProtoReflect.Descriptor instead.
+func (*ChangePasswordRequest) Descriptor() ([]byte, []int) {
+	return file_auth_user_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ChangePasswordRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ChangePasswordRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *ChangePasswordRequest) GetCurrentPassword() string {
+	if x != nil {
+		return x.CurrentPassword
+	}
+	return ""
+}
+
+func (x *ChangePasswordRequest) GetNewPassword() string {
+	if x != nil {
+		return x.NewPassword
+	}
+	return ""
+}
+
+type ChangePasswordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangePasswordResponse) Reset() {
+	*x = ChangePasswordResponse{}
+	mi := &file_auth_user_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangePasswordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangePasswordResponse) ProtoMessage() {}
+
+func (x *ChangePasswordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_user_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangePasswordResponse.ProtoReflect.Descriptor instead.
+func (*ChangePasswordResponse) Descriptor() ([]byte, []int) {
+	return file_auth_user_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ChangePasswordResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
 var File_auth_user_proto protoreflect.FileDescriptor
 
 const file_auth_user_proto_rawDesc = "" +
@@ -1291,7 +1403,14 @@ const file_auth_user_proto_rawDesc = "" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\"f\n" +
 	"\x1aBatchResetPasswordResponse\x12#\n" +
 	"\rsuccess_count\x18\x01 \x01(\x05R\fsuccessCount\x12#\n" +
-	"\rfailure_count\x18\x02 \x01(\x05R\ffailureCount*\\\n" +
+	"\rfailure_count\x18\x02 \x01(\x05R\ffailureCount\"\x9b\x01\n" +
+	"\x15ChangePasswordRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12)\n" +
+	"\x10current_password\x18\x03 \x01(\tR\x0fcurrentPassword\x12!\n" +
+	"\fnew_password\x18\x04 \x01(\tR\vnewPassword\"2\n" +
+	"\x16ChangePasswordResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess*\\\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -1314,7 +1433,7 @@ func file_auth_user_proto_rawDescGZIP() []byte {
 }
 
 var file_auth_user_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_auth_user_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_auth_user_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_auth_user_proto_goTypes = []any{
 	(Role)(0),                          // 0: auth.Role
 	(*User)(nil),                       // 1: auth.User
@@ -1333,6 +1452,8 @@ var file_auth_user_proto_goTypes = []any{
 	(*DeleteUserResponse)(nil),         // 14: auth.DeleteUserResponse
 	(*BatchResetPasswordRequest)(nil),  // 15: auth.BatchResetPasswordRequest
 	(*BatchResetPasswordResponse)(nil), // 16: auth.BatchResetPasswordResponse
+	(*ChangePasswordRequest)(nil),      // 17: auth.ChangePasswordRequest
+	(*ChangePasswordResponse)(nil),     // 18: auth.ChangePasswordResponse
 }
 var file_auth_user_proto_depIdxs = []int32{
 	0, // 0: auth.User.role:type_name -> auth.Role
@@ -1362,7 +1483,7 @@ func file_auth_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_auth_user_proto_rawDesc), len(file_auth_user_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

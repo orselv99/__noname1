@@ -285,7 +285,7 @@ func (h *UserHandler) ResetUserPassword(c *gin.Context) {
 }
 
 // BatchResetPassword: Tenant 내 모든 사용자 비밀번호 일괄 초기화
-func (h *UserHandler) BatchResetPassword(c *gin.Context) {
+func (h *UserHandler) BatchResetUserPassword(c *gin.Context) {
 	tenantID := c.GetHeader("X-Tenant-ID")
 	if tenantID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})

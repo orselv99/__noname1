@@ -35,5 +35,10 @@ server/server
 client-ai-service/*
 !client-ai-service/README.md
 
-# Test results
-.test/result/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

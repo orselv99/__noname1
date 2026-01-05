@@ -74,6 +74,9 @@ func main() {
 		auth := api.Group("/auth")
 		{
 			auth.POST("/login", authHandler.Login)
+			// Password Change for authenticated users
+			auth.POST("/change-password", authMiddleware.Handler(), authHandler.ChangePassword)
+			auth.POST("/logout", authMiddleware.Handler(), authHandler.Logout)
 		}
 
 		// Public Tenant Routes
@@ -93,7 +96,7 @@ func main() {
 			protected.PUT("/users/:id", userHandler.UpdateUser)
 			protected.DELETE("/users/:id", userHandler.DeleteUser)
 			protected.POST("/users/:id/reset-password", userHandler.ResetUserPassword)
-			protected.POST("/users/batch/reset-password", userHandler.BatchResetPassword)
+			protected.POST("/users/batch/reset-password", userHandler.BatchResetUserPassword)
 
 			// Tenant Management Routes (Super Only)
 			protected.POST("/tenants", tenantHandler.CreateTenant)

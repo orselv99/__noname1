@@ -651,7 +651,10 @@ func (s *server) BatchResetPassword(ctx context.Context, req *pb.BatchResetPassw
 		if err := s.SendPasswordEmail(user.Email, newPassword); err != nil {
 			// Even if email fails, password is changed.
 			// We might want to log this or consider it a "partial failure"?
-			// For now, count as success because the reset happened, but log the email failure.
+			// For now, count as success
+			// Send emails to mock sender (logged to console) or MailHog
+			// ... (Emails are sent inside the loop now)
+
 			fmt.Printf("Failed to send email to %s: %v\n", user.Email, err)
 		}
 		successCount++
@@ -661,4 +664,36 @@ func (s *server) BatchResetPassword(ctx context.Context, req *pb.BatchResetPassw
 		SuccessCount: successCount,
 		FailureCount: failureCount,
 	}, nil
+}
+
+func (s *server) ChangePassword(ctx context.Context, req *pb.ChangePasswordRequest) (*pb.ChangePasswordResponse, error) {
+	var user User
+	result := s.db.Where("id = ? AND tenant_id = ?", req.UserId, req.TenantId).First(&user)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, status.Errorf(codes.NotFound, "user not found")
+		}
+		return nil, status.Errorf(codes.Internal, "db error: %v", result.Error)
+	}
+
+	// Verify current password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "invalid current password")
+	}
+
+	// Hash new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to hash password")
+	}
+
+	// Update user
+	user.PasswordHash = string(hashedPassword)
+	user.ForceChangePassword = false // Reset force flag
+
+	if err := s.db.Save(&user).Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update user")
+	}
+
+	return &pb.ChangePasswordResponse{Success: true}, nil
 }
