@@ -92,6 +92,8 @@ func main() {
 			protected.GET("/users", userHandler.ListUsers)
 			protected.PUT("/users/:id", userHandler.UpdateUser)
 			protected.DELETE("/users/:id", userHandler.DeleteUser)
+			protected.POST("/users/:id/reset-password", userHandler.ResetUserPassword)
+			protected.POST("/users/batch/reset-password", userHandler.BatchResetPassword)
 
 			// Tenant Management Routes (Super Only)
 			protected.POST("/tenants", tenantHandler.CreateTenant)

@@ -105,20 +105,21 @@ func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.L
 		contact := strings.Join(u.PhoneNumbers, ", ")
 
 		pbUsers = append(pbUsers, &pb.User{
-			Id:             u.ID,
-			Email:          u.Email,
-			Username:       u.Username,
-			TenantId:       u.TenantID,
-			Role:           pb.Role(pb.Role_value[strings.ToUpper("ROLE_"+u.Role)]), // Convert string role to enum
-			DepartmentId:   ptrToStr(u.DepartmentID),
-			CreatedAt:      u.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:      u.UpdatedAt.Format(time.RFC3339),
-			Contact:        contact,
-			Birthday:       u.Birthday,
-			PhoneNumbers:   u.PhoneNumbers,
-			PositionId:     ptrToStr(u.PositionID),
-			PositionName:   posName,
-			DepartmentName: deptName,
+			Id:                  u.ID,
+			Email:               u.Email,
+			Username:            u.Username,
+			TenantId:            u.TenantID,
+			Role:                pb.Role(pb.Role_value[strings.ToUpper("ROLE_"+u.Role)]), // Convert string role to enum
+			DepartmentId:        ptrToStr(u.DepartmentID),
+			CreatedAt:           u.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:           u.UpdatedAt.Format(time.RFC3339),
+			Contact:             contact,
+			Birthday:            u.Birthday,
+			PhoneNumbers:        u.PhoneNumbers,
+			PositionId:          ptrToStr(u.PositionID),
+			PositionName:        posName,
+			DepartmentName:      deptName,
+			ForceChangePassword: u.ForceChangePassword,
 		})
 	}
 
@@ -211,20 +212,21 @@ func (s *server) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb
 
 	return &pb.UpdateUserResponse{
 		User: &pb.User{
-			Id:             user.ID,
-			Email:          user.Email,
-			Username:       user.Username,
-			TenantId:       user.TenantID,
-			Role:           req.Role,
-			DepartmentId:   ptrToStr(user.DepartmentID),
-			CreatedAt:      user.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:      user.UpdatedAt.Format(time.RFC3339),
-			Contact:        contact,
-			Birthday:       user.Birthday,
-			PhoneNumbers:   user.PhoneNumbers,
-			PositionId:     ptrToStr(user.PositionID),
-			PositionName:   posName,
-			DepartmentName: deptName,
+			Id:                  user.ID,
+			Email:               user.Email,
+			Username:            user.Username,
+			TenantId:            user.TenantID,
+			Role:                req.Role,
+			DepartmentId:        ptrToStr(user.DepartmentID),
+			CreatedAt:           user.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:           user.UpdatedAt.Format(time.RFC3339),
+			Contact:             contact,
+			Birthday:            user.Birthday,
+			PhoneNumbers:        user.PhoneNumbers,
+			PositionId:          ptrToStr(user.PositionID),
+			PositionName:        posName,
+			DepartmentName:      deptName,
+			ForceChangePassword: user.ForceChangePassword,
 		},
 	}, nil
 }
@@ -295,21 +297,30 @@ func (s *server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb
 		return nil, result.Error
 	}
 
+	// Exemption: Super/Admin does not need forced password change upon creation
+	if req.Role == pb.Role_ROLE_SUPER || req.Role == pb.Role_ROLE_ADMIN {
+		if err := s.db.Model(&user).Update("force_change_password", false).Error; err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to set exemption: %v", err)
+		}
+		user.ForceChangePassword = false
+	}
+
 	contact := strings.Join(user.PhoneNumbers, ", ")
 
 	resp := &pb.User{
-		Id:           user.ID,
-		Email:        user.Email,
-		Username:     user.Username,
-		TenantId:     user.TenantID,
-		Role:         req.Role,
-		DepartmentId: ptrToStr(user.DepartmentID),
-		CreatedAt:    user.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:    user.UpdatedAt.Format(time.RFC3339),
-		Contact:      contact,
-		Birthday:     user.Birthday,
-		PhoneNumbers: user.PhoneNumbers,
-		PositionId:   ptrToStr(user.PositionID),
+		Id:                  user.ID,
+		Email:               user.Email,
+		Username:            user.Username,
+		TenantId:            user.TenantID,
+		Role:                req.Role,
+		DepartmentId:        ptrToStr(user.DepartmentID),
+		CreatedAt:           user.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:           user.UpdatedAt.Format(time.RFC3339),
+		Contact:             contact,
+		Birthday:            user.Birthday,
+		PhoneNumbers:        user.PhoneNumbers,
+		PositionId:          ptrToStr(user.PositionID),
+		ForceChangePassword: user.ForceChangePassword,
 	}
 	return &pb.CreateUserResponse{
 		User: resp,
@@ -463,6 +474,16 @@ func (s *server) BatchCreateUsers(ctx context.Context, req *pb.BatchCreateUsersR
 				failureReasons = append(failureReasons, "Create failed for "+item.Email+": "+err.Error())
 				continue
 			}
+
+			// Exemption: Super/Admin
+			if item.Role == pb.Role_ROLE_SUPER || item.Role == pb.Role_ROLE_ADMIN {
+				if err := tx.Model(&user).Update("force_change_password", false).Error; err != nil {
+					tx.RollbackTo(spName)
+					failureCount++
+					failureReasons = append(failureReasons, "Failed to set exemption for "+item.Email)
+					continue
+				}
+			}
 			successCount++
 		}
 	}
@@ -520,4 +541,124 @@ func ptrToStr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// ResetAndSendPassword: 비밀번호 재설정 및 이메일 전송
+func (s *server) ResetAndSendPassword(ctx context.Context, req *pb.ResetAndSendPasswordRequest) (*pb.ResetAndSendPasswordResponse, error) {
+	var user User
+	result := s.db.Where("id = ? AND tenant_id = ?", req.UserId, req.TenantId).First(&user)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, status.Errorf(codes.NotFound, "user not found")
+		}
+		return nil, status.Errorf(codes.Internal, "db error: %v", result.Error)
+	}
+
+	// Generate New Password
+	newPassword, err := generateRandomPassword(12)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to generate password: %v", err)
+	}
+
+	// Hash Password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to hash password: %v", err)
+	}
+
+	// Generate New Salt (Optional, but good practice to rotate)
+	saltBytes := make([]byte, 32)
+	if _, err := rand.Read(saltBytes); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to generate salt: %v", err)
+	}
+	salt := base64.StdEncoding.EncodeToString(saltBytes)
+
+	// Update User
+	updates := map[string]interface{}{
+		"password_hash":         string(hashedPassword),
+		"salt":                  salt,
+		"force_change_password": true,
+		"updated_at":            gorm.Expr("NOW()"),
+	}
+
+	if err := s.db.Model(&user).Updates(updates).Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to update user: %v", err)
+	}
+
+	// Send Email
+	if err := s.SendPasswordEmail(user.Email, newPassword); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to send email: %v", err)
+	}
+
+	return &pb.ResetAndSendPasswordResponse{Success: true}, nil
+}
+
+func generateRandomPassword(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	for i := range b {
+		b[i] = charset[int(b[i])%len(charset)]
+	}
+	return string(b), nil
+}
+
+// BatchResetPassword: Tenant 내 모든 일반 사용자(Super/Admin 제외)의 비밀번호 초기화 및 전송
+func (s *server) BatchResetPassword(ctx context.Context, req *pb.BatchResetPasswordRequest) (*pb.BatchResetPasswordResponse, error) {
+	if req.TenantId == "" {
+		return nil, status.Error(codes.InvalidArgument, "Tenant ID is required")
+	}
+
+	// 1. Fetch target users (Exclude Super/Admin for safety)
+	var users []User
+	if err := s.db.Where("tenant_id = ? AND role NOT IN ?", req.TenantId, []string{"super", "admin"}).Find(&users).Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to fetch users: %v", err)
+	}
+
+	var successCount int32
+	var failureCount int32
+
+	// 2. Iterate and Reset
+	for _, user := range users {
+		// Generate New Password
+		newPassword, err := generateRandomPassword(12)
+		if err != nil {
+			failureCount++
+			continue
+		}
+
+		// Hash Password
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+		if err != nil {
+			failureCount++
+			continue
+		}
+
+		// Update DB
+		updates := map[string]interface{}{
+			"password_hash":         string(hashedPassword),
+			"force_change_password": true,
+			"updated_at":            gorm.Expr("NOW()"),
+		}
+		if err := s.db.Model(&user).Updates(updates).Error; err != nil {
+			failureCount++
+			continue
+		}
+
+		// Send Email (Best Effort)
+		if err := s.SendPasswordEmail(user.Email, newPassword); err != nil {
+			// Even if email fails, password is changed.
+			// We might want to log this or consider it a "partial failure"?
+			// For now, count as success because the reset happened, but log the email failure.
+			fmt.Printf("Failed to send email to %s: %v\n", user.Email, err)
+		}
+		successCount++
+	}
+
+	return &pb.BatchResetPasswordResponse{
+		SuccessCount: successCount,
+		FailureCount: failureCount,
+	}, nil
 }

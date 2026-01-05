@@ -89,7 +89,6 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 }
 
 // CreateUserRequest는 사용자 생성 JSON 바디 구조체입니다.
-// CreateUserRequest는 사용자 생성 JSON 바디 구조체입니다.
 type CreateUserRequest struct {
 	Email        string `json:"email" binding:"required,email"`
 	Password     string `json:"password" binding:"required,min=6"`
@@ -248,6 +247,65 @@ func (h *UserHandler) BatchCreateUsers(c *gin.Context) {
 	if err != nil {
 		st, _ := status.FromError(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": st.Message()})
+		return
+	}
+
+	c.JSON(http.StatusOK, res)
+}
+
+// ResetUserPassword: 사용자 비밀번호 재설정 및 전송 (Admin Only)
+func (h *UserHandler) ResetUserPassword(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	userID := c.Param("id")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := h.authClient.ResetAndSendPassword(ctx, &pb.ResetAndSendPasswordRequest{
+		UserId:   userID,
+		TenantId: tenantID,
+	})
+
+	if err != nil {
+		st, ok := status.FromError(err)
+		if ok && st.Code() == codes.NotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": st.Message()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// BatchResetPassword: Tenant 내 모든 사용자 비밀번호 일괄 초기화
+func (h *UserHandler) BatchResetPassword(c *gin.Context) {
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second) // Longer timeout for batch
+	defer cancel()
+
+	res, err := h.authClient.BatchResetPassword(ctx, &pb.BatchResetPasswordRequest{
+		TenantId: tenantID,
+	})
+
+	if err != nil {
+		st, ok := status.FromError(err)
+		if ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": st.Message()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to batch reset passwords"})
+		}
 		return
 	}
 

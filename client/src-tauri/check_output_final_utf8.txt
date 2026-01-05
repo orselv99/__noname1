@@ -1,0 +1,74 @@
+﻿cargo : warning: tauri-app@0.1.0: 
+Copied model directory to "C:\\Users
+\\orseL\\.gemini\\antigravity\\playg
+round\\fiery-horizon\\client\\src-ta
+uri\\target\\debug\\model"
+At line:1 char:1
++ cargo check > 
+check_output_final.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~
+    + CategoryInfo          : NotSp 
+   ecified: (warning: tauri-...\\d  
+  ebug\\model":String) [], Remote   
+ Exception
+    + FullyQualifiedErrorId : Nativ 
+   eCommandError
+ 
+    Checking tauri-app v0.1.0 (C:\Us
+ers\orseL\.gemini\antigravity\playgr
+ound\fiery-horizon\client\src-tauri)
+warning: unused import: 
+`tauri_plugin_shell::ShellExt`
+  --> src\lib.rs:98:5
+   |
+98 | use 
+tauri_plugin_shell::ShellExt;
+   |     
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: 
+`#[warn(unused_imports)]` (part of 
+`#[warn(unused)]`) on by default
+
+error[E0382]: borrow of partially 
+moved value: `response`
+  --> src\lib.rs:47:56
+   |
+45 |       all_vectors.push(response
+.embedding);
+   |                        
+------------------ value partially 
+moved here
+46 |
+47 |       println!("Debug - Raw 
+Embedding Response: {:?}", 
+response);
+   |                                
+                        ^^^^^^^^ 
+value borrowed here after partial 
+move
+   |
+   = note: partial move occurs 
+because `response.embedding` has 
+type `Vec<f32>`, which does not 
+implement the `Copy` trait
+   = note: this error originates in 
+the macro `$crate::format_args_nl` 
+which comes from the expansion of 
+the macro `println` (in Nightly 
+builds, run with -Z macro-backtrace 
+for more info)
+
+For more information about this 
+error, try `rustc --explain E0382`.
+warning: `tauri-app` (lib) 
+generated 1 warning
+warning: tauri-app@0.1.0: Copied 
+model directory to "C:\\Users\\orseL
+\\.gemini\\antigravity\\playground\\
+fiery-horizon\\client\\src-tauri\\ta
+rget\\debug\\model"
+error: could not compile 
+`tauri-app` (lib) due to 1 previous 
+error; 1 warning emitted

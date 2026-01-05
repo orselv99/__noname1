@@ -46,11 +46,21 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		return nil, err
 	}
 
+	// Update LastLoginAt
+	now := time.Now()
+	s.db.Model(&user).Update("last_login_at", &now)
+
+	// Exemption: Super/Admin never forced to change password
+	if user.Role == "super" || user.Role == "admin" {
+		user.ForceChangePassword = false
+	}
+
 	return &pb.LoginResponse{
-		AccessToken:  token,
-		RefreshToken: refreshToken,
-		ExpiresIn:    int64(exp - time.Now().Unix()),
-		Role:         user.Role, // Return Role string directly (mapped from DB)
+		AccessToken:         token,
+		RefreshToken:        refreshToken,
+		ExpiresIn:           int64(exp - time.Now().Unix()),
+		Role:                user.Role,
+		ForceChangePassword: user.ForceChangePassword,
 	}, nil
 }
 

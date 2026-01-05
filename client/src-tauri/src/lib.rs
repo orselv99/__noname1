@@ -4,62 +4,65 @@ fn greet(name: &str) -> String {
   format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[derive(serde::Deserialize, Debug)]
+struct LlamaEmbeddingResponse {
+    pub embedding: Vec<f32>,
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct AiResult {
-  embedding: String,
+  embedding: Vec<f32>,
   generation: String,
 }
 
 #[tauri::command]
 async fn extract_info(text: String) -> Result<AiResult, String> {
-  // 1. Get Embedding (Port 8081)
+  // 1. 텍스트 분할 (가장 간단하게 글자 수 기준으로 예시)
+  // 실제로는 토크나이저를 쓰거나 단어 단위로 끊는 것이 좋습니다.
+  let chunk_size = 2000; // 대략 2000토큰 내외로 설정
+  let chunks: Vec<_> = text
+      .chars()
+      .collect::<Vec<_>>()
+      .chunks(chunk_size)
+      .map(|c| c.iter().collect::<String>())
+      .collect();
+  
+  let mut all_vectors = Vec::new();
+
+  // 2. 각 조각에 대해 임베딩 요청 (Port 8081)
   let client = reqwest::Client::new();
-  let embedding_res = client
-    .post("http://localhost:8081/embedding")
-    .json(&serde_json::json!({ "content": text }))
-    .send()
-    .await
-    .map_err(|e| format!("Embedding request failed: {}", e))?
-    .json::<serde_json::Value>()
-    .await
-    .map_err(|e| format!("Failed to parse embedding response: {}", e))?;
+  for chunk in chunks {
+    let response = client
+      .post("http://localhost:8081/embedding")
+      .json(&serde_json::json!({ "content": chunk }))
+      .send()
+      .await
+      .map_err(|e| format!("Embedding request failed: {}", e))?
+      .json::<LlamaEmbeddingResponse>()
+      .await
+      .map_err(|e| format!("Failed to parse embedding response: {}", e))?;
 
-  println!("Debug - Raw Embedding Response: {:?}", embedding_res);
-
-  // Handle various llama-server response formats
-  // Format 1: [ { "embedding": [ [0.1, ...] ] } ] (Root array, nested embedding)
-  // Format 2: { "embedding": [0.1, ...] } (Standard)
+      all_vectors.push(response.embedding);
+  }
   
-  let embedding_val = if let Some(arr) = embedding_res.as_array() {
-      // Root is array
-      let first = arr.get(0).ok_or("Empty embedding response array")?;
-      let emb = first["embedding"].as_array().ok_or("Missing embedding field in object")?;
-      // Check if it's nested [[...]] or flat [...]
-      if let Some(inner) = emb.get(0).and_then(|v| v.as_array()) {
-          inner // It's [[...]], take first inner
-      } else {
-          emb // It's [...], use as is
+  // 3. 벡터 평균 계산 (Mean Pooling)
+  let vector_dim = all_vectors[0].len();
+  let num_chunks = all_vectors.len() as f32;
+  let mut mean_vector = vec![0.0; vector_dim];
+
+  for vec in &all_vectors {
+      for i in 0..vector_dim {
+          mean_vector[i] += vec[i];
       }
-  } else {
-     // Root is object
-     let emb = embedding_res["embedding"].as_array().ok_or("Invalid embedding format (root object)")?;
-     // Check nesting here too just in case
-     if let Some(inner) = emb.get(0).and_then(|v| v.as_array()) {
-        inner
-    } else {
-        emb
-    }
-  };
-  
-  // Convert to Vec<f64> for preview
-  let embedding_preview = format!(
-      "[{:.4}, {:.4}, {:.4}, {:.4}, {:.4} ...]", 
-      embedding_val.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0),
-      embedding_val.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0),
-      embedding_val.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0),
-      embedding_val.get(3).and_then(|v| v.as_f64()).unwrap_or(0.0),
-      embedding_val.get(4).and_then(|v| v.as_f64()).unwrap_or(0.0)
-  );
+  }
+
+  for i in 0..vector_dim {
+      mean_vector[i] /= num_chunks;
+  }
+
+  // 4. L2 정규화 (Normalization) - 벡터 검색의 정확도를 위해 권장
+  let norm = mean_vector.iter().map(|x| x * x).sum::<f32>().sqrt();
+  let normalized_vector: Vec<f32> = mean_vector.iter().map(|&x| x / norm).collect();
 
   // 2. Get Summary/Tags (Port 8082)
   let prompt = format!(
@@ -84,7 +87,7 @@ async fn extract_info(text: String) -> Result<AiResult, String> {
   let content = gen_res["content"].as_str().unwrap_or("").to_string();
 
   Ok(AiResult {
-      embedding: embedding_preview,
+      embedding: normalized_vector,
       generation: content,
   })
 }
@@ -157,9 +160,9 @@ pub fn run() {
             "--model", embedding_model.to_str().unwrap(),
             "--port", "8081",
             "--embedding",
-            "-c", "8192",
-            "-b", "4096",
-            "-ub", "4096",
+            "-c", "2048",
+            "-b", "2048",
+            "-ub", "2048",
             "-np", "1"
         ])
         .stdout(Stdio::piped())
@@ -198,9 +201,9 @@ pub fn run() {
         .args([
             "--model", gen_model.to_str().unwrap(),
             "--port", "8082",
-            "-c", "4096",
-            "-b", "2048",
-            "-ub", "2048",
+            "-c", "8192",
+            "-b", "8192",
+            "-ub", "8192",
             "-np", "1"
         ])
         .stdout(Stdio::piped())

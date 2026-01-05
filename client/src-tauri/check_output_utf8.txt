@@ -1,0 +1,294 @@
+﻿cargo : warning: tauri-app@0.1.0: 
+Copied model directory to "C:\\Users
+\\orseL\\.gemini\\antigravity\\playg
+round\\fiery-horizon\\client\\src-ta
+uri\\target\\debug\\model"
+At line:1 char:1
++ cargo check > check_output.txt 
+2>&1
++ 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSp 
+   ecified: (warning: tauri-...\\d  
+  ebug\\model":String) [], Remote   
+ Exception
+    + FullyQualifiedErrorId : Nativ 
+   eCommandError
+ 
+    Checking tauri-app v0.1.0 (C:\Us
+ers\orseL\.gemini\antigravity\playgr
+ound\fiery-horizon\client\src-tauri)
+error: cannot find derive macro 
+`Deserialize` in this scope
+ --> src\lib.rs:7:10
+  |
+7 | #[derive(Deserialize, Debug)]
+  |          ^^^^^^^^^^^
+  |
+help: consider importing this 
+derive macro
+  |
+97+ use serde::Deserialize;
+  |
+
+warning: unused import: 
+`tauri_plugin_shell::ShellExt`
+  --> src\lib.rs:98:5
+   |
+98 | use 
+tauri_plugin_shell::ShellExt;
+   |     
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: 
+`#[warn(unused_imports)]` (part of 
+`#[warn(unused)]`) on by default
+
+error[E0277]: the trait bound 
+`LlamaEmbeddingResponse: 
+serde::de::DeserializeOwned` is not 
+satisfied
+   --> src\lib.rs:41:15
+    |
+ 41 |       
+.json::<LlamaEmbeddingResponse>()
+    |        ----   
+^^^^^^^^^^^^^^^^^^^^^^ unsatisfied 
+trait bound
+    |        |
+    |        required by a bound 
+introduced by this call
+    |
+help: the trait `for<'de> 
+Deserialize<'de>` is not 
+implemented for 
+`LlamaEmbeddingResponse`
+   --> src\lib.rs:8:1
+    |
+  8 | struct LlamaEmbeddingResponse 
+{
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = help: the following other 
+types implement trait 
+`Deserialize<'de>`:
+              `&'a [u8]` implements 
+`Deserialize<'de>`
+              `&'a 
+serde_json::value::RawValue` 
+implements `Deserialize<'de>`
+              `&'a std::path::Path` 
+implements `Deserialize<'de>`
+              `&'a str` implements 
+`Deserialize<'de>`
+              `&'p 
+jsonptr::pointer::Pointer` 
+implements `Deserialize<'de>`
+              `()` implements 
+`Deserialize<'de>`
+              `(T,)` implements 
+`Deserialize<'de>`
+              `(T0, T1)` implements 
+`Deserialize<'de>`
+            and 379 others
+    = note: required for 
+`LlamaEmbeddingResponse` to 
+implement `DeserializeOwned`
+note: required by a bound in 
+`reqwest::Response::json`
+   --> C:\Users\orseL\.cargo\registr
+y\src\index.crates.io-1949cf8c6b5b55
+7f\reqwest-0.12.28\src\async_impl\re
+sponse.rs:269:26
+    |
+269 |     pub async fn json<T: 
+DeserializeOwned>(self) -> 
+crate::Result<T> {
+    |                          
+^^^^^^^^^^^^^^^^ required by this 
+bound in `Response::json`
+    = note: the full name for the 
+type has been written to 'C:\Users\o
+rseL\.gemini\antigravity\playground\
+fiery-horizon\client\src-tauri\targe
+t\debug\deps\tauri_app_lib-eb94b2ba1
+5541514.long-type-612024499453351425
+8.txt'
+    = note: consider using 
+`--verbose` to print the full type 
+name to the console
+
+error[E0277]: the trait bound 
+`LlamaEmbeddingResponse: 
+serde::Deserialize<'de>` is not 
+satisfied
+   --> src\lib.rs:35:20
+    |
+ 35 |       let response = client
+    |  ____________________^
+ 36 | |       .post("http://localhos
+t:8081/embedding")
+ 37 | |       
+.json(&serde_json::json!({ 
+"content": chunk }))
+ 38 | |       .send()
+ 39 | |       .await
+ 40 | |       .map_err(|e| 
+format!("Embedding request failed: 
+{}", e))?
+ 41 | |       
+.json::<LlamaEmbeddingResponse>()
+    | |_____________________________
+__________^ unsatisfied trait bound
+    |
+help: the trait `for<'de> 
+Deserialize<'de>` is not 
+implemented for 
+`LlamaEmbeddingResponse`
+   --> src\lib.rs:8:1
+    |
+  8 | struct LlamaEmbeddingResponse 
+{
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: for local types 
+consider adding 
+`#[derive(serde::Deserialize)]` to 
+your `LlamaEmbeddingResponse` type
+    = note: for types from other 
+crates check whether the crate 
+offers a `serde` feature flag
+    = help: the following other 
+types implement trait 
+`Deserialize<'de>`:
+              `&'a [u8]` implements 
+`Deserialize<'de>`
+              `&'a 
+serde_json::value::RawValue` 
+implements `Deserialize<'de>`
+              `&'a std::path::Path` 
+implements `Deserialize<'de>`
+              `&'a str` implements 
+`Deserialize<'de>`
+              `&'p 
+jsonptr::pointer::Pointer` 
+implements `Deserialize<'de>`
+              `()` implements 
+`Deserialize<'de>`
+              `(T,)` implements 
+`Deserialize<'de>`
+              `(T0, T1)` implements 
+`Deserialize<'de>`
+            and 379 others
+    = note: required for 
+`LlamaEmbeddingResponse` to 
+implement `DeserializeOwned`
+note: required by a bound in 
+`reqwest::Response::json`
+   --> C:\Users\orseL\.cargo\registr
+y\src\index.crates.io-1949cf8c6b5b55
+7f\reqwest-0.12.28\src\async_impl\re
+sponse.rs:269:26
+    |
+269 |     pub async fn json<T: 
+DeserializeOwned>(self) -> 
+crate::Result<T> {
+    |                          
+^^^^^^^^^^^^^^^^ required by this 
+bound in `Response::json`
+    = note: the full name for the 
+type has been written to 'C:\Users\o
+rseL\.gemini\antigravity\playground\
+fiery-horizon\client\src-tauri\targe
+t\debug\deps\tauri_app_lib-eb94b2ba1
+5541514.long-type-612024499453351425
+8.txt'
+    = note: consider using 
+`--verbose` to print the full type 
+name to the console
+
+error[E0277]: the trait bound 
+`LlamaEmbeddingResponse: 
+serde::Deserialize<'de>` is not 
+satisfied
+   --> src\lib.rs:42:8
+    |
+ 42 |       .await
+    |        ^^^^^ unsatisfied 
+trait bound
+    |
+help: the trait `for<'de> 
+Deserialize<'de>` is not 
+implemented for 
+`LlamaEmbeddingResponse`
+   --> src\lib.rs:8:1
+    |
+  8 | struct LlamaEmbeddingResponse 
+{
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = note: for local types 
+consider adding 
+`#[derive(serde::Deserialize)]` to 
+your `LlamaEmbeddingResponse` type
+    = note: for types from other 
+crates check whether the crate 
+offers a `serde` feature flag
+    = help: the following other 
+types implement trait 
+`Deserialize<'de>`:
+              `&'a [u8]` implements 
+`Deserialize<'de>`
+              `&'a 
+serde_json::value::RawValue` 
+implements `Deserialize<'de>`
+              `&'a std::path::Path` 
+implements `Deserialize<'de>`
+              `&'a str` implements 
+`Deserialize<'de>`
+              `&'p 
+jsonptr::pointer::Pointer` 
+implements `Deserialize<'de>`
+              `()` implements 
+`Deserialize<'de>`
+              `(T,)` implements 
+`Deserialize<'de>`
+              `(T0, T1)` implements 
+`Deserialize<'de>`
+            and 379 others
+    = note: required for 
+`LlamaEmbeddingResponse` to 
+implement `DeserializeOwned`
+note: required by a bound in 
+`reqwest::Response::json`
+   --> C:\Users\orseL\.cargo\registr
+y\src\index.crates.io-1949cf8c6b5b55
+7f\reqwest-0.12.28\src\async_impl\re
+sponse.rs:269:26
+    |
+269 |     pub async fn json<T: 
+DeserializeOwned>(self) -> 
+crate::Result<T> {
+    |                          
+^^^^^^^^^^^^^^^^ required by this 
+bound in `Response::json`
+    = note: the full name for the 
+type has been written to 'C:\Users\o
+rseL\.gemini\antigravity\playground\
+fiery-horizon\client\src-tauri\targe
+t\debug\deps\tauri_app_lib-eb94b2ba1
+5541514.long-type-612024499453351425
+8.txt'
+    = note: consider using 
+`--verbose` to print the full type 
+name to the console
+
+For more information about this 
+error, try `rustc --explain E0277`.
+warning: `tauri-app` (lib) 
+generated 1 warning
+warning: tauri-app@0.1.0: Copied 
+model directory to "C:\\Users\\orseL
+\\.gemini\\antigravity\\playground\\
+fiery-horizon\\client\\src-tauri\\ta
+rget\\debug\\model"
+error: could not compile 
+`tauri-app` (lib) due to 4 previous 
+errors; 1 warning emitted

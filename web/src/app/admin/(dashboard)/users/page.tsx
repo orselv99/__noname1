@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanguage } from '@/context/LanguageContext';
-import { Users, Search, UserPlus, MoreVertical, Trash2, Edit, Plus, ChevronUp, ChevronDown, Check, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Users, Search, UserPlus, MoreVertical, Trash2, Edit, Plus, ChevronUp, ChevronDown, Check, ChevronLeft, ChevronRight, Eye, Mail } from 'lucide-react';
 import CreateUserModal from '@/components/admin/users/CreateUserModal';
 import EditUserModal from '@/components/admin/users/EditUserModal';
 import OrganizationSidebar from '@/components/admin/users/OrganizationSidebar';
@@ -22,6 +22,7 @@ interface User {
   department_role?: string;
   position_id?: string;
   position_name?: string;
+  force_change_password?: boolean;
 }
 
 interface Position {
@@ -530,6 +531,54 @@ export default function UsersPage() {
     }
   };
 
+  const handleResetAndSendPassword = async (user: User) => {
+    if (!window.confirm(`Send new password to ${user.email}? This will reset the current password.`)) return;
+
+    try {
+      const response = await fetch(`/api/v1/users/${user.id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'X-Tenant-ID': tenantId,
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to send password');
+
+      showToast('Password sent successfully', 'success');
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to send password', 'error');
+    }
+  };
+
+  const handleBatchReset = async () => {
+    if (!window.confirm(
+      'WARNING: This will reset passwords for ALL users in this tenant (excluding Super/Admin) and send new passwords via email.\n\nAre you sure you want to proceed?'
+    )) return;
+
+    if (!window.confirm('Double check: Are you absolutely sure? This action cannot be undone.')) return;
+
+    try {
+      const response = await fetch('/api/v1/users/batch/reset-password', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'X-Tenant-ID': tenantId,
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to batch reset passwords');
+
+      const data = await response.json();
+      showToast(`Batch reset processed. Success: ${data.success_count}, Failure: ${data.failure_count}`, 'success');
+      fetchUsers(tenantId);
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to perform batch reset', 'error');
+    }
+  };
+
   const filteredUsers = users.filter((user) => {
     // 1. Search Filter
     const matchesSearch =
@@ -551,7 +600,7 @@ export default function UsersPage() {
       </div>
     );
   }
-  console.log(filteredUsers);
+
   return (
     <div className="h-[calc(100vh-100px)] flex gap-6">
 
@@ -562,10 +611,19 @@ export default function UsersPage() {
         {/* Header */}
         <div className="h-14 flex items-center justify-between shrink-0">
           <TitleLabel title={t.admin.users.title} subtitle={t.admin.users.subtitle} />
-          <AddButton
-            onClick={() => setIsCreateModalOpen(true)}
-          // label={t.admin.users.add_user}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBatchReset}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors"
+            >
+              <Mail size={16} />
+              <span>Send All Passwords</span>
+            </button>
+            <AddButton
+              onClick={() => setIsCreateModalOpen(true)}
+            // label={t.admin.users.add_user}
+            />
+          </div>
         </div>
 
         {/* Search & Toolbar */}
@@ -672,6 +730,15 @@ export default function UsersPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {user.force_change_password && (
+                            <button
+                              onClick={() => handleResetAndSendPassword(user)}
+                              className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors text-gray-400 hover:text-purple-400"
+                              title="Reset & Send Password"
+                            >
+                              <Mail size={16} />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleEditClick(user)}
                             className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors text-gray-400 hover:text-blue-400"

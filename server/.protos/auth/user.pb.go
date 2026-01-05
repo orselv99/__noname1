@@ -78,23 +78,25 @@ func (Role) EnumDescriptor() ([]byte, []int) {
 }
 
 type User struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Email          string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	Username       string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
-	TenantId       string                 `protobuf:"bytes,4,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	Role           Role                   `protobuf:"varint,5,opt,name=role,proto3,enum=auth.Role" json:"role,omitempty"`
-	DepartmentId   string                 `protobuf:"bytes,6,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"`
-	CreatedAt      string                 `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt      string                 `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Contact        string                 `protobuf:"bytes,9,opt,name=contact,proto3" json:"contact,omitempty"`
-	Birthday       string                 `protobuf:"bytes,12,opt,name=birthday,proto3" json:"birthday,omitempty"`
-	PhoneNumbers   []string               `protobuf:"bytes,13,rep,name=phone_numbers,json=phoneNumbers,proto3" json:"phone_numbers,omitempty"`
-	PositionId     string                 `protobuf:"bytes,14,opt,name=position_id,json=positionId,proto3" json:"position_id,omitempty"`
-	PositionName   string                 `protobuf:"bytes,16,opt,name=position_name,json=positionName,proto3" json:"position_name,omitempty"`
-	DepartmentName string                 `protobuf:"bytes,17,opt,name=department_name,json=departmentName,proto3" json:"department_name,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Id                  string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Email               string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Username            string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	TenantId            string                 `protobuf:"bytes,4,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Role                Role                   `protobuf:"varint,5,opt,name=role,proto3,enum=auth.Role" json:"role,omitempty"`
+	DepartmentId        string                 `protobuf:"bytes,6,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"`
+	CreatedAt           string                 `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt           string                 `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Contact             string                 `protobuf:"bytes,9,opt,name=contact,proto3" json:"contact,omitempty"`
+	LastLoginAt         string                 `protobuf:"bytes,15,opt,name=last_login_at,json=lastLoginAt,proto3" json:"last_login_at,omitempty"`
+	Birthday            string                 `protobuf:"bytes,12,opt,name=birthday,proto3" json:"birthday,omitempty"`
+	PhoneNumbers        []string               `protobuf:"bytes,13,rep,name=phone_numbers,json=phoneNumbers,proto3" json:"phone_numbers,omitempty"`
+	PositionId          string                 `protobuf:"bytes,14,opt,name=position_id,json=positionId,proto3" json:"position_id,omitempty"`
+	PositionName        string                 `protobuf:"bytes,16,opt,name=position_name,json=positionName,proto3" json:"position_name,omitempty"`
+	DepartmentName      string                 `protobuf:"bytes,17,opt,name=department_name,json=departmentName,proto3" json:"department_name,omitempty"`
+	ForceChangePassword bool                   `protobuf:"varint,18,opt,name=force_change_password,json=forceChangePassword,proto3" json:"force_change_password,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *User) Reset() {
@@ -190,6 +192,13 @@ func (x *User) GetContact() string {
 	return ""
 }
 
+func (x *User) GetLastLoginAt() string {
+	if x != nil {
+		return x.LastLoginAt
+	}
+	return ""
+}
+
 func (x *User) GetBirthday() string {
 	if x != nil {
 		return x.Birthday
@@ -223,6 +232,13 @@ func (x *User) GetDepartmentName() string {
 		return x.DepartmentName
 	}
 	return ""
+}
+
+func (x *User) GetForceChangePassword() bool {
+	if x != nil {
+		return x.ForceChangePassword
+	}
+	return false
 }
 
 // 사용자 추가 요청
@@ -1075,11 +1091,107 @@ func (x *DeleteUserResponse) GetSuccess() bool {
 	return false
 }
 
+type BatchResetPasswordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchResetPasswordRequest) Reset() {
+	*x = BatchResetPasswordRequest{}
+	mi := &file_auth_user_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchResetPasswordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchResetPasswordRequest) ProtoMessage() {}
+
+func (x *BatchResetPasswordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_user_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchResetPasswordRequest.ProtoReflect.Descriptor instead.
+func (*BatchResetPasswordRequest) Descriptor() ([]byte, []int) {
+	return file_auth_user_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *BatchResetPasswordRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+type BatchResetPasswordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SuccessCount  int32                  `protobuf:"varint,1,opt,name=success_count,json=successCount,proto3" json:"success_count,omitempty"`
+	FailureCount  int32                  `protobuf:"varint,2,opt,name=failure_count,json=failureCount,proto3" json:"failure_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchResetPasswordResponse) Reset() {
+	*x = BatchResetPasswordResponse{}
+	mi := &file_auth_user_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchResetPasswordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchResetPasswordResponse) ProtoMessage() {}
+
+func (x *BatchResetPasswordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_user_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchResetPasswordResponse.ProtoReflect.Descriptor instead.
+func (*BatchResetPasswordResponse) Descriptor() ([]byte, []int) {
+	return file_auth_user_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *BatchResetPasswordResponse) GetSuccessCount() int32 {
+	if x != nil {
+		return x.SuccessCount
+	}
+	return 0
+}
+
+func (x *BatchResetPasswordResponse) GetFailureCount() int32 {
+	if x != nil {
+		return x.FailureCount
+	}
+	return 0
+}
+
 var File_auth_user_proto protoreflect.FileDescriptor
 
 const file_auth_user_proto_rawDesc = "" +
 	"\n" +
-	"\x0fauth/user.proto\x12\x04auth\"\xb2\x03\n" +
+	"\x0fauth/user.proto\x12\x04auth\"\x8a\x04\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x1a\n" +
@@ -1092,13 +1204,15 @@ const file_auth_user_proto_rawDesc = "" +
 	"created_at\x18\a \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"updated_at\x18\b \x01(\tR\tupdatedAt\x12\x18\n" +
-	"\acontact\x18\t \x01(\tR\acontact\x12\x1a\n" +
+	"\acontact\x18\t \x01(\tR\acontact\x12\"\n" +
+	"\rlast_login_at\x18\x0f \x01(\tR\vlastLoginAt\x12\x1a\n" +
 	"\bbirthday\x18\f \x01(\tR\bbirthday\x12#\n" +
 	"\rphone_numbers\x18\r \x03(\tR\fphoneNumbers\x12\x1f\n" +
 	"\vposition_id\x18\x0e \x01(\tR\n" +
 	"positionId\x12#\n" +
 	"\rposition_name\x18\x10 \x01(\tR\fpositionName\x12'\n" +
-	"\x0fdepartment_name\x18\x11 \x01(\tR\x0edepartmentName\"\xa5\x02\n" +
+	"\x0fdepartment_name\x18\x11 \x01(\tR\x0edepartmentName\x122\n" +
+	"\x15force_change_password\x18\x12 \x01(\bR\x13forceChangePassword\"\xa5\x02\n" +
 	"\x11CreateUserRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x1a\n" +
@@ -1172,7 +1286,12 @@ const file_auth_user_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\".\n" +
 	"\x12DeleteUserResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess*\\\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"8\n" +
+	"\x19BatchResetPasswordRequest\x12\x1b\n" +
+	"\ttenant_id\x18\x01 \x01(\tR\btenantId\"f\n" +
+	"\x1aBatchResetPasswordResponse\x12#\n" +
+	"\rsuccess_count\x18\x01 \x01(\x05R\fsuccessCount\x12#\n" +
+	"\rfailure_count\x18\x02 \x01(\x05R\ffailureCount*\\\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -1195,23 +1314,25 @@ func file_auth_user_proto_rawDescGZIP() []byte {
 }
 
 var file_auth_user_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_auth_user_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_auth_user_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_auth_user_proto_goTypes = []any{
-	(Role)(0),                        // 0: auth.Role
-	(*User)(nil),                     // 1: auth.User
-	(*CreateUserRequest)(nil),        // 2: auth.CreateUserRequest
-	(*CreateUserRequestItem)(nil),    // 3: auth.CreateUserRequestItem
-	(*CreateUserResponse)(nil),       // 4: auth.CreateUserResponse
-	(*BatchCreateUsersRequest)(nil),  // 5: auth.BatchCreateUsersRequest
-	(*BatchCreateUsersResponse)(nil), // 6: auth.BatchCreateUsersResponse
-	(*GetUserRequest)(nil),           // 7: auth.GetUserRequest
-	(*GetUserResponse)(nil),          // 8: auth.GetUserResponse
-	(*ListUsersRequest)(nil),         // 9: auth.ListUsersRequest
-	(*ListUsersResponse)(nil),        // 10: auth.ListUsersResponse
-	(*UpdateUserRequest)(nil),        // 11: auth.UpdateUserRequest
-	(*UpdateUserResponse)(nil),       // 12: auth.UpdateUserResponse
-	(*DeleteUserRequest)(nil),        // 13: auth.DeleteUserRequest
-	(*DeleteUserResponse)(nil),       // 14: auth.DeleteUserResponse
+	(Role)(0),                          // 0: auth.Role
+	(*User)(nil),                       // 1: auth.User
+	(*CreateUserRequest)(nil),          // 2: auth.CreateUserRequest
+	(*CreateUserRequestItem)(nil),      // 3: auth.CreateUserRequestItem
+	(*CreateUserResponse)(nil),         // 4: auth.CreateUserResponse
+	(*BatchCreateUsersRequest)(nil),    // 5: auth.BatchCreateUsersRequest
+	(*BatchCreateUsersResponse)(nil),   // 6: auth.BatchCreateUsersResponse
+	(*GetUserRequest)(nil),             // 7: auth.GetUserRequest
+	(*GetUserResponse)(nil),            // 8: auth.GetUserResponse
+	(*ListUsersRequest)(nil),           // 9: auth.ListUsersRequest
+	(*ListUsersResponse)(nil),          // 10: auth.ListUsersResponse
+	(*UpdateUserRequest)(nil),          // 11: auth.UpdateUserRequest
+	(*UpdateUserResponse)(nil),         // 12: auth.UpdateUserResponse
+	(*DeleteUserRequest)(nil),          // 13: auth.DeleteUserRequest
+	(*DeleteUserResponse)(nil),         // 14: auth.DeleteUserResponse
+	(*BatchResetPasswordRequest)(nil),  // 15: auth.BatchResetPasswordRequest
+	(*BatchResetPasswordResponse)(nil), // 16: auth.BatchResetPasswordResponse
 }
 var file_auth_user_proto_depIdxs = []int32{
 	0, // 0: auth.User.role:type_name -> auth.Role
@@ -1241,7 +1362,7 @@ func file_auth_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_auth_user_proto_rawDesc), len(file_auth_user_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

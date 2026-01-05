@@ -92,6 +92,11 @@ service AuthService {
   //
   rpc ListVisibilityApprovals(ListVisibilityApprovalsRequest) returns (ListVisibilityApprovalsResponse);
   rpc ApproveVisibilityChange(ApproveVisibilityChangeRequest) returns (ApproveVisibilityChangeResponse);
+  //
+  // Password Management
+  //
+  rpc ResetAndSendPassword(ResetAndSendPasswordRequest) returns (ResetAndSendPasswordResponse);
+  rpc BatchResetPassword(BatchResetPasswordRequest) returns (BatchResetPasswordResponse);
 }
 
 // 로그인 요청
@@ -105,7 +110,17 @@ message LoginResponse {
   string access_token = 1;
   string refresh_token = 2;
   int64 expires_in = 3;
-  string role = 4; 
+  string role = 4;
+  bool force_change_password = 5;
+}
+
+message ResetAndSendPasswordRequest {
+  string user_id = 1;
+  string tenant_id = 2;
+}
+
+message ResetAndSendPasswordResponse {
+  bool success = 1;
 }
 
 // 토큰 검증 요청

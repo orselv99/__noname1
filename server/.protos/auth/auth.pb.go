@@ -76,13 +76,14 @@ func (x *LoginRequest) GetPassword() string {
 
 // 로그인 응답
 type LoginResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
-	RefreshToken  string                 `protobuf:"bytes,2,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
-	ExpiresIn     int64                  `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
-	Role          string                 `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken         string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	RefreshToken        string                 `protobuf:"bytes,2,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	ExpiresIn           int64                  `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
+	Role                string                 `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
+	ForceChangePassword bool                   `protobuf:"varint,5,opt,name=force_change_password,json=forceChangePassword,proto3" json:"force_change_password,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *LoginResponse) Reset() {
@@ -143,6 +144,109 @@ func (x *LoginResponse) GetRole() string {
 	return ""
 }
 
+func (x *LoginResponse) GetForceChangePassword() bool {
+	if x != nil {
+		return x.ForceChangePassword
+	}
+	return false
+}
+
+type ResetAndSendPasswordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	TenantId      string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetAndSendPasswordRequest) Reset() {
+	*x = ResetAndSendPasswordRequest{}
+	mi := &file_auth_auth_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetAndSendPasswordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetAndSendPasswordRequest) ProtoMessage() {}
+
+func (x *ResetAndSendPasswordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_auth_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetAndSendPasswordRequest.ProtoReflect.Descriptor instead.
+func (*ResetAndSendPasswordRequest) Descriptor() ([]byte, []int) {
+	return file_auth_auth_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ResetAndSendPasswordRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ResetAndSendPasswordRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+type ResetAndSendPasswordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetAndSendPasswordResponse) Reset() {
+	*x = ResetAndSendPasswordResponse{}
+	mi := &file_auth_auth_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetAndSendPasswordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetAndSendPasswordResponse) ProtoMessage() {}
+
+func (x *ResetAndSendPasswordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_auth_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetAndSendPasswordResponse.ProtoReflect.Descriptor instead.
+func (*ResetAndSendPasswordResponse) Descriptor() ([]byte, []int) {
+	return file_auth_auth_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ResetAndSendPasswordResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
 // 토큰 검증 요청
 type ValidateTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -153,7 +257,7 @@ type ValidateTokenRequest struct {
 
 func (x *ValidateTokenRequest) Reset() {
 	*x = ValidateTokenRequest{}
-	mi := &file_auth_auth_proto_msgTypes[2]
+	mi := &file_auth_auth_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -165,7 +269,7 @@ func (x *ValidateTokenRequest) String() string {
 func (*ValidateTokenRequest) ProtoMessage() {}
 
 func (x *ValidateTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_auth_auth_proto_msgTypes[2]
+	mi := &file_auth_auth_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -178,7 +282,7 @@ func (x *ValidateTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateTokenRequest.ProtoReflect.Descriptor instead.
 func (*ValidateTokenRequest) Descriptor() ([]byte, []int) {
-	return file_auth_auth_proto_rawDescGZIP(), []int{2}
+	return file_auth_auth_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ValidateTokenRequest) GetAccessToken() string {
@@ -200,7 +304,7 @@ type ValidateTokenResponse struct {
 
 func (x *ValidateTokenResponse) Reset() {
 	*x = ValidateTokenResponse{}
-	mi := &file_auth_auth_proto_msgTypes[3]
+	mi := &file_auth_auth_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -212,7 +316,7 @@ func (x *ValidateTokenResponse) String() string {
 func (*ValidateTokenResponse) ProtoMessage() {}
 
 func (x *ValidateTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_auth_auth_proto_msgTypes[3]
+	mi := &file_auth_auth_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -225,7 +329,7 @@ func (x *ValidateTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateTokenResponse.ProtoReflect.Descriptor instead.
 func (*ValidateTokenResponse) Descriptor() ([]byte, []int) {
-	return file_auth_auth_proto_rawDescGZIP(), []int{3}
+	return file_auth_auth_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ValidateTokenResponse) GetValid() bool {
@@ -259,7 +363,7 @@ type RefreshTokenRequest struct {
 
 func (x *RefreshTokenRequest) Reset() {
 	*x = RefreshTokenRequest{}
-	mi := &file_auth_auth_proto_msgTypes[4]
+	mi := &file_auth_auth_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -271,7 +375,7 @@ func (x *RefreshTokenRequest) String() string {
 func (*RefreshTokenRequest) ProtoMessage() {}
 
 func (x *RefreshTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_auth_auth_proto_msgTypes[4]
+	mi := &file_auth_auth_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -284,7 +388,7 @@ func (x *RefreshTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshTokenRequest.ProtoReflect.Descriptor instead.
 func (*RefreshTokenRequest) Descriptor() ([]byte, []int) {
-	return file_auth_auth_proto_rawDescGZIP(), []int{4}
+	return file_auth_auth_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RefreshTokenRequest) GetRefreshToken() string {
@@ -305,7 +409,7 @@ type RefreshTokenResponse struct {
 
 func (x *RefreshTokenResponse) Reset() {
 	*x = RefreshTokenResponse{}
-	mi := &file_auth_auth_proto_msgTypes[5]
+	mi := &file_auth_auth_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -317,7 +421,7 @@ func (x *RefreshTokenResponse) String() string {
 func (*RefreshTokenResponse) ProtoMessage() {}
 
 func (x *RefreshTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_auth_auth_proto_msgTypes[5]
+	mi := &file_auth_auth_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -330,7 +434,7 @@ func (x *RefreshTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshTokenResponse.ProtoReflect.Descriptor instead.
 func (*RefreshTokenResponse) Descriptor() ([]byte, []int) {
-	return file_auth_auth_proto_rawDescGZIP(), []int{5}
+	return file_auth_auth_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RefreshTokenResponse) GetAccessToken() string {
@@ -354,13 +458,19 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\x0fauth/auth.proto\x12\x04auth\x1a\x0fauth/user.proto\x1a\x11auth/tenant.proto\x1a\x0eauth/acl.proto\x1a\x15auth/department.proto\x1a\x12auth/project.proto\x1a\x13auth/document.proto\x1a\x13auth/position.proto\"@\n" +
 	"\fLoginRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x8a\x01\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xbe\x01\n" +
 	"\rLoginResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x12\x1d\n" +
 	"\n" +
 	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x12\x12\n" +
-	"\x04role\x18\x04 \x01(\tR\x04role\"9\n" +
+	"\x04role\x18\x04 \x01(\tR\x04role\x122\n" +
+	"\x15force_change_password\x18\x05 \x01(\bR\x13forceChangePassword\"S\n" +
+	"\x1bResetAndSendPasswordRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\"8\n" +
+	"\x1cResetAndSendPasswordResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"9\n" +
 	"\x14ValidateTokenRequest\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\"c\n" +
 	"\x15ValidateTokenResponse\x12\x14\n" +
@@ -371,7 +481,7 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\"^\n" +
 	"\x14RefreshTokenResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
-	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken2\x92\x19\n" +
+	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken2\xca\x1a\n" +
 	"\vAuthService\x120\n" +
 	"\x05Login\x12\x12.auth.LoginRequest\x1a\x13.auth.LoginResponse\x12H\n" +
 	"\rValidateToken\x12\x1a.auth.ValidateTokenRequest\x1a\x1b.auth.ValidateTokenResponse\x12E\n" +
@@ -417,7 +527,9 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\x18UpdateDocumentVisibility\x12%.auth.UpdateDocumentVisibilityRequest\x1a&.auth.UpdateDocumentVisibilityResponse\x12Z\n" +
 	"\x13GetDocumentMetadata\x12 .auth.GetDocumentMetadataRequest\x1a!.auth.GetDocumentMetadataResponse\x12f\n" +
 	"\x17ListVisibilityApprovals\x12$.auth.ListVisibilityApprovalsRequest\x1a%.auth.ListVisibilityApprovalsResponse\x12f\n" +
-	"\x17ApproveVisibilityChange\x12$.auth.ApproveVisibilityChangeRequest\x1a%.auth.ApproveVisibilityChangeResponseB\x15Z\x13server/.protos/authb\x06proto3"
+	"\x17ApproveVisibilityChange\x12$.auth.ApproveVisibilityChangeRequest\x1a%.auth.ApproveVisibilityChangeResponse\x12]\n" +
+	"\x14ResetAndSendPassword\x12!.auth.ResetAndSendPasswordRequest\x1a\".auth.ResetAndSendPasswordResponse\x12W\n" +
+	"\x12BatchResetPassword\x12\x1f.auth.BatchResetPasswordRequest\x1a .auth.BatchResetPasswordResponseB\x15Z\x13server/.protos/authb\x06proto3"
 
 var (
 	file_auth_auth_proto_rawDescOnce sync.Once
@@ -431,176 +543,184 @@ func file_auth_auth_proto_rawDescGZIP() []byte {
 	return file_auth_auth_proto_rawDescData
 }
 
-var file_auth_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_auth_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_auth_auth_proto_goTypes = []any{
 	(*LoginRequest)(nil),                     // 0: auth.LoginRequest
 	(*LoginResponse)(nil),                    // 1: auth.LoginResponse
-	(*ValidateTokenRequest)(nil),             // 2: auth.ValidateTokenRequest
-	(*ValidateTokenResponse)(nil),            // 3: auth.ValidateTokenResponse
-	(*RefreshTokenRequest)(nil),              // 4: auth.RefreshTokenRequest
-	(*RefreshTokenResponse)(nil),             // 5: auth.RefreshTokenResponse
-	(*CreateUserRequest)(nil),                // 6: auth.CreateUserRequest
-	(*BatchCreateUsersRequest)(nil),          // 7: auth.BatchCreateUsersRequest
-	(*GetUserRequest)(nil),                   // 8: auth.GetUserRequest
-	(*ListUsersRequest)(nil),                 // 9: auth.ListUsersRequest
-	(*UpdateUserRequest)(nil),                // 10: auth.UpdateUserRequest
-	(*DeleteUserRequest)(nil),                // 11: auth.DeleteUserRequest
-	(*CreateTenantRequest)(nil),              // 12: auth.CreateTenantRequest
-	(*GetTenantRequest)(nil),                 // 13: auth.GetTenantRequest
-	(*ListTenantsRequest)(nil),               // 14: auth.ListTenantsRequest
-	(*CreateDepartmentRequest)(nil),          // 15: auth.CreateDepartmentRequest
-	(*BatchCreateDepartmentsRequest)(nil),    // 16: auth.BatchCreateDepartmentsRequest
-	(*ListDepartmentsRequest)(nil),           // 17: auth.ListDepartmentsRequest
-	(*UpdateDepartmentRequest)(nil),          // 18: auth.UpdateDepartmentRequest
-	(*DeleteDepartmentRequest)(nil),          // 19: auth.DeleteDepartmentRequest
-	(*GetDepartmentRequest)(nil),             // 20: auth.GetDepartmentRequest
-	(*ReorderDepartmentsRequest)(nil),        // 21: auth.ReorderDepartmentsRequest
-	(*CreateProjectRequest)(nil),             // 22: auth.CreateProjectRequest
-	(*BatchCreateProjectsRequest)(nil),       // 23: auth.BatchCreateProjectsRequest
-	(*ListProjectsRequest)(nil),              // 24: auth.ListProjectsRequest
-	(*UpdateProjectRequest)(nil),             // 25: auth.UpdateProjectRequest
-	(*DeleteProjectRequest)(nil),             // 26: auth.DeleteProjectRequest
-	(*GetProjectRequest)(nil),                // 27: auth.GetProjectRequest
-	(*ReorderProjectsRequest)(nil),           // 28: auth.ReorderProjectsRequest
-	(*CreatePositionRequest)(nil),            // 29: auth.CreatePositionRequest
-	(*ListPositionsRequest)(nil),             // 30: auth.ListPositionsRequest
-	(*UpdatePositionRequest)(nil),            // 31: auth.UpdatePositionRequest
-	(*DeletePositionRequest)(nil),            // 32: auth.DeletePositionRequest
-	(*ReorderPositionsRequest)(nil),          // 33: auth.ReorderPositionsRequest
-	(*BatchCreatePositionsRequest)(nil),      // 34: auth.BatchCreatePositionsRequest
-	(*CheckAccessRequest)(nil),               // 35: auth.CheckAccessRequest
-	(*RequestAccessRequest)(nil),             // 36: auth.RequestAccessRequest
-	(*GrantAccessRequest)(nil),               // 37: auth.GrantAccessRequest
-	(*ListAccessRequestsRequest)(nil),        // 38: auth.ListAccessRequestsRequest
-	(*CreateDocumentMetadataRequest)(nil),    // 39: auth.CreateDocumentMetadataRequest
-	(*UpdateDocumentVisibilityRequest)(nil),  // 40: auth.UpdateDocumentVisibilityRequest
-	(*GetDocumentMetadataRequest)(nil),       // 41: auth.GetDocumentMetadataRequest
-	(*ListVisibilityApprovalsRequest)(nil),   // 42: auth.ListVisibilityApprovalsRequest
-	(*ApproveVisibilityChangeRequest)(nil),   // 43: auth.ApproveVisibilityChangeRequest
-	(*CreateUserResponse)(nil),               // 44: auth.CreateUserResponse
-	(*BatchCreateUsersResponse)(nil),         // 45: auth.BatchCreateUsersResponse
-	(*GetUserResponse)(nil),                  // 46: auth.GetUserResponse
-	(*ListUsersResponse)(nil),                // 47: auth.ListUsersResponse
-	(*UpdateUserResponse)(nil),               // 48: auth.UpdateUserResponse
-	(*DeleteUserResponse)(nil),               // 49: auth.DeleteUserResponse
-	(*CreateTenantResponse)(nil),             // 50: auth.CreateTenantResponse
-	(*GetTenantResponse)(nil),                // 51: auth.GetTenantResponse
-	(*ListTenantsResponse)(nil),              // 52: auth.ListTenantsResponse
-	(*CreateDepartmentResponse)(nil),         // 53: auth.CreateDepartmentResponse
-	(*BatchCreateDepartmentsResponse)(nil),   // 54: auth.BatchCreateDepartmentsResponse
-	(*ListDepartmentsResponse)(nil),          // 55: auth.ListDepartmentsResponse
-	(*UpdateDepartmentResponse)(nil),         // 56: auth.UpdateDepartmentResponse
-	(*DeleteDepartmentResponse)(nil),         // 57: auth.DeleteDepartmentResponse
-	(*GetDepartmentResponse)(nil),            // 58: auth.GetDepartmentResponse
-	(*ReorderDepartmentsResponse)(nil),       // 59: auth.ReorderDepartmentsResponse
-	(*CreateProjectResponse)(nil),            // 60: auth.CreateProjectResponse
-	(*BatchCreateProjectsResponse)(nil),      // 61: auth.BatchCreateProjectsResponse
-	(*ListProjectsResponse)(nil),             // 62: auth.ListProjectsResponse
-	(*UpdateProjectResponse)(nil),            // 63: auth.UpdateProjectResponse
-	(*DeleteProjectResponse)(nil),            // 64: auth.DeleteProjectResponse
-	(*GetProjectResponse)(nil),               // 65: auth.GetProjectResponse
-	(*ReorderProjectsResponse)(nil),          // 66: auth.ReorderProjectsResponse
-	(*CreatePositionResponse)(nil),           // 67: auth.CreatePositionResponse
-	(*ListPositionsResponse)(nil),            // 68: auth.ListPositionsResponse
-	(*UpdatePositionResponse)(nil),           // 69: auth.UpdatePositionResponse
-	(*DeletePositionResponse)(nil),           // 70: auth.DeletePositionResponse
-	(*ReorderPositionsResponse)(nil),         // 71: auth.ReorderPositionsResponse
-	(*BatchCreatePositionsResponse)(nil),     // 72: auth.BatchCreatePositionsResponse
-	(*CheckAccessResponse)(nil),              // 73: auth.CheckAccessResponse
-	(*RequestAccessResponse)(nil),            // 74: auth.RequestAccessResponse
-	(*GrantAccessResponse)(nil),              // 75: auth.GrantAccessResponse
-	(*ListAccessRequestsResponse)(nil),       // 76: auth.ListAccessRequestsResponse
-	(*CreateDocumentMetadataResponse)(nil),   // 77: auth.CreateDocumentMetadataResponse
-	(*UpdateDocumentVisibilityResponse)(nil), // 78: auth.UpdateDocumentVisibilityResponse
-	(*GetDocumentMetadataResponse)(nil),      // 79: auth.GetDocumentMetadataResponse
-	(*ListVisibilityApprovalsResponse)(nil),  // 80: auth.ListVisibilityApprovalsResponse
-	(*ApproveVisibilityChangeResponse)(nil),  // 81: auth.ApproveVisibilityChangeResponse
+	(*ResetAndSendPasswordRequest)(nil),      // 2: auth.ResetAndSendPasswordRequest
+	(*ResetAndSendPasswordResponse)(nil),     // 3: auth.ResetAndSendPasswordResponse
+	(*ValidateTokenRequest)(nil),             // 4: auth.ValidateTokenRequest
+	(*ValidateTokenResponse)(nil),            // 5: auth.ValidateTokenResponse
+	(*RefreshTokenRequest)(nil),              // 6: auth.RefreshTokenRequest
+	(*RefreshTokenResponse)(nil),             // 7: auth.RefreshTokenResponse
+	(*CreateUserRequest)(nil),                // 8: auth.CreateUserRequest
+	(*BatchCreateUsersRequest)(nil),          // 9: auth.BatchCreateUsersRequest
+	(*GetUserRequest)(nil),                   // 10: auth.GetUserRequest
+	(*ListUsersRequest)(nil),                 // 11: auth.ListUsersRequest
+	(*UpdateUserRequest)(nil),                // 12: auth.UpdateUserRequest
+	(*DeleteUserRequest)(nil),                // 13: auth.DeleteUserRequest
+	(*CreateTenantRequest)(nil),              // 14: auth.CreateTenantRequest
+	(*GetTenantRequest)(nil),                 // 15: auth.GetTenantRequest
+	(*ListTenantsRequest)(nil),               // 16: auth.ListTenantsRequest
+	(*CreateDepartmentRequest)(nil),          // 17: auth.CreateDepartmentRequest
+	(*BatchCreateDepartmentsRequest)(nil),    // 18: auth.BatchCreateDepartmentsRequest
+	(*ListDepartmentsRequest)(nil),           // 19: auth.ListDepartmentsRequest
+	(*UpdateDepartmentRequest)(nil),          // 20: auth.UpdateDepartmentRequest
+	(*DeleteDepartmentRequest)(nil),          // 21: auth.DeleteDepartmentRequest
+	(*GetDepartmentRequest)(nil),             // 22: auth.GetDepartmentRequest
+	(*ReorderDepartmentsRequest)(nil),        // 23: auth.ReorderDepartmentsRequest
+	(*CreateProjectRequest)(nil),             // 24: auth.CreateProjectRequest
+	(*BatchCreateProjectsRequest)(nil),       // 25: auth.BatchCreateProjectsRequest
+	(*ListProjectsRequest)(nil),              // 26: auth.ListProjectsRequest
+	(*UpdateProjectRequest)(nil),             // 27: auth.UpdateProjectRequest
+	(*DeleteProjectRequest)(nil),             // 28: auth.DeleteProjectRequest
+	(*GetProjectRequest)(nil),                // 29: auth.GetProjectRequest
+	(*ReorderProjectsRequest)(nil),           // 30: auth.ReorderProjectsRequest
+	(*CreatePositionRequest)(nil),            // 31: auth.CreatePositionRequest
+	(*ListPositionsRequest)(nil),             // 32: auth.ListPositionsRequest
+	(*UpdatePositionRequest)(nil),            // 33: auth.UpdatePositionRequest
+	(*DeletePositionRequest)(nil),            // 34: auth.DeletePositionRequest
+	(*ReorderPositionsRequest)(nil),          // 35: auth.ReorderPositionsRequest
+	(*BatchCreatePositionsRequest)(nil),      // 36: auth.BatchCreatePositionsRequest
+	(*CheckAccessRequest)(nil),               // 37: auth.CheckAccessRequest
+	(*RequestAccessRequest)(nil),             // 38: auth.RequestAccessRequest
+	(*GrantAccessRequest)(nil),               // 39: auth.GrantAccessRequest
+	(*ListAccessRequestsRequest)(nil),        // 40: auth.ListAccessRequestsRequest
+	(*CreateDocumentMetadataRequest)(nil),    // 41: auth.CreateDocumentMetadataRequest
+	(*UpdateDocumentVisibilityRequest)(nil),  // 42: auth.UpdateDocumentVisibilityRequest
+	(*GetDocumentMetadataRequest)(nil),       // 43: auth.GetDocumentMetadataRequest
+	(*ListVisibilityApprovalsRequest)(nil),   // 44: auth.ListVisibilityApprovalsRequest
+	(*ApproveVisibilityChangeRequest)(nil),   // 45: auth.ApproveVisibilityChangeRequest
+	(*BatchResetPasswordRequest)(nil),        // 46: auth.BatchResetPasswordRequest
+	(*CreateUserResponse)(nil),               // 47: auth.CreateUserResponse
+	(*BatchCreateUsersResponse)(nil),         // 48: auth.BatchCreateUsersResponse
+	(*GetUserResponse)(nil),                  // 49: auth.GetUserResponse
+	(*ListUsersResponse)(nil),                // 50: auth.ListUsersResponse
+	(*UpdateUserResponse)(nil),               // 51: auth.UpdateUserResponse
+	(*DeleteUserResponse)(nil),               // 52: auth.DeleteUserResponse
+	(*CreateTenantResponse)(nil),             // 53: auth.CreateTenantResponse
+	(*GetTenantResponse)(nil),                // 54: auth.GetTenantResponse
+	(*ListTenantsResponse)(nil),              // 55: auth.ListTenantsResponse
+	(*CreateDepartmentResponse)(nil),         // 56: auth.CreateDepartmentResponse
+	(*BatchCreateDepartmentsResponse)(nil),   // 57: auth.BatchCreateDepartmentsResponse
+	(*ListDepartmentsResponse)(nil),          // 58: auth.ListDepartmentsResponse
+	(*UpdateDepartmentResponse)(nil),         // 59: auth.UpdateDepartmentResponse
+	(*DeleteDepartmentResponse)(nil),         // 60: auth.DeleteDepartmentResponse
+	(*GetDepartmentResponse)(nil),            // 61: auth.GetDepartmentResponse
+	(*ReorderDepartmentsResponse)(nil),       // 62: auth.ReorderDepartmentsResponse
+	(*CreateProjectResponse)(nil),            // 63: auth.CreateProjectResponse
+	(*BatchCreateProjectsResponse)(nil),      // 64: auth.BatchCreateProjectsResponse
+	(*ListProjectsResponse)(nil),             // 65: auth.ListProjectsResponse
+	(*UpdateProjectResponse)(nil),            // 66: auth.UpdateProjectResponse
+	(*DeleteProjectResponse)(nil),            // 67: auth.DeleteProjectResponse
+	(*GetProjectResponse)(nil),               // 68: auth.GetProjectResponse
+	(*ReorderProjectsResponse)(nil),          // 69: auth.ReorderProjectsResponse
+	(*CreatePositionResponse)(nil),           // 70: auth.CreatePositionResponse
+	(*ListPositionsResponse)(nil),            // 71: auth.ListPositionsResponse
+	(*UpdatePositionResponse)(nil),           // 72: auth.UpdatePositionResponse
+	(*DeletePositionResponse)(nil),           // 73: auth.DeletePositionResponse
+	(*ReorderPositionsResponse)(nil),         // 74: auth.ReorderPositionsResponse
+	(*BatchCreatePositionsResponse)(nil),     // 75: auth.BatchCreatePositionsResponse
+	(*CheckAccessResponse)(nil),              // 76: auth.CheckAccessResponse
+	(*RequestAccessResponse)(nil),            // 77: auth.RequestAccessResponse
+	(*GrantAccessResponse)(nil),              // 78: auth.GrantAccessResponse
+	(*ListAccessRequestsResponse)(nil),       // 79: auth.ListAccessRequestsResponse
+	(*CreateDocumentMetadataResponse)(nil),   // 80: auth.CreateDocumentMetadataResponse
+	(*UpdateDocumentVisibilityResponse)(nil), // 81: auth.UpdateDocumentVisibilityResponse
+	(*GetDocumentMetadataResponse)(nil),      // 82: auth.GetDocumentMetadataResponse
+	(*ListVisibilityApprovalsResponse)(nil),  // 83: auth.ListVisibilityApprovalsResponse
+	(*ApproveVisibilityChangeResponse)(nil),  // 84: auth.ApproveVisibilityChangeResponse
+	(*BatchResetPasswordResponse)(nil),       // 85: auth.BatchResetPasswordResponse
 }
 var file_auth_auth_proto_depIdxs = []int32{
 	0,  // 0: auth.AuthService.Login:input_type -> auth.LoginRequest
-	2,  // 1: auth.AuthService.ValidateToken:input_type -> auth.ValidateTokenRequest
-	4,  // 2: auth.AuthService.RefreshToken:input_type -> auth.RefreshTokenRequest
-	6,  // 3: auth.AuthService.CreateUser:input_type -> auth.CreateUserRequest
-	7,  // 4: auth.AuthService.BatchCreateUsers:input_type -> auth.BatchCreateUsersRequest
-	8,  // 5: auth.AuthService.GetUser:input_type -> auth.GetUserRequest
-	9,  // 6: auth.AuthService.ListUsers:input_type -> auth.ListUsersRequest
-	10, // 7: auth.AuthService.UpdateUser:input_type -> auth.UpdateUserRequest
-	11, // 8: auth.AuthService.DeleteUser:input_type -> auth.DeleteUserRequest
-	12, // 9: auth.AuthService.CreateTenant:input_type -> auth.CreateTenantRequest
-	13, // 10: auth.AuthService.GetTenant:input_type -> auth.GetTenantRequest
-	14, // 11: auth.AuthService.ListTenants:input_type -> auth.ListTenantsRequest
-	15, // 12: auth.AuthService.CreateDepartment:input_type -> auth.CreateDepartmentRequest
-	16, // 13: auth.AuthService.BatchCreateDepartments:input_type -> auth.BatchCreateDepartmentsRequest
-	17, // 14: auth.AuthService.ListDepartments:input_type -> auth.ListDepartmentsRequest
-	18, // 15: auth.AuthService.UpdateDepartment:input_type -> auth.UpdateDepartmentRequest
-	19, // 16: auth.AuthService.DeleteDepartment:input_type -> auth.DeleteDepartmentRequest
-	20, // 17: auth.AuthService.GetDepartment:input_type -> auth.GetDepartmentRequest
-	21, // 18: auth.AuthService.ReorderDepartments:input_type -> auth.ReorderDepartmentsRequest
-	22, // 19: auth.AuthService.CreateProject:input_type -> auth.CreateProjectRequest
-	23, // 20: auth.AuthService.BatchCreateProjects:input_type -> auth.BatchCreateProjectsRequest
-	24, // 21: auth.AuthService.ListProjects:input_type -> auth.ListProjectsRequest
-	25, // 22: auth.AuthService.UpdateProject:input_type -> auth.UpdateProjectRequest
-	26, // 23: auth.AuthService.DeleteProject:input_type -> auth.DeleteProjectRequest
-	27, // 24: auth.AuthService.GetProject:input_type -> auth.GetProjectRequest
-	28, // 25: auth.AuthService.ReorderProjects:input_type -> auth.ReorderProjectsRequest
-	29, // 26: auth.AuthService.CreatePosition:input_type -> auth.CreatePositionRequest
-	30, // 27: auth.AuthService.ListPositions:input_type -> auth.ListPositionsRequest
-	31, // 28: auth.AuthService.UpdatePosition:input_type -> auth.UpdatePositionRequest
-	32, // 29: auth.AuthService.DeletePosition:input_type -> auth.DeletePositionRequest
-	33, // 30: auth.AuthService.ReorderPositions:input_type -> auth.ReorderPositionsRequest
-	34, // 31: auth.AuthService.BatchCreatePositions:input_type -> auth.BatchCreatePositionsRequest
-	35, // 32: auth.AuthService.CheckAccess:input_type -> auth.CheckAccessRequest
-	36, // 33: auth.AuthService.RequestAccess:input_type -> auth.RequestAccessRequest
-	37, // 34: auth.AuthService.GrantAccess:input_type -> auth.GrantAccessRequest
-	38, // 35: auth.AuthService.ListAccessRequests:input_type -> auth.ListAccessRequestsRequest
-	39, // 36: auth.AuthService.CreateDocumentMetadata:input_type -> auth.CreateDocumentMetadataRequest
-	40, // 37: auth.AuthService.UpdateDocumentVisibility:input_type -> auth.UpdateDocumentVisibilityRequest
-	41, // 38: auth.AuthService.GetDocumentMetadata:input_type -> auth.GetDocumentMetadataRequest
-	42, // 39: auth.AuthService.ListVisibilityApprovals:input_type -> auth.ListVisibilityApprovalsRequest
-	43, // 40: auth.AuthService.ApproveVisibilityChange:input_type -> auth.ApproveVisibilityChangeRequest
-	1,  // 41: auth.AuthService.Login:output_type -> auth.LoginResponse
-	3,  // 42: auth.AuthService.ValidateToken:output_type -> auth.ValidateTokenResponse
-	5,  // 43: auth.AuthService.RefreshToken:output_type -> auth.RefreshTokenResponse
-	44, // 44: auth.AuthService.CreateUser:output_type -> auth.CreateUserResponse
-	45, // 45: auth.AuthService.BatchCreateUsers:output_type -> auth.BatchCreateUsersResponse
-	46, // 46: auth.AuthService.GetUser:output_type -> auth.GetUserResponse
-	47, // 47: auth.AuthService.ListUsers:output_type -> auth.ListUsersResponse
-	48, // 48: auth.AuthService.UpdateUser:output_type -> auth.UpdateUserResponse
-	49, // 49: auth.AuthService.DeleteUser:output_type -> auth.DeleteUserResponse
-	50, // 50: auth.AuthService.CreateTenant:output_type -> auth.CreateTenantResponse
-	51, // 51: auth.AuthService.GetTenant:output_type -> auth.GetTenantResponse
-	52, // 52: auth.AuthService.ListTenants:output_type -> auth.ListTenantsResponse
-	53, // 53: auth.AuthService.CreateDepartment:output_type -> auth.CreateDepartmentResponse
-	54, // 54: auth.AuthService.BatchCreateDepartments:output_type -> auth.BatchCreateDepartmentsResponse
-	55, // 55: auth.AuthService.ListDepartments:output_type -> auth.ListDepartmentsResponse
-	56, // 56: auth.AuthService.UpdateDepartment:output_type -> auth.UpdateDepartmentResponse
-	57, // 57: auth.AuthService.DeleteDepartment:output_type -> auth.DeleteDepartmentResponse
-	58, // 58: auth.AuthService.GetDepartment:output_type -> auth.GetDepartmentResponse
-	59, // 59: auth.AuthService.ReorderDepartments:output_type -> auth.ReorderDepartmentsResponse
-	60, // 60: auth.AuthService.CreateProject:output_type -> auth.CreateProjectResponse
-	61, // 61: auth.AuthService.BatchCreateProjects:output_type -> auth.BatchCreateProjectsResponse
-	62, // 62: auth.AuthService.ListProjects:output_type -> auth.ListProjectsResponse
-	63, // 63: auth.AuthService.UpdateProject:output_type -> auth.UpdateProjectResponse
-	64, // 64: auth.AuthService.DeleteProject:output_type -> auth.DeleteProjectResponse
-	65, // 65: auth.AuthService.GetProject:output_type -> auth.GetProjectResponse
-	66, // 66: auth.AuthService.ReorderProjects:output_type -> auth.ReorderProjectsResponse
-	67, // 67: auth.AuthService.CreatePosition:output_type -> auth.CreatePositionResponse
-	68, // 68: auth.AuthService.ListPositions:output_type -> auth.ListPositionsResponse
-	69, // 69: auth.AuthService.UpdatePosition:output_type -> auth.UpdatePositionResponse
-	70, // 70: auth.AuthService.DeletePosition:output_type -> auth.DeletePositionResponse
-	71, // 71: auth.AuthService.ReorderPositions:output_type -> auth.ReorderPositionsResponse
-	72, // 72: auth.AuthService.BatchCreatePositions:output_type -> auth.BatchCreatePositionsResponse
-	73, // 73: auth.AuthService.CheckAccess:output_type -> auth.CheckAccessResponse
-	74, // 74: auth.AuthService.RequestAccess:output_type -> auth.RequestAccessResponse
-	75, // 75: auth.AuthService.GrantAccess:output_type -> auth.GrantAccessResponse
-	76, // 76: auth.AuthService.ListAccessRequests:output_type -> auth.ListAccessRequestsResponse
-	77, // 77: auth.AuthService.CreateDocumentMetadata:output_type -> auth.CreateDocumentMetadataResponse
-	78, // 78: auth.AuthService.UpdateDocumentVisibility:output_type -> auth.UpdateDocumentVisibilityResponse
-	79, // 79: auth.AuthService.GetDocumentMetadata:output_type -> auth.GetDocumentMetadataResponse
-	80, // 80: auth.AuthService.ListVisibilityApprovals:output_type -> auth.ListVisibilityApprovalsResponse
-	81, // 81: auth.AuthService.ApproveVisibilityChange:output_type -> auth.ApproveVisibilityChangeResponse
-	41, // [41:82] is the sub-list for method output_type
-	0,  // [0:41] is the sub-list for method input_type
+	4,  // 1: auth.AuthService.ValidateToken:input_type -> auth.ValidateTokenRequest
+	6,  // 2: auth.AuthService.RefreshToken:input_type -> auth.RefreshTokenRequest
+	8,  // 3: auth.AuthService.CreateUser:input_type -> auth.CreateUserRequest
+	9,  // 4: auth.AuthService.BatchCreateUsers:input_type -> auth.BatchCreateUsersRequest
+	10, // 5: auth.AuthService.GetUser:input_type -> auth.GetUserRequest
+	11, // 6: auth.AuthService.ListUsers:input_type -> auth.ListUsersRequest
+	12, // 7: auth.AuthService.UpdateUser:input_type -> auth.UpdateUserRequest
+	13, // 8: auth.AuthService.DeleteUser:input_type -> auth.DeleteUserRequest
+	14, // 9: auth.AuthService.CreateTenant:input_type -> auth.CreateTenantRequest
+	15, // 10: auth.AuthService.GetTenant:input_type -> auth.GetTenantRequest
+	16, // 11: auth.AuthService.ListTenants:input_type -> auth.ListTenantsRequest
+	17, // 12: auth.AuthService.CreateDepartment:input_type -> auth.CreateDepartmentRequest
+	18, // 13: auth.AuthService.BatchCreateDepartments:input_type -> auth.BatchCreateDepartmentsRequest
+	19, // 14: auth.AuthService.ListDepartments:input_type -> auth.ListDepartmentsRequest
+	20, // 15: auth.AuthService.UpdateDepartment:input_type -> auth.UpdateDepartmentRequest
+	21, // 16: auth.AuthService.DeleteDepartment:input_type -> auth.DeleteDepartmentRequest
+	22, // 17: auth.AuthService.GetDepartment:input_type -> auth.GetDepartmentRequest
+	23, // 18: auth.AuthService.ReorderDepartments:input_type -> auth.ReorderDepartmentsRequest
+	24, // 19: auth.AuthService.CreateProject:input_type -> auth.CreateProjectRequest
+	25, // 20: auth.AuthService.BatchCreateProjects:input_type -> auth.BatchCreateProjectsRequest
+	26, // 21: auth.AuthService.ListProjects:input_type -> auth.ListProjectsRequest
+	27, // 22: auth.AuthService.UpdateProject:input_type -> auth.UpdateProjectRequest
+	28, // 23: auth.AuthService.DeleteProject:input_type -> auth.DeleteProjectRequest
+	29, // 24: auth.AuthService.GetProject:input_type -> auth.GetProjectRequest
+	30, // 25: auth.AuthService.ReorderProjects:input_type -> auth.ReorderProjectsRequest
+	31, // 26: auth.AuthService.CreatePosition:input_type -> auth.CreatePositionRequest
+	32, // 27: auth.AuthService.ListPositions:input_type -> auth.ListPositionsRequest
+	33, // 28: auth.AuthService.UpdatePosition:input_type -> auth.UpdatePositionRequest
+	34, // 29: auth.AuthService.DeletePosition:input_type -> auth.DeletePositionRequest
+	35, // 30: auth.AuthService.ReorderPositions:input_type -> auth.ReorderPositionsRequest
+	36, // 31: auth.AuthService.BatchCreatePositions:input_type -> auth.BatchCreatePositionsRequest
+	37, // 32: auth.AuthService.CheckAccess:input_type -> auth.CheckAccessRequest
+	38, // 33: auth.AuthService.RequestAccess:input_type -> auth.RequestAccessRequest
+	39, // 34: auth.AuthService.GrantAccess:input_type -> auth.GrantAccessRequest
+	40, // 35: auth.AuthService.ListAccessRequests:input_type -> auth.ListAccessRequestsRequest
+	41, // 36: auth.AuthService.CreateDocumentMetadata:input_type -> auth.CreateDocumentMetadataRequest
+	42, // 37: auth.AuthService.UpdateDocumentVisibility:input_type -> auth.UpdateDocumentVisibilityRequest
+	43, // 38: auth.AuthService.GetDocumentMetadata:input_type -> auth.GetDocumentMetadataRequest
+	44, // 39: auth.AuthService.ListVisibilityApprovals:input_type -> auth.ListVisibilityApprovalsRequest
+	45, // 40: auth.AuthService.ApproveVisibilityChange:input_type -> auth.ApproveVisibilityChangeRequest
+	2,  // 41: auth.AuthService.ResetAndSendPassword:input_type -> auth.ResetAndSendPasswordRequest
+	46, // 42: auth.AuthService.BatchResetPassword:input_type -> auth.BatchResetPasswordRequest
+	1,  // 43: auth.AuthService.Login:output_type -> auth.LoginResponse
+	5,  // 44: auth.AuthService.ValidateToken:output_type -> auth.ValidateTokenResponse
+	7,  // 45: auth.AuthService.RefreshToken:output_type -> auth.RefreshTokenResponse
+	47, // 46: auth.AuthService.CreateUser:output_type -> auth.CreateUserResponse
+	48, // 47: auth.AuthService.BatchCreateUsers:output_type -> auth.BatchCreateUsersResponse
+	49, // 48: auth.AuthService.GetUser:output_type -> auth.GetUserResponse
+	50, // 49: auth.AuthService.ListUsers:output_type -> auth.ListUsersResponse
+	51, // 50: auth.AuthService.UpdateUser:output_type -> auth.UpdateUserResponse
+	52, // 51: auth.AuthService.DeleteUser:output_type -> auth.DeleteUserResponse
+	53, // 52: auth.AuthService.CreateTenant:output_type -> auth.CreateTenantResponse
+	54, // 53: auth.AuthService.GetTenant:output_type -> auth.GetTenantResponse
+	55, // 54: auth.AuthService.ListTenants:output_type -> auth.ListTenantsResponse
+	56, // 55: auth.AuthService.CreateDepartment:output_type -> auth.CreateDepartmentResponse
+	57, // 56: auth.AuthService.BatchCreateDepartments:output_type -> auth.BatchCreateDepartmentsResponse
+	58, // 57: auth.AuthService.ListDepartments:output_type -> auth.ListDepartmentsResponse
+	59, // 58: auth.AuthService.UpdateDepartment:output_type -> auth.UpdateDepartmentResponse
+	60, // 59: auth.AuthService.DeleteDepartment:output_type -> auth.DeleteDepartmentResponse
+	61, // 60: auth.AuthService.GetDepartment:output_type -> auth.GetDepartmentResponse
+	62, // 61: auth.AuthService.ReorderDepartments:output_type -> auth.ReorderDepartmentsResponse
+	63, // 62: auth.AuthService.CreateProject:output_type -> auth.CreateProjectResponse
+	64, // 63: auth.AuthService.BatchCreateProjects:output_type -> auth.BatchCreateProjectsResponse
+	65, // 64: auth.AuthService.ListProjects:output_type -> auth.ListProjectsResponse
+	66, // 65: auth.AuthService.UpdateProject:output_type -> auth.UpdateProjectResponse
+	67, // 66: auth.AuthService.DeleteProject:output_type -> auth.DeleteProjectResponse
+	68, // 67: auth.AuthService.GetProject:output_type -> auth.GetProjectResponse
+	69, // 68: auth.AuthService.ReorderProjects:output_type -> auth.ReorderProjectsResponse
+	70, // 69: auth.AuthService.CreatePosition:output_type -> auth.CreatePositionResponse
+	71, // 70: auth.AuthService.ListPositions:output_type -> auth.ListPositionsResponse
+	72, // 71: auth.AuthService.UpdatePosition:output_type -> auth.UpdatePositionResponse
+	73, // 72: auth.AuthService.DeletePosition:output_type -> auth.DeletePositionResponse
+	74, // 73: auth.AuthService.ReorderPositions:output_type -> auth.ReorderPositionsResponse
+	75, // 74: auth.AuthService.BatchCreatePositions:output_type -> auth.BatchCreatePositionsResponse
+	76, // 75: auth.AuthService.CheckAccess:output_type -> auth.CheckAccessResponse
+	77, // 76: auth.AuthService.RequestAccess:output_type -> auth.RequestAccessResponse
+	78, // 77: auth.AuthService.GrantAccess:output_type -> auth.GrantAccessResponse
+	79, // 78: auth.AuthService.ListAccessRequests:output_type -> auth.ListAccessRequestsResponse
+	80, // 79: auth.AuthService.CreateDocumentMetadata:output_type -> auth.CreateDocumentMetadataResponse
+	81, // 80: auth.AuthService.UpdateDocumentVisibility:output_type -> auth.UpdateDocumentVisibilityResponse
+	82, // 81: auth.AuthService.GetDocumentMetadata:output_type -> auth.GetDocumentMetadataResponse
+	83, // 82: auth.AuthService.ListVisibilityApprovals:output_type -> auth.ListVisibilityApprovalsResponse
+	84, // 83: auth.AuthService.ApproveVisibilityChange:output_type -> auth.ApproveVisibilityChangeResponse
+	3,  // 84: auth.AuthService.ResetAndSendPassword:output_type -> auth.ResetAndSendPasswordResponse
+	85, // 85: auth.AuthService.BatchResetPassword:output_type -> auth.BatchResetPasswordResponse
+	43, // [43:86] is the sub-list for method output_type
+	0,  // [0:43] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -624,7 +744,7 @@ func file_auth_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_auth_auth_proto_rawDesc), len(file_auth_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

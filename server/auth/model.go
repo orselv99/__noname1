@@ -10,24 +10,26 @@ import (
 
 // User 모델 정의
 type User struct {
-	ID             string         `gorm:"type:uuid;primary_key;"`
-	Email          string         `gorm:"type:varchar(100);uniqueIndex;not null"`
-	PasswordHash   string         `gorm:"not null"`
-	Salt           string         `gorm:"default:'';not null"` // 암호화 키 파생용 소금
-	Username       string         `gorm:"type:varchar(50);not null"`
-	TenantID       string         `gorm:"type:varchar(50);index;not null"`          // 멀티테넌트 식별자
-	Role           string         `gorm:"type:varchar(20);default:'user';not null"` // 권한 (admin, user 등)
-	PositionID     *string        `gorm:"type:uuid;index"`
-	PositionRel    *Position      `gorm:"foreignKey:PositionID;references:ID"`
-	PositionName   string         `gorm:"-"`                      // Join
-	DepartmentID   *string        `gorm:"type:varchar(50);index"` // 부서 식별자 (Optional)
-	DepartmentRel  *Department    `gorm:"foreignKey:DepartmentID;references:ID"`
-	DepartmentName string         `gorm:"-"`                 // Join
-	Contact        string         `gorm:"type:varchar(100)"` // 연락처
-	Birthday       string         `gorm:"type:varchar(20)"`
-	PhoneNumbers   pq.StringArray `gorm:"type:text[]"`
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                  string         `gorm:"type:uuid;primary_key;"`
+	Email               string         `gorm:"type:varchar(100);uniqueIndex;not null"`
+	PasswordHash        string         `gorm:"not null"`
+	Salt                string         `gorm:"default:'';not null"` // 암호화 키 파생용 소금
+	Username            string         `gorm:"type:varchar(50);not null"`
+	TenantID            string         `gorm:"type:varchar(50);index;not null"`          // 멀티테넌트 식별자
+	Role                string         `gorm:"type:varchar(20);default:'user';not null"` // 권한 (admin, user 등)
+	PositionID          *string        `gorm:"type:uuid;index"`
+	PositionRel         *Position      `gorm:"foreignKey:PositionID;references:ID"`
+	PositionName        string         `gorm:"-"`                      // Join
+	DepartmentID        *string        `gorm:"type:varchar(50);index"` // 부서 식별자 (Optional)
+	DepartmentRel       *Department    `gorm:"foreignKey:DepartmentID;references:ID"`
+	DepartmentName      string         `gorm:"-"`                 // Join
+	Contact             string         `gorm:"type:varchar(100)"` // 연락처
+	Birthday            string         `gorm:"type:varchar(20)"`
+	PhoneNumbers        pq.StringArray `gorm:"type:text[]"`
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	LastLoginAt         *time.Time
+	ForceChangePassword bool `gorm:"default:true"`
 }
 
 // Subscription 모델 정의

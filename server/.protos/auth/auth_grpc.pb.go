@@ -60,6 +60,8 @@ const (
 	AuthService_GetDocumentMetadata_FullMethodName      = "/auth.AuthService/GetDocumentMetadata"
 	AuthService_ListVisibilityApprovals_FullMethodName  = "/auth.AuthService/ListVisibilityApprovals"
 	AuthService_ApproveVisibilityChange_FullMethodName  = "/auth.AuthService/ApproveVisibilityChange"
+	AuthService_ResetAndSendPassword_FullMethodName     = "/auth.AuthService/ResetAndSendPassword"
+	AuthService_BatchResetPassword_FullMethodName       = "/auth.AuthService/BatchResetPassword"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -134,6 +136,11 @@ type AuthServiceClient interface {
 	//
 	ListVisibilityApprovals(ctx context.Context, in *ListVisibilityApprovalsRequest, opts ...grpc.CallOption) (*ListVisibilityApprovalsResponse, error)
 	ApproveVisibilityChange(ctx context.Context, in *ApproveVisibilityChangeRequest, opts ...grpc.CallOption) (*ApproveVisibilityChangeResponse, error)
+	//
+	// Password Management
+	//
+	ResetAndSendPassword(ctx context.Context, in *ResetAndSendPasswordRequest, opts ...grpc.CallOption) (*ResetAndSendPasswordResponse, error)
+	BatchResetPassword(ctx context.Context, in *BatchResetPasswordRequest, opts ...grpc.CallOption) (*BatchResetPasswordResponse, error)
 }
 
 type authServiceClient struct {
@@ -554,6 +561,26 @@ func (c *authServiceClient) ApproveVisibilityChange(ctx context.Context, in *App
 	return out, nil
 }
 
+func (c *authServiceClient) ResetAndSendPassword(ctx context.Context, in *ResetAndSendPasswordRequest, opts ...grpc.CallOption) (*ResetAndSendPasswordResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResetAndSendPasswordResponse)
+	err := c.cc.Invoke(ctx, AuthService_ResetAndSendPassword_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) BatchResetPassword(ctx context.Context, in *BatchResetPasswordRequest, opts ...grpc.CallOption) (*BatchResetPasswordResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BatchResetPasswordResponse)
+	err := c.cc.Invoke(ctx, AuthService_BatchResetPassword_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -626,6 +653,11 @@ type AuthServiceServer interface {
 	//
 	ListVisibilityApprovals(context.Context, *ListVisibilityApprovalsRequest) (*ListVisibilityApprovalsResponse, error)
 	ApproveVisibilityChange(context.Context, *ApproveVisibilityChangeRequest) (*ApproveVisibilityChangeResponse, error)
+	//
+	// Password Management
+	//
+	ResetAndSendPassword(context.Context, *ResetAndSendPasswordRequest) (*ResetAndSendPasswordResponse, error)
+	BatchResetPassword(context.Context, *BatchResetPasswordRequest) (*BatchResetPasswordResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
@@ -758,6 +790,12 @@ func (UnimplementedAuthServiceServer) ListVisibilityApprovals(context.Context, *
 }
 func (UnimplementedAuthServiceServer) ApproveVisibilityChange(context.Context, *ApproveVisibilityChangeRequest) (*ApproveVisibilityChangeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ApproveVisibilityChange not implemented")
+}
+func (UnimplementedAuthServiceServer) ResetAndSendPassword(context.Context, *ResetAndSendPasswordRequest) (*ResetAndSendPasswordResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResetAndSendPassword not implemented")
+}
+func (UnimplementedAuthServiceServer) BatchResetPassword(context.Context, *BatchResetPasswordRequest) (*BatchResetPasswordResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BatchResetPassword not implemented")
 }
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 func (UnimplementedAuthServiceServer) testEmbeddedByValue()                     {}
@@ -1518,6 +1556,42 @@ func _AuthService_ApproveVisibilityChange_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_ResetAndSendPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetAndSendPasswordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ResetAndSendPassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ResetAndSendPassword_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ResetAndSendPassword(ctx, req.(*ResetAndSendPasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_BatchResetPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchResetPasswordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).BatchResetPassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_BatchResetPassword_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).BatchResetPassword(ctx, req.(*BatchResetPasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1688,6 +1762,14 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ApproveVisibilityChange",
 			Handler:    _AuthService_ApproveVisibilityChange_Handler,
+		},
+		{
+			MethodName: "ResetAndSendPassword",
+			Handler:    _AuthService_ResetAndSendPassword_Handler,
+		},
+		{
+			MethodName: "BatchResetPassword",
+			Handler:    _AuthService_BatchResetPassword_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

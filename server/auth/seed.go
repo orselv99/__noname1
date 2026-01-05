@@ -97,7 +97,6 @@ func seedSuperUsers(db *gorm.DB) error {
 			Email:        u.Email,
 			Username:     u.Username,
 			PasswordHash: string(hashedPassword),
-			Salt:         salt,
 			TenantID:     SUPER_TENANT_DOMAIN,
 			Role:         role,
 			DepartmentID: strToPtr(SUPER_DEPARTMENT_ID),
@@ -110,6 +109,8 @@ func seedSuperUsers(db *gorm.DB) error {
 			log.Printf("Updating super user %s...", u.Email)
 			existing.PasswordHash = string(hashedPassword)
 			existing.Salt = salt
+			// Explicitly set ForceChangePassword to false (Update handles zero values)
+			existing.ForceChangePassword = false
 			// Re-save
 			if err := db.Save(&existing).Error; err != nil {
 				return fmt.Errorf("failed to update super user %s: %w", u.Email, err)
@@ -119,6 +120,10 @@ func seedSuperUsers(db *gorm.DB) error {
 			log.Printf("Creating super user %s...", u.Email)
 			if err := db.Create(&user).Error; err != nil {
 				return fmt.Errorf("failed to create super user %s: %w", u.Email, err)
+			}
+			// FORCE Update to false (because Create ignores zero value 'false' when default is 'true')
+			if err := db.Model(&user).Update("force_change_password", false).Error; err != nil {
+				return fmt.Errorf("failed to set force_change_password for %s: %w", u.Email, err)
 			}
 		}
 		log.Printf("Super user %s seeded successfully.", u.Email)
