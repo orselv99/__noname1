@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanguage } from '@/context/LanguageContext';
-import { Users, Search, UserPlus, MoreVertical, Trash2, Edit, Plus, ChevronUp, ChevronDown, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Search, UserPlus, MoreVertical, Trash2, Edit, Plus, ChevronUp, ChevronDown, Check, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import CreateUserModal from '@/components/admin/users/CreateUserModal';
 import EditUserModal from '@/components/admin/users/EditUserModal';
 import OrganizationSidebar from '@/components/admin/users/OrganizationSidebar';
@@ -15,7 +15,7 @@ interface User {
   id: string;
   email: string;
   username: string;
-  role: string;
+  role: number;
   created_at: string;
   department_id?: string;
   department_name?: string;
@@ -506,6 +506,30 @@ export default function UsersPage() {
     setIsEditModalOpen(true);
   };
 
+  const { showToast } = useToast();
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!window.confirm('Are you sure you want to delete this user?')) return;
+
+    try {
+      const response = await fetch(`/api/v1/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'X-Tenant-ID': tenantId,
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to delete user');
+
+      showToast('User deleted successfully', 'success');
+      fetchUsers(tenantId);
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to delete user', 'error');
+    }
+  };
+
   const filteredUsers = users.filter((user) => {
     // 1. Search Filter
     const matchesSearch =
@@ -527,7 +551,7 @@ export default function UsersPage() {
       </div>
     );
   }
-
+  console.log(filteredUsers);
   return (
     <div className="h-[calc(100vh-100px)] flex gap-6">
 
@@ -608,14 +632,17 @@ export default function UsersPage() {
                     <tr key={user.id} className="hover:bg-white/5 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          {/* Avatar */}
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center text-blue-400 border border-white/5">
-                            {user.username.charAt(0).toUpperCase()}
-                          </div>
                           <div>
                             <div className="flex items-center gap-2">
                               {/* Username */}
-                              <div className="font-medium text-gray-200">{user.username}</div>
+                              <div className="flex items-center gap-1.5 font-medium text-gray-200">
+                                {user.username}
+                                {user.role === 3 && (
+                                  <div className="w-4 h-4 bg-zinc-900 rounded-full flex items-center justify-center border border-orange-500/50 shadow-sm shadow-orange-500/20">
+                                    <Eye size={12} className="text-orange-400" />
+                                  </div>
+                                )}
+                              </div>
                               {/* Department */}
                               {user.department_role && (
                                 <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded uppercase tracking-wide">
@@ -652,7 +679,11 @@ export default function UsersPage() {
                           >
                             <Edit size={16} />
                           </button>
-                          <button className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-gray-400 hover:text-red-400" title="Delete User">
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-gray-400 hover:text-red-400"
+                            title="Delete User"
+                          >
                             <Trash2 size={16} />
                           </button>
                         </div>

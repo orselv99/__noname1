@@ -17,20 +17,17 @@ type User struct {
 	Username       string         `gorm:"type:varchar(50);not null"`
 	TenantID       string         `gorm:"type:varchar(50);index;not null"`          // 멀티테넌트 식별자
 	Role           string         `gorm:"type:varchar(20);default:'user';not null"` // 권한 (admin, user 등)
-	DepartmentID   *string        `gorm:"type:varchar(50);index"`                   // 부서 식별자 (Optional)
-	DepartmentRel  *Department    `gorm:"foreignKey:DepartmentID;references:ID"`
-	Contact        string         `gorm:"type:varchar(100)"` // 연락처
-	FirstName      string         `gorm:"type:varchar(50)"`
-	LastName       string         `gorm:"type:varchar(50)"`
-	Birthday       string         `gorm:"type:varchar(20)"`
-	PhoneNumbers   pq.StringArray `gorm:"type:text[]"`
 	PositionID     *string        `gorm:"type:uuid;index"`
 	PositionRel    *Position      `gorm:"foreignKey:PositionID;references:ID"`
-	PositionName   string         `gorm:"-"` // Join
-	DepartmentName string         `gorm:"-"` // Join
+	PositionName   string         `gorm:"-"`                      // Join
+	DepartmentID   *string        `gorm:"type:varchar(50);index"` // 부서 식별자 (Optional)
+	DepartmentRel  *Department    `gorm:"foreignKey:DepartmentID;references:ID"`
+	DepartmentName string         `gorm:"-"`                 // Join
+	Contact        string         `gorm:"type:varchar(100)"` // 연락처
+	Birthday       string         `gorm:"type:varchar(20)"`
+	PhoneNumbers   pq.StringArray `gorm:"type:text[]"`
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
-	DeletedAt      gorm.DeletedAt `gorm:"index"`
 }
 
 // Subscription 모델 정의
@@ -73,7 +70,6 @@ func (s *Subscription) BeforeCreate(tx *gorm.DB) (err error) {
 	return
 }
 
-// BeforeCreate 훅: UUID 생성
 // BeforeCreate 훅: UUID 생성
 func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 	if u.ID == "" {

@@ -194,7 +194,6 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
       });
-
       if (response.ok) {
         const data = await response.json();
         setPositions(data.positions || []);
@@ -289,8 +288,6 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
     }
   };
 
-  // console.log(csvPreview)
-
   const processFile = (file: File) => {
     setCsvFile(file);
     Papa.parse(file, {
@@ -343,6 +340,15 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
           return 4;
         };
 
+        // Lookup Position ID by Name
+        const positionName = row.position || row.Position;
+        let positionId = row.position_id || row.PositionId || '';
+
+        if (!positionId && positionName) {
+          const found = positions.find(d => d.name.toLowerCase() === positionName.toLowerCase());
+          if (found) positionId = found.id;
+        }
+
         // Lookup Department ID by Name
         const deptName = row.department || row.Department;
         let deptId = row.department_id || row.DepartmentId || '';
@@ -362,7 +368,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
           phone_numbers: row.phone_numbers
             ? row.phone_numbers.split(/[|;,\s]+/).map((p: string) => p.trim()).filter(Boolean)
             : (row.phone || row.Phone ? [row.phone || row.Phone] : []),
-          position_id: '' // Not requested in CSV headers, default empty
+          position_id: positionId // Not requested in CSV headers, default empty
         };
       }).filter(Boolean);
 
