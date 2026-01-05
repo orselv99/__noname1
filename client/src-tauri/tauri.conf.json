@@ -23,6 +23,12 @@
     }
   },
   "bundle": {
+    "externalBin": [
+      "bin/llama-server"
+    ],
+    "resources": [
+      "../../client-ai-service/model"
+    ],
     "active": true,
     "targets": "all",
     "icon": [

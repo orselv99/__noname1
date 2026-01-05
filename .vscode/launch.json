@@ -48,6 +48,15 @@
       "mode": "debug",
       "program": "${workspaceFolder}/server/signaling",
       "cwd": "${workspaceFolder}/server"
+    },
+    {
+      "name": "Tauri Development",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder}/client/src-tauri",
+      "program": "${workspaceFolder}/client/src-tauri/target/debug/tauri-app.exe",
+      "preLaunchTask": "tauri: dev"
     }
   ],
   "compounds": [

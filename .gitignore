@@ -5,9 +5,12 @@ build/
 npm-debug.log
 yarn-error.log
 
+
 # Rust / Tauri
 client/src-tauri/target/
 client/src-tauri/gen/schemas/
+client/src-tauri/bin/*.exe
+client/src-tauri/bin/*.dll
 
 # Server (Go)
 server/*.exe
