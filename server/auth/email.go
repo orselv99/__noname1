@@ -3,19 +3,23 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/smtp"
 	"os"
+	"strconv"
+
+	"gopkg.in/gomail.v2"
 )
 
 // SendPasswordEmail sends the new password to the user's email.
+// Supports SSL/TLS (port 465) via gomail.
 func (s *server) SendPasswordEmail(email, password string) error {
 	smtpHost := os.Getenv("SMTP_HOST")
-	smtpPort := os.Getenv("SMTP_PORT")
+	smtpPortStr := os.Getenv("SMTP_PORT")
 	smtpUser := os.Getenv("SMTP_USER")
 	smtpPass := os.Getenv("SMTP_PASSWORD")
+	smtpSSL := os.Getenv("SMTP_SSL") // "true" or "false"
 
 	// Fallback to mock if SMTP config is missing
-	if smtpHost == "" || smtpPort == "" {
+	if smtpHost == "" || smtpPortStr == "" {
 		log.Printf("==============================================")
 		log.Printf("[EMAIL MOCK] To: %s", email)
 		log.Printf("[EMAIL MOCK] Subject: Your New Password")
@@ -24,31 +28,43 @@ func (s *server) SendPasswordEmail(email, password string) error {
 		return nil
 	}
 
+	smtpPort, err := strconv.Atoi(smtpPortStr)
+	if err != nil {
+		return fmt.Errorf("invalid SMTP_PORT: %v", err)
+	}
+
 	from := os.Getenv("SMTP_FROM")
 	if from == "" {
 		from = smtpUser
 	}
 	if from == "" {
-		from = "noreply@fiery-horizon.local" // Default for anonymous
+		from = "noreply@fiery-horizon.local"
 	}
 
-	to := []string{email}
-	subject := "Subject: Your New Password\n"
-	mime := "MIME-version: 1.0;\nContent-Type: text/plain; charset=\"UTF-8\";\n\n"
-	body := fmt.Sprintf("Hello,\n\nYour password has been reset.\nNew Password: %s\n\nPlease log in and change your password immediately.", password)
-	msg := []byte(subject + mime + body)
+	// Build email message
+	m := gomail.NewMessage()
+	m.SetHeader("From", from)
+	m.SetHeader("To", email)
+	m.SetHeader("Subject", "Your New Password")
+	m.SetBody("text/plain", fmt.Sprintf(
+		"Hello,\n\nYour password has been reset.\nNew Password: %s\n\nPlease log in and change your password immediately.",
+		password,
+	))
 
-	var auth smtp.Auth
-	if smtpUser != "" {
-		auth = smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
+	// Create dialer
+	d := gomail.NewDialer(smtpHost, smtpPort, smtpUser, smtpPass)
+
+	// Enable SSL for port 465 (implicit TLS)
+	if smtpSSL == "true" || smtpPort == 465 {
+		d.SSL = true
 	}
 
-	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
-	if err := smtp.SendMail(addr, auth, from, to, msg); err != nil {
+	// Send email
+	if err := d.DialAndSend(m); err != nil {
 		log.Printf("Failed to send email to %s: %v", email, err)
 		return err
 	}
 
-	log.Printf("Sent password email to %s via SMTP [password: %s]", email, password)
+	log.Printf("Sent password email to %s via SMTP (SSL=%v)", email, d.SSL)
 	return nil
 }

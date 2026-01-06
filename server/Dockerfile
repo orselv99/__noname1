@@ -16,8 +16,8 @@ WORKDIR /app
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 
-# Copy Proto definitions from Root
-COPY .protos /tmp/protos
+# Copy Proto definitions from server/.protos
+COPY server/.protos /tmp/protos
 
 # Copy source code (this moves server/* to /app/*)
 # server/.protos (renamed from protos) containing old generated files is also copied
