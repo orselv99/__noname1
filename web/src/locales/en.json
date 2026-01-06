@@ -51,6 +51,7 @@
       "tenants": "Tenants",
       "projects": "Projects",
       "positions": "Positions",
+      "aiSettings": "AI Settings",
       "logout": "Logout"
     },
     "dashboard": {
@@ -218,6 +219,27 @@
         "summary": "Summary",
         "partial": "Partial",
         "full": "Full"
+      }
+    },
+    "ai": {
+      "title": "AI Settings",
+      "subtitle": "Configure AI models, LoRA adapters, and prompts.",
+      "models": {
+        "title": "Model Settings",
+        "subtitle": "Configure LLM and Embedding models."
+      },
+      "lora": {
+        "title": "LoRA Settings",
+        "subtitle": "Manage LoRA adapters for fine-tuning."
+      },
+      "prompts": {
+        "title": "Prompt Settings",
+        "subtitle": "Manage system prompts and templates."
+      },
+      "tabs": {
+        "models": "Models",
+        "lora": "LoRA",
+        "prompts": "Prompts"
       }
     }
   }

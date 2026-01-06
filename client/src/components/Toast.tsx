@@ -90,7 +90,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
 
       {/* Toast Container */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
         <AnimatePresence>
           {toasts.map(toast => {
             const MotionDiv = motion.div as any;

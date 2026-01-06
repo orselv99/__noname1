@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MotionDiv } from './ui/Motion';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -81,7 +82,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2">
         <AnimatePresence>
           {toasts.map(toast => {
-            const MotionDiv = motion.div as any;
             return (
               <MotionDiv
                 key={toast.id}

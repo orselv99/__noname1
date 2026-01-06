@@ -16,8 +16,7 @@ import {
 import { useLanguage } from '@/context/LanguageContext';
 import { useToast } from '@/components/admin/Toast';
 import Papa from 'papaparse';
-
-const MotionDiv = motion.div as any;
+import { MotionDiv } from '../ui/Motion';
 
 interface CreateUserModalProps {
   isOpen: boolean;

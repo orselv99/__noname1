@@ -51,6 +51,7 @@
       "tenants": "테넌트",
       "projects": "프로젝트",
       "positions": "직위",
+      "aiSettings": "AI 설정",
       "logout": "로그아웃"
     },
     "dashboard": {
@@ -204,6 +205,27 @@
         "summary": "Summary",
         "partial": "Partial",
         "full": "Full"
+      }
+    },
+    "ai": {
+      "title": "AI 설정",
+      "subtitle": "AI 모델, LoRA 어댑터 및 프롬프트를 구성합니다.",
+      "models": {
+        "title": "모델 설정",
+        "subtitle": "LLM 및 임베딩 모델을 구성합니다."
+      },
+      "lora": {
+        "title": "LoRA 설정",
+        "subtitle": "파인튜닝을 위한 LoRA 어댑터를 관리합니다."
+      },
+      "prompts": {
+        "title": "프롬프트 설정",
+        "subtitle": "시스템 프롬프트 및 템플릿을 관리합니다."
+      },
+      "tabs": {
+        "models": "모델",
+        "lora": "LoRA",
+        "prompts": "프롬프트"
       }
     }
   }

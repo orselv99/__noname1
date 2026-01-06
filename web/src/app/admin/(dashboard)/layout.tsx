@@ -18,13 +18,26 @@ import {
   Network,
   FileText,
   Briefcase,
-  Award
+  Award,
+  Brain,
+  ChevronRight,
+  Database,
+  Cpu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '@/context/LanguageContext';
 import Nav from '@/components/admin/Nav';
 import { ToastProvider } from '@/components/admin/Toast';
+import { MotionAside, MotionDiv, MotionSpan } from '@/components/admin/ui/Motion';
 
+
+// Menu Item Interface
+interface MenuItem {
+  icon: any;
+  label: string;
+  href: string;
+  children?: MenuItem[];
+}
 
 export default function AdminLayout({
   children,
@@ -35,6 +48,7 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>(['/admin/ai/models']); // Default expand for demo
 
   // Language Context
   const { t, language, setLanguage } = useLanguage();
@@ -49,8 +63,6 @@ export default function AdminLayout({
     }
 
     // Decode JWT/Check LocalStorage for Role (Temporary: Assume 'super' for testing if authenticated)
-    // In real implementation, parse JWT from localStorage 'accessToken'
-    // For now, let's mock or assume if login logic stores role
     const storedRole = localStorage.getItem('userRole'); // We need to store this during login
     if (storedRole) setUserRole(storedRole);
 
@@ -64,18 +76,29 @@ export default function AdminLayout({
   }, [router]);
 
 
-
-  const toggleLanguage = () => {
-    setLanguage(language === 'en' ? 'ko' : 'en');
+  const toggleMenu = (href: string) => {
+    if (expandedMenus.includes(href)) {
+      setExpandedMenus(expandedMenus.filter(item => item !== href));
+    } else {
+      setExpandedMenus([...expandedMenus, href]);
+    }
+    if (!isSidebarOpen) setIsSidebarOpen(true);
   };
 
-  const menuItems = [
+  const menuItems: MenuItem[] = [
     { icon: LayoutDashboard, label: t.admin.sidebar.dashboard, href: '/admin/dashboard' },
   ];
 
   // super tenant는 tenants 메뉴만 표시, 일반 tenant는 부서/사용자/문서/접근요청 표시
   if (userRole === 'super') {
-    menuItems.push({ icon: Building2, label: t.admin.sidebar.tenants, href: '/admin/tenants' });
+    menuItems.push(
+      { icon: Building2, label: t.admin.sidebar.tenants, href: '/admin/tenants' },
+      {
+        icon: Brain,
+        label: t.admin.sidebar.aiSettings || 'AI Settings',
+        href: '/admin/ai',
+      }
+    );
   } else {
     menuItems.push(
       { icon: Network, label: t.admin.sidebar.departments, href: '/admin/departments' },
@@ -87,30 +110,27 @@ export default function AdminLayout({
     );
   }
 
-  // Settings removed
-  // menuItems.push({ icon: Settings, label: t.admin.sidebar.settings, href: '/admin/settings' });
-
   return (
     <ToastProvider>
       <div className="min-h-screen bg-black text-gray-100 flex">
-        {/* Sidebar - Restored classic look but with clean style */}
-        <motion.aside
+        {/* Sidebar */}
+        <MotionAside
           initial={false}
           animate={{ width: isSidebarOpen ? 240 : 80 }}
-          className="fixed md:relative z-40 h-screen border-r border-zinc-800 bg-zinc-900/50 backdrop-blur-xl flex flex-col transition-all duration-300"
+          className="fixed md:relative z-40 h-screen border-r border-zinc-800 bg-zinc-900/50 backdrop-blur-xl flex flex-col transition-all duration-300 overflow-hidden"
         >
           <div className={`flex items-center h-16 transition-all duration-300 ${isSidebarOpen ? 'justify-between px-6' : 'justify-center px-2'}`}>
             <AnimatePresence mode="wait">
               {isSidebarOpen && (
-                <motion.span
+                <MotionSpan
                   key="sidebar-title"
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 'auto' }}
-                  exit={{ opacity: 0, width: 0 }}
+                  initial={{ opacity: 0, width: 0 } as any}
+                  animate={{ opacity: 1, width: 'auto' } as any}
+                  exit={{ opacity: 0, width: 0 } as any}
                   className="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 text-transparent bg-clip-text whitespace-nowrap overflow-hidden"
                 >
                   {t.admin.sidebar.title}
-                </motion.span>
+                </MotionSpan>
               )}
             </AnimatePresence>
 
@@ -122,44 +142,119 @@ export default function AdminLayout({
             </button>
           </div>
 
-          <nav className="flex-1 px-3 py-6 space-y-2 flex flex-col">
+          <nav className="flex-1 px-3 py-6 space-y-2 flex flex-col overflow-y-auto hidden-scrollbar">
             {menuItems.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || (item.children && item.children.some(child => pathname === child.href));
+              const isExpanded = expandedMenus.includes(item.href);
+              const hasChildren = item.children && item.children.length > 0;
+
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center transition-all group overflow-hidden rounded-xl
-                    ${isSidebarOpen
-                      ? 'gap-3 px-3 py-3 w-full'
-                      : 'justify-center w-10 h-10 mx-auto p-0'} 
-                    ${isActive
-                      ? 'bg-blue-600/20 text-blue-400'
-                      : 'hover:bg-white/5 text-gray-400 hover:text-white'
-                    }`}
-                  title={!isSidebarOpen ? item.label : ''}
-                >
-                  <div className={`${isSidebarOpen ? 'min-w-[22px]' : ''} flex justify-center items-center`}>
-                    <item.icon size={22} className={`${isActive ? 'text-blue-400' : ''}`} />
-                  </div>
+                <div key={item.href}>
+                  {/* Main Menu Item */}
+                  {hasChildren ? (
+                    <button
+                      onClick={() => toggleMenu(item.href)}
+                      className={`flex items-center transition-all group overflow-hidden rounded-xl w-full text-left
+                          ${isSidebarOpen
+                          ? 'gap-3 px-3 py-3'
+                          : 'justify-center h-10 w-10 mx-auto p-0'} 
+                          ${isActive
+                          ? 'text-blue-400'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      title={!isSidebarOpen ? item.label : ''}
+                    >
+                      <div className={`${isSidebarOpen ? 'min-w-[22px]' : ''} flex justify-center items-center`}>
+                        <item.icon size={22} className={`${isActive ? 'text-blue-400' : ''}`} />
+                      </div>
+
+                      <AnimatePresence>
+                        {isSidebarOpen && (
+                          <>
+                            <MotionSpan
+                              initial={{ opacity: 0, width: 0 } as any}
+                              animate={{ opacity: 1, width: 'auto' } as any}
+                              exit={{ opacity: 0, width: 0 } as any}
+                              className="whitespace-nowrap overflow-hidden flex-1"
+                            >
+                              {item.label}
+                            </MotionSpan>
+                            <MotionDiv
+                              animate={{ rotate: isExpanded ? 90 : 0 } as any}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <ChevronRight size={16} />
+                            </MotionDiv>
+                          </>
+                        )}
+                      </AnimatePresence>
+                    </button>
+                  ) : (
+                    <Link
+                      href={item.href}
+                      className={`flex items-center transition-all group overflow-hidden rounded-xl
+                        ${isSidebarOpen
+                          ? 'gap-3 px-3 py-3 w-full'
+                          : 'justify-center w-10 h-10 mx-auto p-0'} 
+                        ${isActive
+                          ? 'bg-blue-600/20 text-blue-400'
+                          : 'hover:bg-white/5 text-gray-400 hover:text-white'
+                        }`}
+                      title={!isSidebarOpen ? item.label : ''}
+                    >
+                      <div className={`${isSidebarOpen ? 'min-w-[22px]' : ''} flex justify-center items-center`}>
+                        <item.icon size={22} className={`${isActive ? 'text-blue-400' : ''}`} />
+                      </div>
+                      <AnimatePresence>
+                        {isSidebarOpen && (
+                          <MotionSpan
+                            key="label"
+                            initial={{ opacity: 0, width: 0 } as any}
+                            animate={{ opacity: 1, width: 'auto' } as any}
+                            exit={{ opacity: 0, width: 0 } as any}
+                            className="whitespace-nowrap overflow-hidden"
+                          >
+                            {item.label}
+                          </MotionSpan>
+                        )}
+                      </AnimatePresence>
+                    </Link>
+                  )}
+
+                  {/* Children Item (Nested) */}
                   <AnimatePresence>
-                    {isSidebarOpen && (
-                      <motion.span
-                        key="label"
-                        initial={{ opacity: 0, width: 0 }}
-                        animate={{ opacity: 1, width: 'auto' }}
-                        exit={{ opacity: 0, width: 0 }}
-                        className="whitespace-nowrap overflow-hidden"
+                    {hasChildren && isExpanded && isSidebarOpen && (
+                      <MotionDiv
+                        initial={{ height: 0, opacity: 0 } as any}
+                        animate={{ height: 'auto', opacity: 1 } as any}
+                        exit={{ height: 0, opacity: 0 } as any}
+                        className="overflow-hidden ml-4 pl-4 border-l border-zinc-800 space-y-1 mt-1"
                       >
-                        {item.label}
-                      </motion.span>
+                        {item.children!.map((child) => {
+                          const isChildActive = pathname === child.href;
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors
+                                  ${isChildActive
+                                  ? 'text-blue-400 bg-blue-600/10'
+                                  : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                                }`}
+                            >
+                              <child.icon size={16} />
+                              <span>{child.label}</span>
+                            </Link>
+                          )
+                        })}
+                      </MotionDiv>
                     )}
                   </AnimatePresence>
-                </Link>
+                </div>
               );
             })}
           </nav>
-        </motion.aside>
+        </MotionAside>
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto h-screen relative flex flex-col">

@@ -43,6 +43,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import TitleLabel from '@/components/admin/ui/TitleLabel';
+import { MotionDiv } from '@/components/admin/ui/Motion';
 
 interface Department {
   id: string;
@@ -313,7 +314,7 @@ function SortableDepartmentItem({
       {/* Children - rendered OUTSIDE the sortable container */}
       <AnimatePresence>
         {isExpanded && hasChildren && (
-          <motion.div
+          <MotionDiv
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -332,7 +333,7 @@ function SortableDepartmentItem({
                 highlightedId={highlightedId}
               />
             ))}
-          </motion.div>
+          </MotionDiv>
         )}
       </AnimatePresence>
     </>
