@@ -1,6 +1,19 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, Star, FilePlus, FolderPlus, ArrowUpDown, ChevronsUpDown, Link, Building2, FolderKanban, Folder, GripVertical } from 'lucide-react';
-import { NewDocumentDialog } from '../dialogs/NewDocumentDialog';
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Star,
+  FilePlus,
+  FolderPlus,
+  ArrowUpDown,
+  ChevronsUpDown,
+  Link,
+  Building2,
+  FolderKanban,
+  Folder,
+  GripVertical
+} from 'lucide-react';
 import { GroupLinkDialog } from '../dialogs/GroupLinkDialog';
 import {
   DndContext,
@@ -19,6 +32,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { NewDocumentDialog } from '../dialogs/NewDocumentDialog';
 
 export type SidebarMode = 'folder' | 'star';
 
@@ -443,8 +457,15 @@ export const DocumentList = ({
     id: g.id,
     name: g.name,
     type: g.type,
-    folders: g.items.filter(i => i.type === 'folder').map(f => ({ id: f.id, name: f.title }))
+    expanded: g.expanded,
+    folders: g.items.filter(i => i.type === 'folder').map(f => ({
+      id: f.id,
+      name: f.title,
+      expanded: f.expanded,
+      children: f.children
+    })) as any
   }));
+
   const groupIds = groups.map(g => g.id);
 
   const toolbarButtonClass = "w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded-md transition-colors";
