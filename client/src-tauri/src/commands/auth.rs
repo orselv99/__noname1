@@ -1,11 +1,16 @@
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use serde::{Deserialize, Serialize};
+use crate::sidecar;
+use crate::database::{self, DatabaseState, CachedUser};
 
 #[derive(Default)]
 pub struct AuthState {
     pub token: Option<String>,
     pub tenant_id: Option<String>,
+    pub email: Option<String>,
+    pub user_id: Option<String>,
+    pub username: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -14,7 +19,7 @@ struct LoginRequest {
     password: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct LoginResponse {
     pub access_token: String,
     #[serde(default)]
@@ -23,6 +28,27 @@ pub struct LoginResponse {
     pub tenant_id: String,
     #[serde(default)]
     pub role: String,
+    #[serde(default)]
+    pub is_offline: bool,
+    // Extended user info from server
+    #[serde(default)]
+    pub user_id: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub position_id: Option<String>,
+    #[serde(default)]
+    pub department_id: Option<String>,
+    #[serde(default)]
+    pub phone_numbers: Vec<String>,
+    #[serde(default)]
+    pub contact: Option<String>,
+    #[serde(default)]
+    pub birthday: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -32,35 +58,176 @@ struct ChangePasswordRequest {
 }
 
 #[tauri::command]
-pub async fn login(state: State<'_, Mutex<AuthState>>, email: String, password: String) -> Result<LoginResponse, String> {
+pub async fn login(
+    app: AppHandle,
+    state: State<'_, Mutex<AuthState>>,
+    db_state: State<'_, Mutex<DatabaseState>>,
+    email: String, 
+    password: String
+) -> Result<LoginResponse, String> {
     let client = reqwest::Client::new();
-    let res = client.post("http://localhost:8080/api/v1/auth/login")
-        .json(&LoginRequest { email, password })
+    
+    // Try online login first
+    let online_result = client.post("http://localhost:8080/api/v1/auth/login")
+        .json(&LoginRequest { email: email.clone(), password: password.clone() })
         .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !res.status().is_success() {
-        let err_text = res.text().await.unwrap_or("Unknown error".to_string());
-        return Err(err_text);
+        .await;
+    
+    match online_result {
+        Ok(res) if res.status().is_success() => {
+            // Online login successful
+            let login_res: LoginResponse = res.json().await.map_err(|e| e.to_string())?;
+            
+            // Update State
+            {
+                let mut auth = state.lock().unwrap();
+                auth.token = Some(login_res.access_token.clone());
+                auth.tenant_id = Some(login_res.tenant_id.clone());
+                auth.email = Some(email.clone());
+                auth.user_id = Some(login_res.user_id.clone());
+                auth.username = Some(login_res.username.clone());
+            }
+            
+            // Cache user for offline use
+            {
+                let db = db_state.lock().unwrap();
+                if let Some(ref conn) = db.conn {
+                    // Convert phone_numbers Vec to comma-separated string for SQLite
+                    let phone_numbers_str = if login_res.phone_numbers.is_empty() {
+                        None
+                    } else {
+                        Some(login_res.phone_numbers.join(","))
+                    };
+                    
+                    let cached_user = CachedUser {
+                        id: login_res.user_id.clone(),
+                        email: email.clone(),
+                        password_hash: String::new(), // Will be hashed in save_user
+                        username: login_res.username.clone(),
+                        tenant_id: login_res.tenant_id.clone(),
+                        role: login_res.role.clone(),
+                        position_id: login_res.position_id.clone(),
+                        department_id: login_res.department_id.clone(),
+                        contact: login_res.contact.clone(),
+                        birthday: login_res.birthday.clone(),
+                        phone_numbers: phone_numbers_str,
+                        force_change_password: login_res.force_change_password,
+                        created_at: login_res.created_at.clone(),
+                        updated_at: login_res.updated_at.clone(),
+                    };
+                    
+                    if let Err(e) = database::save_user(conn, &cached_user, &password) {
+                        println!("Warning: Failed to cache user: {}", e);
+                    }
+                }
+            }
+            
+            // Spawn AI sidecars after successful login
+            if let Err(e) = sidecar::spawn_sidecars(&app) {
+                println!("Warning: Failed to spawn sidecars: {}", e);
+            }
+            
+            Ok(login_res)
+        }
+        Ok(res) => {
+            // Online login failed (wrong credentials, etc.)
+            let err_text = res.text().await.unwrap_or("Unknown error".to_string());
+            
+            // Try offline login as fallback
+            try_offline_login(&app, &state, &db_state, &email, &password, Some(&err_text))
+        }
+        Err(e) => {
+            // Network error - try offline login
+            println!("Warning: Online login failed (network): {}", e);
+            try_offline_login(&app, &state, &db_state, &email, &password, None)
+        }
     }
+}
 
-    let login_res: LoginResponse = res.json().await.map_err(|e| e.to_string())?;
-
-    // Update State
-    let mut auth = state.lock().unwrap();
-    auth.token = Some(login_res.access_token.clone());
-    auth.tenant_id = Some(login_res.tenant_id.clone());
-
-    Ok(login_res)
+/// Attempt offline login using cached credentials
+fn try_offline_login(
+    app: &AppHandle,
+    state: &State<'_, Mutex<AuthState>>,
+    db_state: &State<'_, Mutex<DatabaseState>>,
+    email: &str,
+    password: &str,
+    online_error: Option<&str>,
+) -> Result<LoginResponse, String> {
+    let db = db_state.lock().unwrap();
+    
+    if let Some(ref conn) = db.conn {
+        match database::verify_offline_login(conn, email, password) {
+            Ok(user) => {
+                // Update state
+                {
+                    let mut auth = state.lock().unwrap();
+                    auth.token = None; // No token for offline mode
+                    auth.tenant_id = Some(user.tenant_id.clone());
+                    auth.email = Some(email.to_string());
+                    auth.user_id = Some(user.id.clone());
+                    auth.username = Some(user.username.clone());
+                }
+                
+                // Spawn sidecars for offline mode too
+                if let Err(e) = sidecar::spawn_sidecars(app) {
+                    println!("Warning: Failed to spawn sidecars: {}", e);
+                }
+                
+                println!("Debug: Offline login successful for: {}", email);
+                
+                // Convert phone_numbers from comma-separated back to Vec
+                let phone_numbers = user.phone_numbers
+                    .as_ref()
+                    .map(|s| s.split(',').map(|p| p.to_string()).collect())
+                    .unwrap_or_default();
+                
+                Ok(LoginResponse {
+                    access_token: String::new(),
+                    force_change_password: user.force_change_password,
+                    tenant_id: user.tenant_id,
+                    role: user.role,
+                    is_offline: true,
+                    user_id: user.id,
+                    username: user.username,
+                    position_id: user.position_id,
+                    department_id: user.department_id,
+                    phone_numbers,
+                    contact: user.contact,
+                    birthday: user.birthday,
+                    created_at: user.created_at,
+                    updated_at: user.updated_at,
+                })
+            }
+            Err(offline_err) => {
+                // Both online and offline failed
+                if let Some(online_err) = online_error {
+                    Err(online_err.to_string())
+                } else {
+                    Err(format!("Offline login failed: {}", offline_err))
+                }
+            }
+        }
+    } else {
+        // No database connection
+        if let Some(online_err) = online_error {
+            Err(online_err.to_string())
+        } else {
+            Err("Network error and no offline data available".to_string())
+        }
+    }
 }
 
 #[tauri::command]
-pub async fn change_password(state: State<'_, Mutex<AuthState>>, current_password: String, new_password: String) -> Result<bool, String> {
-    let (token, tenant_id) = {
+pub async fn change_password(
+    db_state: State<'_, Mutex<DatabaseState>>,
+    state: State<'_, Mutex<AuthState>>, 
+    current_password: String, 
+    new_password: String
+) -> Result<bool, String> {
+    let (token, tenant_id, email) = {
         let auth = state.lock().unwrap();
         match &auth.token {
-            Some(t) => (t.clone(), auth.tenant_id.clone()),
+            Some(t) => (t.clone(), auth.tenant_id.clone(), auth.email.clone()),
             None => return Err("Not authenticated".to_string()),
         }
     };
@@ -69,12 +236,12 @@ pub async fn change_password(state: State<'_, Mutex<AuthState>>, current_passwor
     let mut request = client.post("http://localhost:8080/api/v1/auth/change-password")
         .header("Authorization", format!("Bearer {}", token));
     
-    if let Some(tid) = tenant_id {
+    if let Some(tid) = &tenant_id {
         request = request.header("X-Tenant-ID", tid);
     }
 
     let res = request
-        .json(&ChangePasswordRequest { current_password, new_password })
+        .json(&ChangePasswordRequest { current_password, new_password: new_password.clone() })
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -84,11 +251,21 @@ pub async fn change_password(state: State<'_, Mutex<AuthState>>, current_passwor
          return Err(err_text);
     }
 
+    // Update cached password
+    if let Some(email) = email {
+        let db = db_state.lock().unwrap();
+        if let Some(ref conn) = db.conn {
+            if let Err(e) = database::update_cached_password(conn, &email, &new_password) {
+                println!("Warning: Failed to update cached password: {}", e);
+            }
+        }
+    }
+
     Ok(true)
 }
 
 #[tauri::command]
-pub async fn logout(state: State<'_, Mutex<AuthState>>) -> Result<(), String> {
+pub async fn logout(app: AppHandle, state: State<'_, Mutex<AuthState>>) -> Result<(), String> {
     let token = {
         let auth = state.lock().unwrap();
         auth.token.clone()
@@ -103,8 +280,14 @@ pub async fn logout(state: State<'_, Mutex<AuthState>>) -> Result<(), String> {
             .await;
     }
 
+    // Stop sidecars on logout
+    sidecar::stop_sidecars(&app);
+
     let mut auth = state.lock().unwrap();
     auth.token = None;
     auth.tenant_id = None;
+    auth.email = None;
+    auth.user_id = None;
+    auth.username = None;
     Ok(())
 }

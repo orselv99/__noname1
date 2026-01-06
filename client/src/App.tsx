@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { CollaborativeEditor } from './components/Editor';
+import { DocumentSidebar } from './components/DocumentSidebar';
 import { ToastProvider, useToast } from './components/Toast';
 
 // Mock Password Strength Meter
@@ -130,23 +131,33 @@ function AppContent() {
   // Main View
   if (view === 'main') {
     return (
-      <div className="min-h-screen bg-black text-white p-8 font-sans">
-        <div className="max-w-4xl mx-auto space-y-8">
-          <header className="space-y-2 flex justify-between items-center">
+      <div className="h-screen bg-black text-white font-sans flex">
+        {/* Sidebar */}
+        <DocumentSidebar
+          onSelectDocument={(id) => console.log('Selected:', id)}
+          selectedDocumentId={undefined}
+        />
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header */}
+          <header className="flex justify-between items-center px-6 py-4 border-b border-zinc-800">
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-600 text-transparent bg-clip-text">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-600 text-transparent bg-clip-text">
                 Fiery Horizon Editor
               </h1>
-              <p className="text-zinc-400">Collaborative editing powered by Rust, Tauri, and Tiptap.</p>
+              <p className="text-zinc-500 text-sm">Collaborative editing powered by Rust, Tauri, and Tiptap.</p>
             </div>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 text-sm text-gray-400 hover:text-white"
+              className="px-4 py-2 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
             >
               Logout
             </button>
           </header>
-          <main>
+
+          {/* Editor */}
+          <main className="flex-1 p-4 overflow-hidden">
             <CollaborativeEditor />
           </main>
         </div>

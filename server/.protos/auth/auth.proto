@@ -120,6 +120,15 @@ message LoginResponse {
   int64 expires_in = 4;
   string role = 5;
   bool force_change_password = 6;
+  // User info for offline caching
+  string user_id = 7;
+  string username = 8;
+  string position_id = 9;
+  string department_id = 10;
+  repeated string phone_numbers = 11;
+  string contact = 12;
+  string created_at = 13;
+  string updated_at = 14;
 }
 
 message ResetAndSendPasswordRequest {

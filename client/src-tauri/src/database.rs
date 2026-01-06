@@ -1,0 +1,285 @@
+// Database module for local SQLite storage (offline support)
+use bcrypt::{hash, verify};
+use rusqlite::{Connection, Result as SqliteResult};
+use std::path::PathBuf;
+
+// Use cost 10 to match Go's bcrypt.DefaultCost
+const BCRYPT_COST: u32 = 10;
+
+/// Database state to hold SQLite connection
+pub struct DatabaseState {
+  pub conn: Option<Connection>,
+}
+
+impl Default for DatabaseState {
+  fn default() -> Self {
+    Self { conn: None }
+  }
+}
+
+/// Get the database path in %APPDATA%/client
+pub fn get_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  use tauri::Manager;
+
+  // Get base app data directory (%APPDATA% on Windows)
+  let base_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+  // Go up one level and create "client" directory
+  let client_dir = base_dir
+    .parent()
+    .ok_or("Failed to get parent directory")?
+    .join("client");
+
+  // Create directory if it doesn't exist
+  std::fs::create_dir_all(&client_dir)
+    .map_err(|e| format!("Failed to create client dir: {}", e))?;
+
+  Ok(client_dir.join("fiery_horizon.db"))
+}
+
+/// Initialize the SQLite database and create tables
+pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
+  let db_path = get_db_path(app)?;
+  println!("Debug: Database path: {:?}", db_path);
+
+  let conn = Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))?;
+
+  // Create users table matching server schema (server/auth/model.go User)
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            username TEXT NOT NULL,
+            tenant_id TEXT NOT NULL,
+            role TEXT DEFAULT 'user' NOT NULL,
+            position_id TEXT,
+            department_id TEXT,
+            contact TEXT,
+            birthday TEXT,
+            phone_numbers TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_login_at DATETIME,
+            force_change_password INTEGER DEFAULT 1
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create users table: {}", e))?;
+
+  // Create documents table for AI-processed content
+  // All fields except id, user_id, document_state, visibility_level, group_type, group_id are encrypted (BLOB)
+  // state: 0=UNSPECIFIED, 1=DRAFT, 2=FEEDBACK, 3=PUBLISHED
+  // visibility: 0=UNSPECIFIED, 1=HIDDEN, 2=METADATA, 3=SNIPPET, 4=PUBLIC
+  // group_type: 0=DEPARTMENT, 1=PROJECT, 2=PRIVATE
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS documents (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            document_state INTEGER DEFAULT 1,
+            visibility_level INTEGER DEFAULT 1,
+            group_type INTEGER DEFAULT 2,
+            group_id TEXT,
+            title BLOB,
+            content BLOB NOT NULL,
+            embedding BLOB,
+            summary BLOB,
+            contributors BLOB,
+            size BLOB,
+            created_at BLOB,
+            updated_at BLOB,
+            accessed_at BLOB,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create documents table: {}", e))?;
+
+  // Create document_tags table for tags with evidence paragraphs
+  // All fields except id, document_id are encrypted (BLOB)
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS document_tags (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            tag BLOB NOT NULL,
+            evidence BLOB,
+            created_at BLOB,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create document_tags table: {}", e))?;
+
+  // Create index for faster document queries
+  conn
+    .execute(
+      "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)",
+      [],
+    )
+    .map_err(|e| format!("Failed to create documents index: {}", e))?;
+
+  conn
+    .execute(
+      "CREATE INDEX IF NOT EXISTS idx_document_tags_document_id ON document_tags(document_id)",
+      [],
+    )
+    .map_err(|e| format!("Failed to create document_tags index: {}", e))?;
+
+  println!("Debug: Database initialized successfully");
+  Ok(conn)
+}
+
+/// Hash a password using bcrypt with cost 10 (matches Go bcrypt.DefaultCost)
+/// Note: Rust bcrypt uses $2b prefix, Go uses $2a - they are compatible for verification
+pub fn hash_password(password: &str) -> Result<String, String> {
+  hash(password, BCRYPT_COST).map_err(|e| format!("Failed to hash password: {}", e))
+}
+
+/// Verify a password against a bcrypt hash
+/// Handles both $2a (Go) and $2b (Rust) prefixes
+pub fn verify_password(password: &str, stored_hash: &str) -> bool {
+  // bcrypt crate can verify both $2a and $2b hashes
+  verify(password, stored_hash).unwrap_or(false)
+}
+
+/// CachedUser struct matching server User model
+#[derive(Debug, Clone)]
+pub struct CachedUser {
+  pub id: String,
+  pub email: String,
+  pub password_hash: String,
+  pub username: String,
+  pub tenant_id: String,
+  pub role: String,
+  pub position_id: Option<String>,
+  pub department_id: Option<String>,
+  pub contact: Option<String>,
+  pub birthday: Option<String>,
+  pub phone_numbers: Option<String>,
+  pub force_change_password: bool,
+  pub created_at: Option<String>,
+  pub updated_at: Option<String>,
+}
+
+/// Save or update user in local cache (called after successful online login)
+pub fn save_user(conn: &Connection, user: &CachedUser, plain_password: &str) -> Result<(), String> {
+  let password_hash = hash_password(plain_password)?;
+
+  conn
+    .execute(
+      "INSERT INTO users (
+            id, email, password_hash, username, tenant_id, role,
+            position_id, department_id,
+            contact, birthday, phone_numbers, force_change_password,
+            created_at, updated_at, last_login_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, CURRENT_TIMESTAMP)
+        ON CONFLICT(email) DO UPDATE SET
+            id = excluded.id,
+            password_hash = excluded.password_hash,
+            username = excluded.username,
+            tenant_id = excluded.tenant_id,
+            role = excluded.role,
+            position_id = excluded.position_id,
+            department_id = excluded.department_id,
+            contact = excluded.contact,
+            birthday = excluded.birthday,
+            phone_numbers = excluded.phone_numbers,
+            force_change_password = excluded.force_change_password,
+            updated_at = excluded.updated_at,
+            last_login_at = CURRENT_TIMESTAMP",
+      rusqlite::params![
+        user.id,
+        user.email,
+        password_hash,
+        user.username,
+        user.tenant_id,
+        user.role,
+        user.position_id,
+        user.department_id,
+        user.contact,
+        user.birthday,
+        user.phone_numbers,
+        user.force_change_password as i32,
+        user.created_at,
+        user.updated_at,
+      ],
+    )
+    .map_err(|e| format!("Failed to save user: {}", e))?;
+
+  println!(
+    "Debug: Cached user: {} ({}) with id: {}",
+    user.username, user.email, user.id
+  );
+  Ok(())
+}
+
+/// Attempt offline login using cached credentials
+pub fn verify_offline_login(
+  conn: &Connection,
+  email: &str,
+  password: &str,
+) -> Result<CachedUser, String> {
+  let mut stmt = conn
+    .prepare(
+      "SELECT id, email, password_hash, username, tenant_id, role,
+                position_id, department_id,
+                contact, birthday, phone_numbers, force_change_password,
+                created_at, updated_at
+         FROM users WHERE email = ?1",
+    )
+    .map_err(|e| format!("Failed to prepare query: {}", e))?;
+
+  let result: SqliteResult<CachedUser> = stmt.query_row([email], |row| {
+    Ok(CachedUser {
+      id: row.get(0)?,
+      email: row.get(1)?,
+      password_hash: row.get(2)?,
+      username: row.get(3)?,
+      tenant_id: row.get(4)?,
+      role: row.get(5)?,
+      position_id: row.get(6)?,
+      department_id: row.get(7)?,
+      contact: row.get(8)?,
+      birthday: row.get(9)?,
+      phone_numbers: row.get(10)?,
+      force_change_password: row.get::<_, i32>(11)? != 0,
+      created_at: row.get(12)?,
+      updated_at: row.get(13)?,
+    })
+  });
+
+  match result {
+    Ok(user) => {
+      if verify_password(password, &user.password_hash) {
+        println!("Debug: Offline login successful for: {}", email);
+        Ok(user)
+      } else {
+        Err("Invalid password".to_string())
+      }
+    }
+    Err(_) => Err("User not found in offline cache".to_string()),
+  }
+}
+
+/// Update cached password after password change
+pub fn update_cached_password(
+  conn: &Connection,
+  email: &str,
+  new_password: &str,
+) -> Result<(), String> {
+  let password_hash = hash_password(new_password)?;
+
+  conn.execute(
+        "UPDATE users SET password_hash = ?1, force_change_password = 0, updated_at = CURRENT_TIMESTAMP WHERE email = ?2",
+        rusqlite::params![password_hash, email],
+    ).map_err(|e| format!("Failed to update password: {}", e))?;
+
+  println!("Debug: Updated cached password for: {}", email);
+  Ok(())
+}

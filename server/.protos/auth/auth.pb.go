@@ -135,8 +135,17 @@ type LoginResponse struct {
 	ExpiresIn           int64                  `protobuf:"varint,4,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
 	Role                string                 `protobuf:"bytes,5,opt,name=role,proto3" json:"role,omitempty"`
 	ForceChangePassword bool                   `protobuf:"varint,6,opt,name=force_change_password,json=forceChangePassword,proto3" json:"force_change_password,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// User info for offline caching
+	UserId        string   `protobuf:"bytes,7,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Username      string   `protobuf:"bytes,8,opt,name=username,proto3" json:"username,omitempty"`
+	PositionId    string   `protobuf:"bytes,9,opt,name=position_id,json=positionId,proto3" json:"position_id,omitempty"`
+	DepartmentId  string   `protobuf:"bytes,10,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"`
+	PhoneNumbers  []string `protobuf:"bytes,11,rep,name=phone_numbers,json=phoneNumbers,proto3" json:"phone_numbers,omitempty"`
+	Contact       string   `protobuf:"bytes,12,opt,name=contact,proto3" json:"contact,omitempty"`
+	CreatedAt     string   `protobuf:"bytes,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     string   `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LoginResponse) Reset() {
@@ -209,6 +218,62 @@ func (x *LoginResponse) GetForceChangePassword() bool {
 		return x.ForceChangePassword
 	}
 	return false
+}
+
+func (x *LoginResponse) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *LoginResponse) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *LoginResponse) GetPositionId() string {
+	if x != nil {
+		return x.PositionId
+	}
+	return ""
+}
+
+func (x *LoginResponse) GetDepartmentId() string {
+	if x != nil {
+		return x.DepartmentId
+	}
+	return ""
+}
+
+func (x *LoginResponse) GetPhoneNumbers() []string {
+	if x != nil {
+		return x.PhoneNumbers
+	}
+	return nil
+}
+
+func (x *LoginResponse) GetContact() string {
+	if x != nil {
+		return x.Contact
+	}
+	return ""
+}
+
+func (x *LoginResponse) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *LoginResponse) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
 }
 
 type ResetAndSendPasswordRequest struct {
@@ -617,7 +682,7 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"C\n" +
 	"\x0fRegisterRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xdb\x01\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xd3\x03\n" +
 	"\rLoginResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x12\x1b\n" +
@@ -625,7 +690,19 @@ const file_auth_auth_proto_rawDesc = "" +
 	"\n" +
 	"expires_in\x18\x04 \x01(\x03R\texpiresIn\x12\x12\n" +
 	"\x04role\x18\x05 \x01(\tR\x04role\x122\n" +
-	"\x15force_change_password\x18\x06 \x01(\bR\x13forceChangePassword\"S\n" +
+	"\x15force_change_password\x18\x06 \x01(\bR\x13forceChangePassword\x12\x17\n" +
+	"\auser_id\x18\a \x01(\tR\x06userId\x12\x1a\n" +
+	"\busername\x18\b \x01(\tR\busername\x12\x1f\n" +
+	"\vposition_id\x18\t \x01(\tR\n" +
+	"positionId\x12#\n" +
+	"\rdepartment_id\x18\n" +
+	" \x01(\tR\fdepartmentId\x12#\n" +
+	"\rphone_numbers\x18\v \x03(\tR\fphoneNumbers\x12\x18\n" +
+	"\acontact\x18\f \x01(\tR\acontact\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\r \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x0e \x01(\tR\tupdatedAt\"S\n" +
 	"\x1bResetAndSendPasswordRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\"8\n" +

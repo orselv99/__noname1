@@ -140,6 +140,17 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
   const [aiResult, setAiResult] = useState<any>(null);
   const [isExtracting, setIsExtracting] = useState(false);
 
+  // Document metadata state
+  const [isMetadataExpanded, setIsMetadataExpanded] = useState(true);
+  const [title, setTitle] = useState('');
+  const [summary, setSummary] = useState('');
+  const [tags, setTags] = useState<{ tag: string; evidence: string | null; expanded: boolean }[]>([]);
+  const [documentState, setDocumentState] = useState<number>(1); // 1=DRAFT, 2=FEEDBACK, 3=PUBLISHED
+  const [visibilityLevel, setVisibilityLevel] = useState<number>(1); // 1=HIDDEN, 2=METADATA, 3=SNIPPET, 4=PUBLIC
+  const [contributor, setContributor] = useState('');
+  const [createdAt] = useState('');
+  const [updatedAt] = useState('');
+
   const handleAiExtraction = async () => {
     if (!editor) return;
     const text = editor.getText();
@@ -149,8 +160,18 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
     setAiResult(null);
 
     try {
-      const result = await invoke('extract_info', { text });
+      const result: any = await invoke('extract_info', { text, title: title || undefined });
       setAiResult(result);
+
+      // Auto-populate fields from AI result
+      if (result.summary) setSummary(result.summary);
+      if (result.tags) {
+        setTags(result.tags.map((t: any) => ({
+          tag: t.tag,
+          evidence: t.evidence || null,
+          expanded: false
+        })));
+      }
     } catch (error) {
       console.error('AI Extraction Failed:', error);
       setAiResult({ error: `Failed to extract info: ${error}` });
@@ -159,8 +180,166 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
     }
   };
 
+  const toggleTagExpanded = (index: number) => {
+    setTags(prev => prev.map((t, i) =>
+      i === index ? { ...t, expanded: !t.expanded } : t
+    ));
+  };
+
+  const documentStateLabels: Record<number, string> = {
+    1: 'Draft',
+    2: 'Feedback',
+    3: 'Published'
+  };
+
+  const visibilityLabels: Record<number, string> = {
+    1: 'Hidden',
+    2: 'Metadata Only',
+    3: 'Snippet',
+    4: 'Public'
+  };
+
   return (
     <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
+      {/* Document Metadata Panel - Collapsible */}
+      <div className="bg-zinc-950 border-b border-zinc-800">
+        {/* Header with Toggle */}
+        <button
+          onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
+          className="w-full flex items-center justify-between px-4 py-2 hover:bg-zinc-900 transition-colors"
+        >
+          <span className="text-sm font-medium text-zinc-400">📄 문서 정보</span>
+          <span className="text-zinc-500 text-xs">{isMetadataExpanded ? '▲ 접기' : '▼ 펼치기'}</span>
+        </button>
+
+        {/* Collapsible Content */}
+        {isMetadataExpanded && (
+          <div className="p-4 pt-2 space-y-3 max-h-80 overflow-y-auto custom-scrollbar">
+            {/* Title */}
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1">제목</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="문서 제목을 입력하세요"
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {/* Summary */}
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1">요약</label>
+              <textarea
+                value={summary}
+                onChange={(e) => setSummary(e.target.value)}
+                placeholder="AI가 자동 생성하거나 직접 입력하세요"
+                rows={2}
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none"
+              />
+            </div>
+
+            {/* Tags with Accordion */}
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1">태그</label>
+              <div className="space-y-1">
+                {tags.length === 0 ? (
+                  <div className="text-xs text-zinc-600 italic">AI 추출 후 태그가 표시됩니다</div>
+                ) : (
+                  tags.map((tag, index) => (
+                    <div key={index} className="border border-zinc-700 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => toggleTagExpanded(index)}
+                        className="w-full px-3 py-2 bg-zinc-800 text-left flex justify-between items-center hover:bg-zinc-750"
+                      >
+                        <span className="text-sm text-blue-400">#{tag.tag}</span>
+                        <span className="text-zinc-500 text-xs">
+                          {tag.expanded ? '▲' : '▼'}
+                        </span>
+                      </button>
+                      {tag.expanded && tag.evidence && (
+                        <div className="px-3 py-2 bg-zinc-900 text-xs text-zinc-400 border-t border-zinc-700">
+                          <div className="text-zinc-500 mb-1">근거:</div>
+                          <p className="italic">{tag.evidence}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* State and Visibility */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">문서 상태</label>
+                <select
+                  value={documentState}
+                  onChange={(e) => setDocumentState(Number(e.target.value))}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                >
+                  {Object.entries(documentStateLabels).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">공개 범위</label>
+                <select
+                  value={visibilityLevel}
+                  onChange={(e) => setVisibilityLevel(Number(e.target.value))}
+                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                >
+                  {Object.entries(visibilityLabels).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Contributor */}
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1">기여자</label>
+              <input
+                type="text"
+                value={contributor}
+                onChange={(e) => setContributor(e.target.value)}
+                placeholder="기여자 이름"
+                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">생성일</label>
+                <input
+                  type="text"
+                  value={createdAt}
+                  readOnly
+                  placeholder="자동 생성"
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-400 text-sm cursor-not-allowed"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">수정일</label>
+                <input
+                  type="text"
+                  value={updatedAt}
+                  readOnly
+                  placeholder="자동 생성"
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-400 text-sm cursor-not-allowed"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="h-px bg-linear-to-r from-transparent via-zinc-600 to-transparent" />
+
+      {/* Toolbar */}
       <div className="flex items-center gap-2 p-2 bg-zinc-900 border-b border-zinc-800">
         <div className="flex gap-1 mr-4">
           <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/50" />
@@ -200,6 +379,8 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
           {isExtracting ? 'Extracting...' : '✨ Extract Info'}
         </button>
       </div>
+
+      {/* Editor Content */}
       <div className="flex-1 p-4 bg-black/50 overflow-y-auto">
         <EditorContent editor={editor} className="prose prose-invert max-w-none h-full outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[200px]" />
       </div>

@@ -1,0 +1,450 @@
+// AI commands module for document processing
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use rusqlite::Connection;
+use sha2::{Digest, Sha256};
+use std::sync::Mutex;
+use tauri::State;
+use uuid::Uuid;
+
+use crate::commands::auth::AuthState;
+use crate::database::DatabaseState;
+
+// ============================================================================
+// Types and Responses
+// ============================================================================
+
+// llama.cpp /embedding response: [{"index": 0, "embedding": [[...floats...]]}]
+#[derive(serde::Deserialize, Debug)]
+struct LlamaEmbeddingItem {
+    pub index: i32,
+    pub embedding: Vec<Vec<f32>>,  // 2D array
+}
+
+// Alias for response array
+type LlamaEmbeddingResponse = Vec<LlamaEmbeddingItem>;
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct DocumentTag {
+    pub tag: String,
+    pub evidence: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ExtractInfoResult {
+    pub document_id: String,
+    pub summary: String,
+    pub tags: Vec<DocumentTag>,
+}
+
+// ============================================================================
+// AES Encryption Helpers
+// ============================================================================
+
+/// Derive a 256-bit key from user_id using SHA-256
+fn derive_key(user_id: &str) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(user_id.as_bytes());
+    hasher.finalize().into()
+}
+
+/// Encrypt text using AES-256-GCM with user_id derived key
+fn encrypt_content(user_id: &str, plaintext: &str) -> Result<Vec<u8>, String> {
+    let key = derive_key(user_id);
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|e| format!("Failed to create cipher: {}", e))?;
+
+    // Generate random nonce (12 bytes)
+    let nonce_bytes: [u8; 12] = rand::random();
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext.as_bytes())
+        .map_err(|e| format!("Encryption failed: {}", e))?;
+
+    // Prepend nonce to ciphertext for later decryption
+    let mut result = nonce_bytes.to_vec();
+    result.extend(ciphertext);
+    Ok(result)
+}
+
+/// Decrypt content using AES-256-GCM with user_id derived key
+pub fn decrypt_content(user_id: &str, encrypted: &[u8]) -> Result<String, String> {
+    if encrypted.len() < 12 {
+        return Err("Invalid encrypted data".to_string());
+    }
+
+    let key = derive_key(user_id);
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|e| format!("Failed to create cipher: {}", e))?;
+
+    let nonce = Nonce::from_slice(&encrypted[..12]);
+    let ciphertext = &encrypted[12..];
+
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|e| format!("Decryption failed: {}", e))?;
+
+    String::from_utf8(plaintext).map_err(|e| format!("Invalid UTF-8: {}", e))
+}
+
+// ============================================================================
+// Embedding Helpers
+// ============================================================================
+
+/// Convert Vec<f32> to bytes for BLOB storage
+fn embedding_to_bytes(embedding: &[f32]) -> Vec<u8> {
+    embedding
+        .iter()
+        .flat_map(|f| f.to_le_bytes())
+        .collect()
+}
+
+/// Convert bytes back to Vec<f32>
+pub fn bytes_to_embedding(bytes: &[u8]) -> Vec<f32> {
+    bytes
+        .chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect()
+}
+
+// ============================================================================
+// AI Response Parsing
+// ============================================================================
+
+/// Parse AI response to extract summary and tags with evidence
+fn parse_ai_response(content: &str, original_text: &str) -> (String, Vec<DocumentTag>) {
+    let mut summary = String::new();
+    let mut tags = Vec::new();
+
+    // Parse Summary: line
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with("Summary:") {
+            summary = line.trim_start_matches("Summary:").trim().to_string();
+        } else if line.starts_with("Tags:") {
+            let tags_str = line.trim_start_matches("Tags:").trim();
+            // Parse tags from format: [keyword1, keyword2, keyword3] or keyword1, keyword2, keyword3
+            let tags_str = tags_str.trim_start_matches('[').trim_end_matches(']');
+            for tag in tags_str.split(',') {
+                let tag = tag.trim().to_string();
+                if !tag.is_empty() {
+                    // Find evidence paragraph containing this tag
+                    let evidence = find_evidence_for_tag(&tag, original_text);
+                    tags.push(DocumentTag { tag, evidence });
+                }
+            }
+        }
+    }
+
+    // Limit to 3 tags as per requirement
+    tags.truncate(3);
+    
+    (summary, tags)
+}
+
+/// Find a paragraph containing the tag as evidence
+fn find_evidence_for_tag(tag: &str, text: &str) -> Option<String> {
+    let tag_lower = tag.to_lowercase();
+    
+    // Split by double newlines (paragraphs) or single newlines
+    let paragraphs: Vec<&str> = text.split("\n\n").collect();
+    
+    for paragraph in paragraphs {
+        if paragraph.to_lowercase().contains(&tag_lower) && paragraph.len() > 20 {
+            // Return first 500 chars of matching paragraph
+            return Some(paragraph.chars().take(500).collect());
+        }
+    }
+    
+    // If no paragraph found, try sentences
+    for sentence in text.split('.') {
+        if sentence.to_lowercase().contains(&tag_lower) && sentence.len() > 20 {
+            return Some(sentence.trim().to_string() + ".");
+        }
+    }
+    
+    None
+}
+
+// ============================================================================
+// Database Operations
+// ============================================================================
+
+/// DocumentState enum matching server acl.proto
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(i32)]
+pub enum DocumentState {
+    #[default]
+    Draft = 1,
+    Feedback = 2,
+    Published = 3,
+}
+
+/// VisibilityLevel enum matching server acl.proto
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(i32)]
+pub enum VisibilityLevel {
+    #[default]
+    Hidden = 1,
+    Metadata = 2,
+    Snippet = 3,
+    Public = 4,
+}
+
+/// GroupType enum for document categorization
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(i32)]
+pub enum GroupType {
+    Department = 0,
+    Project = 1,
+    #[default]
+    Private = 2,
+}
+
+fn save_document(
+    conn: &Connection,
+    user_id: &str,
+    doc_id: &str,
+    group_type: GroupType,
+    group_id: Option<&str>,
+    title: Option<&[u8]>,
+    content: &[u8],
+    embedding: &[u8],
+    summary: Option<&[u8]>,
+    contributors: Option<&[u8]>,
+    size: &[u8],
+    created_at: &[u8],
+    document_state: DocumentState,
+    visibility_level: VisibilityLevel,
+) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO documents (
+            id, user_id, document_state, visibility_level, group_type, group_id,
+            title, content, embedding, summary, contributors, size, created_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        rusqlite::params![
+            doc_id,
+            user_id,
+            document_state as i32,
+            visibility_level as i32,
+            group_type as i32,
+            group_id,
+            title,
+            content,
+            embedding,
+            summary,
+            contributors,
+            size,
+            created_at
+        ],
+    )
+    .map_err(|e| format!("Failed to save document: {}", e))?;
+    Ok(())
+}
+
+fn save_document_tags(
+    conn: &Connection,
+    document_id: &str,
+    user_id: &str,
+    tags: &[DocumentTag],
+) -> Result<(), String> {
+    for tag in tags {
+        let tag_id = Uuid::new_v4().to_string();
+        
+        // Encrypt tag, evidence, and created_at
+        let tag_enc = encrypt_content(user_id, &tag.tag)?;
+        let evidence_enc = tag.evidence.as_ref()
+            .map(|e| encrypt_content(user_id, e))
+            .transpose()?;
+        let now = chrono_now();
+        let created_at_enc = encrypt_content(user_id, &now)?;
+        
+        conn.execute(
+            "INSERT INTO document_tags (id, document_id, tag, evidence, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![tag_id, document_id, tag_enc, evidence_enc, created_at_enc],
+        )
+        .map_err(|e| format!("Failed to save tag: {}", e))?;
+    }
+    Ok(())
+}
+
+/// Get current timestamp as ISO 8601 string
+fn chrono_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let secs = duration.as_secs();
+    // Simple ISO 8601 format
+    format!("1970-01-01T00:00:00Z+{}s", secs)
+}
+
+// ============================================================================
+// Main Command
+// ============================================================================
+
+#[tauri::command]
+pub async fn extract_info(
+    auth_state: State<'_, Mutex<AuthState>>,
+    db_state: State<'_, Mutex<DatabaseState>>,
+    text: String,
+    title: Option<String>,
+) -> Result<ExtractInfoResult, String> {
+    // Get user_id from auth state
+    let user_id = {
+        let auth = auth_state.lock().unwrap();
+        auth.user_id.clone().ok_or("Not authenticated")?
+    };
+
+    // 1. Generate embedding
+    let chunk_size = 2000;
+    let chunks: Vec<_> = text
+        .chars()
+        .collect::<Vec<_>>()
+        .chunks(chunk_size)
+        .map(|c| c.iter().collect::<String>())
+        .collect();
+
+    let mut all_vectors = Vec::new();
+    let client = reqwest::Client::new();
+
+    for chunk in chunks {
+        let response = client
+            .post("http://localhost:8081/embedding")
+            .json(&serde_json::json!({ "content": chunk }))
+            .send()
+            .await
+            .map_err(|e| format!("Embedding request failed: {}", e))?
+            .json::<LlamaEmbeddingResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse embedding response: {}", e))?;
+
+        // Extract the first embedding from the 2D array
+        // Response: [{"index": 0, "embedding": [[...floats...]]}]
+        if let Some(item) = response.first() {
+            if let Some(embedding) = item.embedding.first() {
+                all_vectors.push(embedding.clone());
+            }
+        }
+    }
+
+    if all_vectors.is_empty() {
+        return Err("No embeddings generated".to_string());
+    }
+
+    // Mean pooling
+    let vector_dim = all_vectors[0].len();
+    let num_chunks = all_vectors.len() as f32;
+    let mut mean_vector = vec![0.0; vector_dim];
+
+    for vec in &all_vectors {
+        for i in 0..vector_dim {
+            mean_vector[i] += vec[i];
+        }
+    }
+    for i in 0..vector_dim {
+        mean_vector[i] /= num_chunks;
+    }
+
+    // L2 normalize
+    let norm = mean_vector.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let normalized_vector: Vec<f32> = mean_vector.iter().map(|&x| x / norm).collect();
+
+    // 2. Generate summary and tags
+    let prompt = format!(
+        "<|im_start|>system\nYou are a helpful assistant. Extract a brief summary and exactly 3 keywords from the user's text.\nOutput format:\nSummary: [One sentence summary]\nTags: [keyword1, keyword2, keyword3]\n<|im_end|>\n<|im_start|>user\n{}\n<|im_end|>\n<|im_start|>assistant\n",
+        text.chars().take(4000).collect::<String>() // Limit context
+    );
+
+    let gen_res = client
+        .post("http://localhost:8082/completion")
+        .json(&serde_json::json!({
+            "prompt": prompt,
+            "n_predict": 256,
+            "stop": ["<|im_end|>"]
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Generation request failed: {}", e))?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Failed to parse generation response: {}", e))?;
+
+    let ai_content = gen_res["content"].as_str().unwrap_or("").to_string();
+    let (summary, tags) = parse_ai_response(&ai_content, &text);
+
+    // 3. Encrypt content, title, summary, size, and created_at
+    let content_enc = encrypt_content(&user_id, &text)?;
+    let title_enc = title.as_ref()
+        .map(|t| encrypt_content(&user_id, t))
+        .transpose()?;
+    let summary_enc = if !summary.is_empty() {
+        Some(encrypt_content(&user_id, &summary)?)
+    } else {
+        None
+    };
+    
+    // Encrypt size and created_at
+    let size_str = text.len().to_string();
+    let size_enc = encrypt_content(&user_id, &size_str)?;
+    let now = chrono_now();
+    let created_at_enc = encrypt_content(&user_id, &now)?;
+
+    // 4. Save to database
+    let doc_id = Uuid::new_v4().to_string();
+    let embedding_bytes = embedding_to_bytes(&normalized_vector);
+
+    {
+        let db = db_state.lock().unwrap();
+        if let Some(ref conn) = db.conn {
+            save_document(
+                conn,
+                &user_id,
+                &doc_id,
+                GroupType::Private,
+                None, // group_id
+                title_enc.as_deref(),
+                &content_enc,
+                &embedding_bytes,
+                summary_enc.as_deref(),
+                None, // contributors
+                &size_enc,
+                &created_at_enc,
+                DocumentState::Draft,
+                VisibilityLevel::Hidden,
+            )?;
+            save_document_tags(conn, &doc_id, &user_id, &tags)?;
+        } else {
+            return Err("Database not initialized".to_string());
+        }
+    }
+
+    println!("Debug: Saved document {} with {} tags", doc_id, tags.len());
+
+    Ok(ExtractInfoResult {
+        document_id: doc_id,
+        summary,
+        tags,
+    })
+}
+
+// Random number generation for nonce
+mod rand {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    
+    pub fn random<const N: usize>() -> [u8; N] {
+        let mut result = [0u8; N];
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        
+        for (i, byte) in result.iter_mut().enumerate() {
+            *byte = ((seed >> (i * 8)) & 0xFF) as u8;
+        }
+        result
+    }
+}

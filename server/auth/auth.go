@@ -55,6 +55,18 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		user.ForceChangePassword = false
 	}
 
+	// Get position_id and department_id as strings
+	var positionId, departmentId string
+	if user.PositionID != nil {
+		positionId = *user.PositionID
+	}
+	if user.DepartmentID != nil {
+		departmentId = *user.DepartmentID
+	}
+
+	// Convert phone numbers to string slice
+	phoneNumbers := []string(user.PhoneNumbers)
+
 	return &pb.LoginResponse{
 		AccessToken:         token,
 		RefreshToken:        refreshToken,
@@ -62,6 +74,15 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		Role:                user.Role,
 		ForceChangePassword: user.ForceChangePassword,
 		TenantId:            user.TenantID,
+		// User info for offline caching
+		UserId:       user.ID,
+		Username:     user.Username,
+		PositionId:   positionId,
+		DepartmentId: departmentId,
+		PhoneNumbers: phoneNumbers,
+		Contact:      user.Contact,
+		CreatedAt:    user.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    user.UpdatedAt.Format(time.RFC3339),
 	}, nil
 }
 
