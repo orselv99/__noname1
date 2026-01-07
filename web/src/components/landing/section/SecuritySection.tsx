@@ -4,6 +4,7 @@ import { Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { MotionDiv } from '@/components/admin/ui/Motion';
 
 const fadeInUp = {
   initial: { opacity: 0, y: 60 },
@@ -16,7 +17,7 @@ export default function SecuritySection() {
 
   return (
     <section className="h-screen w-full snap-start flex items-center justify-center bg-zinc-900 px-4 relative">
-      <motion.div
+      <MotionDiv
         {...fadeInUp}
         className="max-w-6xl w-full grid md:grid-cols-2 gap-12 items-center z-10"
       >
@@ -41,7 +42,7 @@ export default function SecuritySection() {
           <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
           <Shield size={120} className="text-blue-500/20 group-hover:scale-110 transition-transform duration-700 ease-in-out" />
         </div>
-      </motion.div>
+      </MotionDiv>
     </section>
   );
 }

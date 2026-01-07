@@ -6,6 +6,8 @@ import { Plus, Search, Building2, MoreHorizontal, User, Globe, Activity } from '
 import { useLanguage } from '@/context/LanguageContext';
 import CreateTenantModal from '@/components/admin/tenants/CreateTenantModal';
 import TenantDetailModal from '@/components/admin/tenants/TenantDetailModal';
+import TitleLabel from '@/components/admin/ui/TitleLabel';
+import { MotionDiv } from '@/components/admin/ui/Motion';
 
 interface Tenant {
   id: string;
@@ -78,13 +80,7 @@ export default function TenantsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            <Building2 className="text-blue-500" />
-            Tenants
-          </h1>
-          <p className="text-gray-400 mt-1">Manage customer workspaces and subscriptions</p>
-        </div>
+        <TitleLabel title='Tenants' subtitle='Manage customer workspaces and subscriptions' />
         <button
           onClick={() => setIsCreateModalOpen(true)}
           className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium shadow-lg shadow-blue-900/20"
@@ -145,7 +141,7 @@ export default function TenantsPage() {
             ))
           ) : (
             filteredTenants.map((tenant) => (
-              <motion.div
+              <MotionDiv
                 key={tenant.id}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -179,7 +175,7 @@ export default function TenantsPage() {
                     {new Date(tenant.created_at).toLocaleDateString()}
                   </span>
                 </div>
-              </motion.div>
+              </MotionDiv>
             ))
           )}
         </AnimatePresence>

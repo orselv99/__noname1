@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Building2, User, CreditCard, Calendar, Phone, Mail, ShieldCheck } from 'lucide-react';
+import { MotionDiv } from '../ui/Motion';
 
 interface TenantDetailModalProps {
   isOpen: boolean;
@@ -15,14 +16,14 @@ export default function TenantDetailModal({ isOpen, onClose, tenant }: TenantDet
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div
+        <MotionDiv
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={onClose}
         >
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -130,8 +131,8 @@ export default function TenantDetailModal({ isOpen, onClose, tenant }: TenantDet
                 </button>
               </div> */}
             </div>
-          </motion.div>
-        </motion.div>
+          </MotionDiv>
+        </MotionDiv>
       )}
     </AnimatePresence>
   );

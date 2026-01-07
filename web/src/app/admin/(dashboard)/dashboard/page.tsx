@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { Activity, Users, Database, Server } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
+import { MotionDiv } from '@/components/admin/ui/Motion';
 
 export default function AdminDashboard() {
   const { t } = useLanguage();
@@ -24,7 +25,7 @@ export default function AdminDashboard() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, idx) => (
-          <motion.div
+          <MotionDiv
             key={idx}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -39,27 +40,27 @@ export default function AdminDashboard() {
             </div>
             <h3 className="text-2xl font-bold text-white mb-1">{stat.value}</h3>
             <p className="text-gray-400 text-sm">{stat.label}</p>
-          </motion.div>
+          </MotionDiv>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div
+        <MotionDiv
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800 h-[300px] flex items-center justify-center text-gray-500"
         >
           Activity Chart Placeholder
-        </motion.div>
-        <motion.div
+        </MotionDiv>
+        <MotionDiv
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
           className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800 h-[300px] flex items-center justify-center text-gray-500"
         >
           Recent Logs Placeholder
-        </motion.div>
+        </MotionDiv>
       </div>
     </div>
   );

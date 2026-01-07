@@ -279,7 +279,12 @@ export default function PositionsPage() {
       <CreatePositionModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={() => fetchPositions(tenantId)}
+        onSuccess={(options) => {
+          fetchPositions(tenantId);
+          if (options?.bulkCount) {
+            showToast(t.admin.settings.positions.position.create.bulk.success.replace('{count}', options.bulkCount.toString()), 'success');
+          }
+        }}
       />
     </div>
   );

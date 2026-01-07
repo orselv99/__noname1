@@ -4,13 +4,14 @@ import { ArrowDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { MotionDiv } from '@/components/admin/ui/Motion';
 
 export default function HeroSection() {
   const { t } = useLanguage();
 
   return (
     <section className="h-screen w-full snap-start flex flex-col items-center justify-center relative px-4">
-      <motion.div
+      <MotionDiv
         initial={{ opacity: 0, scale: 0.9 }}
         whileInView={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1 }}
@@ -27,19 +28,19 @@ export default function HeroSection() {
             {t.landing.hero.getStarted}
           </button>
         </div>
-      </motion.div>
+      </MotionDiv>
 
       {/* Background Gradient Blob */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none" />
 
-      <motion.div
+      <MotionDiv
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 1, duration: 1, repeat: Infinity, repeatType: "reverse" }}
         className="absolute bottom-10 text-gray-500"
       >
         <ArrowDown size={32} />
-      </motion.div>
+      </MotionDiv>
     </section>
   );
 }

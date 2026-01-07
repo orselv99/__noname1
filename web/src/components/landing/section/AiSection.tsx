@@ -4,6 +4,7 @@ import { Zap, Cpu } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { MotionDiv } from '@/components/admin/ui/Motion';
 
 const fadeInUp = {
   initial: { opacity: 0, y: 60 },
@@ -16,7 +17,7 @@ export default function AiSection() {
 
   return (
     <section className="h-screen w-full snap-start flex items-center justify-center bg-black px-4 relative">
-      <motion.div
+      <MotionDiv
         {...fadeInUp}
         transition={{ duration: 0.8, ease: "easeOut" }}
         className="max-w-6xl w-full grid md:grid-cols-2 gap-12 items-center md:flex-row-reverse z-10"
@@ -42,7 +43,7 @@ export default function AiSection() {
             ))}
           </ul>
         </div>
-      </motion.div>
+      </MotionDiv>
     </section>
   );
 }

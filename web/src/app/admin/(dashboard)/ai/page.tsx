@@ -5,6 +5,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { AnimatePresence } from 'framer-motion';
 import { Database, Check, Cpu, Info, FileText, Sparkles } from 'lucide-react';
 import { MotionDiv } from '@/components/admin/ui/Motion';
+import TitleLabel from '@/components/admin/ui/TitleLabel';
 
 // Mock Data
 const AVAILABLE_MODELS = [
@@ -38,11 +39,7 @@ export default function AIModelsPage() {
 
   return (
     <div className="space-y-8 max-w-6xl pb-12">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-white">Model Configuration</h1>
-        <p className="text-gray-400">Select a base model to see compatible LoRA adapters and configure usage.</p>
-      </div>
-
+      <TitleLabel title="Model Configuration" subtitle='Select a base model to see compatible LoRA adapters and configure usage.' />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Model Selection Column */}
         <div className="space-y-6">

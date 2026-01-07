@@ -106,7 +106,8 @@
             "delimiters": "지원하는 전화번호 구분자: "
           },
           "download_template": "템플릿 다운로드",
-          "submit": "사용자 가져오기"
+          "submit": "사용자 가져오기",
+          "success": "{count}명의 사용자를 성공적으로 가져왔습니다."
         }
       }
     },
@@ -169,10 +170,22 @@
           "add_button": "직위 추가",
           "modal": {
             "name": "직위명"
+          },
+          "create": {
+            "bulk": {
+              "success": "{count}개 직위를 성공적으로 가져왔습니다."
+            }
           }
         },
         "common": {
           "delete_confirm": "정말로 삭제하시겠습니까?"
+        }
+      }
+    },
+    "projects": {
+      "create": {
+        "bulk": {
+          "success": "{count}개 프로젝트를 성공적으로 가져왔습니다."
         }
       }
     },

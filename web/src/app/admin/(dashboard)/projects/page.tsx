@@ -11,6 +11,7 @@ import {
   Users,
   User
 } from 'lucide-react';
+import { useToast } from '@/components/admin/Toast';
 import { motion } from 'framer-motion';
 import {
   DndContext,
@@ -148,6 +149,7 @@ function SortableProjectItem({
 
 export default function ProjectsPage() {
   const { t } = useLanguage();
+  const { showToast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -358,7 +360,12 @@ export default function ProjectsPage() {
       <CreateProjectModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={fetchProjects}
+        onSuccess={(options) => {
+          fetchProjects();
+          if (options?.bulkCount) {
+            showToast(t.admin.projects.create.bulk.success.replace('{count}', options.bulkCount.toString()), 'success');
+          }
+        }}
       />
 
       <EditProjectModal

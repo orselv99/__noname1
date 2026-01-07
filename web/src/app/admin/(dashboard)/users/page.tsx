@@ -796,7 +796,12 @@ export default function UsersPage() {
       <CreateUserModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={() => fetchUsers(tenantId)}
+        onSuccess={(options) => {
+          fetchUsers(tenantId);
+          if (options?.bulkCount) {
+            showToast(t.admin.users.create.bulk.success.replace('{count}', options.bulkCount.toString()), 'success');
+          }
+        }}
         tenantId={tenantId}
       />
 

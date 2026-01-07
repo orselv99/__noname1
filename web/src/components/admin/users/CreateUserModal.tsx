@@ -21,7 +21,7 @@ import { MotionDiv } from '../ui/Motion';
 interface CreateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (options?: { bulkCount?: number }) => void;
   tenantId: string;
 }
 
@@ -399,7 +399,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
         throw new Error(data.error || 'Failed to batch create users');
       }
 
-      onSuccess();
+      onSuccess({ bulkCount: requests.length });
       onClose();
       resetForm();
     } catch (err: any) {
@@ -624,7 +624,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, tenantId }
                             type="date"
                             value={formData.birthday}
                             onChange={(e) => setFormData({ ...formData, birthday: e.target.value })}
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors [color-scheme:dark]"
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors scheme-dark"
                           />
                         </div>
 

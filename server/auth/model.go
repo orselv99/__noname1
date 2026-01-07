@@ -11,12 +11,12 @@ import (
 // User 모델 정의
 type User struct {
 	ID                  string         `gorm:"type:uuid;primary_key;"`
-	Email               string         `gorm:"type:varchar(100);uniqueIndex;not null"`
+	Email               string         `gorm:"type:varchar(100);uniqueIndex:idx_tenant_email,priority:2;not null"`
 	PasswordHash        string         `gorm:"not null"`
 	Salt                string         `gorm:"default:'';not null"` // 암호화 키 파생용 소금
 	Username            string         `gorm:"type:varchar(50);not null"`
-	TenantID            string         `gorm:"type:varchar(50);index;not null"`          // 멀티테넌트 식별자
-	Role                string         `gorm:"type:varchar(20);default:'user';not null"` // 권한 (admin, user 등)
+	TenantID            string         `gorm:"type:varchar(50);uniqueIndex:idx_tenant_email,priority:1;index;not null"` // 멀티테넌트 식별자
+	Role                string         `gorm:"type:varchar(20);default:'user';not null"`                                // 권한 (admin, user 등)
 	PositionID          *string        `gorm:"type:uuid;index"`
 	PositionRel         *Position      `gorm:"foreignKey:PositionID;references:ID"`
 	PositionName        string         `gorm:"-"`                      // Join
@@ -83,7 +83,8 @@ func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
 // Permission Model (ACL)
 type Permission struct {
 	ID          string `gorm:"type:uuid;primaryKey"`
-	DocumentID  string `gorm:"type:uuid;not null;index"` // Resource ID
+	TenantID    string `gorm:"type:varchar(50);not null;index"` // Tenant Isolation
+	DocumentID  string `gorm:"type:uuid;not null;index"`        // Resource ID
 	UserID      string `gorm:"type:uuid;not null;index"`
 	AccessLevel int    `gorm:"not null"` // 1: Summary, 2: Partial, 3: Full
 	GrantedAt   time.Time
@@ -100,6 +101,7 @@ func (p *Permission) BeforeCreate(tx *gorm.DB) (err error) {
 // AccessRequest Model (Access Control)
 type AccessRequest struct {
 	ID             string `gorm:"type:uuid;primaryKey"`
+	TenantID       string `gorm:"type:varchar(50);not null;index"` // Tenant Isolation
 	RequesterID    string `gorm:"type:uuid;not null;index"`
 	DocumentID     string `gorm:"type:uuid;not null;index"`
 	RequestedLevel int    `gorm:"not null"`
@@ -141,6 +143,7 @@ func (d *Department) BeforeCreate(tx *gorm.DB) (err error) {
 // Stores metadata and visibility settings for documents (Content is in Vector DB)
 type DocumentMetadata struct {
 	ID                    string `gorm:"type:uuid;primaryKey"`
+	TenantID              string `gorm:"type:varchar(50);not null;index"` // Tenant Isolation
 	OwnerID               string `gorm:"type:uuid;index;not null"`
 	DepartmentID          string `gorm:"type:uuid;index;not null"`
 	Title                 string `gorm:"type:varchar(255);not null"`
@@ -161,6 +164,7 @@ func (dm *DocumentMetadata) BeforeCreate(tx *gorm.DB) (err error) {
 // VisiblityApproval Model
 type VisibilityApproval struct {
 	ID             string `gorm:"type:uuid;primaryKey"`
+	TenantID       string `gorm:"type:varchar(50);not null;index"` // Tenant Isolation
 	DocumentID     string `gorm:"type:uuid;index;not null"`
 	RequesterID    string `gorm:"type:uuid;index;not null"`
 	ApproverID     string `gorm:"type:uuid;index"`

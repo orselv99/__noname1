@@ -10,7 +10,7 @@ import UserPickerPanel, { UserData } from '../ui/UserPickerPanel';
 interface CreateProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (options?: { bulkCount?: number }) => void;
 }
 
 
@@ -139,7 +139,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
 
       await batchCreateProjects(requests);
 
-      onSuccess();
+      onSuccess({ bulkCount: requests.length });
       onClose();
       resetForm();
     } catch (err: any) {

@@ -11,6 +11,7 @@ import {
   FileText,
   User
 } from 'lucide-react';
+import TitleLabel from '@/components/admin/ui/TitleLabel';
 
 interface AccessRequest {
   id: string;
@@ -188,14 +189,7 @@ export default function AccessRequestsPage() {
   return (
     <div className="h-full flex flex-col gap-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text">
-          Access Requests
-        </h1>
-        <p className="text-gray-400 text-sm mt-1">
-          Manage document access permissions and requests.
-        </p>
-      </div>
+      <TitleLabel title='Access Requests' subtitle='Manage document access permissions and requests.' />
 
       {/* Tabs */}
       <div className="flex border-b border-zinc-800">

@@ -3,13 +3,14 @@
 import { motion } from 'framer-motion';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { MotionDiv } from '@/components/admin/ui/Motion';
 
 export default function CtaSection() {
   const { t } = useLanguage();
 
   return (
     <section className="h-screen w-full snap-start flex flex-col items-center justify-center bg-black text-white relative px-4">
-      <motion.div
+      <MotionDiv
         initial={{ opacity: 0, scale: 0.9 }}
         whileInView={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8 }}
@@ -27,7 +28,7 @@ export default function CtaSection() {
         <div className="mt-16 text-gray-500">
           <p>{t.landing.cta.copyright}</p>
         </div>
-      </motion.div>
+      </MotionDiv>
     </section>
   );
 }

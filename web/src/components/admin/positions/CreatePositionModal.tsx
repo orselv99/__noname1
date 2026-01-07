@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Papa from 'papaparse';
 
 import { useLanguage } from '@/context/LanguageContext';
+import { MotionDiv } from '../ui/Motion';
 
 interface CreatePositionModalProps {
   isOpen: boolean;
@@ -147,14 +148,14 @@ export default function CreatePositionModal({ isOpen, onClose, onSuccess }: Crea
     <AnimatePresence>
       {isOpen && (
         <>
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => { onClose(); resetForm(); }}
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
           />
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -272,7 +273,7 @@ export default function CreatePositionModal({ isOpen, onClose, onSuccess }: Crea
                 </div>
               )}
             </div>
-          </motion.div>
+          </MotionDiv>
         </>
       )}
     </AnimatePresence>
