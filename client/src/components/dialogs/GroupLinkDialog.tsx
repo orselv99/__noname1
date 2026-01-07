@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Link2, Check, Clock, Building2, FolderKanban } from 'lucide-react';
+import { X, Link2, Check, Clock, Building2, FolderKanban, Share2 } from 'lucide-react';
 
 interface GroupLinkDialogProps {
   isOpen: boolean;
@@ -55,7 +55,7 @@ export const GroupLinkDialog = ({ isOpen, onClose }: GroupLinkDialogProps) => {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Link2 size={18} />
+            <Share2 size={18} />
             그룹 연결
           </h2>
           <button

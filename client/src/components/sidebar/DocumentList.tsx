@@ -1,20 +1,18 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   ChevronDown,
   ChevronRight,
   FileText,
-  Star,
   FilePlus,
-  FolderPlus,
-  ArrowUpDown,
+  MoreHorizontal,
+  Plus,
   ChevronsUpDown,
-  Link,
-  Building2,
-  FolderKanban,
-  Folder,
-  GripVertical
+  Search,
+  Share2,
+  Info,
 } from 'lucide-react';
 import { GroupLinkDialog } from '../dialogs/GroupLinkDialog';
+import { GroupInfoDialog } from '../dialogs/GroupInfoDialog';
 import {
   DndContext,
   DragEndEvent,
@@ -29,7 +27,6 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
-  arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { NewDocumentDialog } from '../dialogs/NewDocumentDialog';
@@ -38,7 +35,6 @@ export type SidebarMode = 'folder' | 'star';
 
 interface DocumentItem {
   id: string;
-  type: 'document' | 'folder';
   title: string;
   path: string;
   isFavorite?: boolean;
@@ -60,23 +56,161 @@ interface DocumentListProps {
   mode?: SidebarMode;
 }
 
-// Sortable Item Component
+type DropPosition = 'top' | 'bottom' | 'inside';
+
+// Helper to interact with the tree
+const findItem = (items: DocumentItem[], id: string): DocumentItem | undefined => {
+  for (const item of items) {
+    if (item.id === id) return item;
+    if (item.children) {
+      const found = findItem(item.children, id);
+      if (found) return found;
+    }
+  }
+  return undefined;
+};
+
+// --- Components ---
+
+interface ItemProps {
+  item: DocumentItem;
+  groupId: string;
+  depth: number;
+  selectedDocumentId?: string;
+  onSelectDocument?: (id: string) => void;
+  onToggleExpand: (groupId: string, itemId: string) => void;
+  onAddSubPage?: (groupId: string, parentId: string) => void;
+  // Drag props
+  isDragging?: boolean;
+  dragOverInfo?: { position: DropPosition } | null;
+  style?: React.CSSProperties;
+  attributes?: any;
+  listeners?: any;
+  setNodeRef?: (node: HTMLElement | null) => void;
+  onMouseMove?: (e: React.MouseEvent, item: DocumentItem) => void;
+  onMouseLeave?: () => void;
+}
+
+function ItemContent({
+  item,
+  groupId,
+  depth,
+  selectedDocumentId,
+  onSelectDocument,
+  onToggleExpand,
+  onAddSubPage,
+  isDragging,
+  dragOverInfo,
+  style,
+  attributes,
+  listeners,
+  setNodeRef,
+  onMouseMove,
+  onMouseLeave
+}: ItemProps) {
+  const hasChildren = item.children && item.children.length > 0;
+
+  // Visual feedback for 'inside' drop
+  const isDropTargetInside = dragOverInfo?.position === 'inside';
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group relative rounded-md transition-colors ${isDragging ? 'opacity-30 z-0' : 'opacity-100 z-10'} ${isDropTargetInside ? 'bg-blue-500/20' : 'hover:bg-zinc-900'}`}
+      {...attributes}
+      {...listeners}
+      onMouseMove={(e) => onMouseMove?.(e, item)}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Drop Indicators - Made clearer with z-index and color */}
+      {dragOverInfo?.position === 'top' && (
+        <div className="absolute -top-[2px] left-0 right-0 h-[3px] bg-blue-500 z-50 pointer-events-none rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+      )}
+      {dragOverInfo?.position === 'bottom' && (
+        <div className="absolute -bottom-[2px] left-0 right-0 h-[3px] bg-blue-500 z-50 pointer-events-none rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)] " />
+      )}
+
+      <div
+        className="flex items-center min-h-[28px] relative"
+        style={{ paddingLeft: `${depth * 14 + 4}px` }}
+      >
+        {/* Toggle Expand */}
+        <div
+          className={`w-5 h-5 flex items-center justify-center shrink-0 cursor-pointer text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-800 transition-colors mr-0.5`}
+          onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on toggle
+          onClick={(e) => {
+            e.stopPropagation();
+            if (hasChildren || !item.expanded) {
+              onToggleExpand(groupId, item.id);
+            }
+          }}
+        >
+          {hasChildren ? (
+            item.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
+          ) : (
+            <div className="w-1 h-1 rounded-full bg-zinc-700 group-hover:bg-zinc-600" />
+          )}
+        </div>
+
+        {/* Icon & Title */}
+        <div
+          className={`flex-1 flex items-center gap-2 py-1 pr-8 cursor-pointer overflow-hidden select-none ${selectedDocumentId === item.id ? 'text-blue-400' : 'text-zinc-400'}`}
+          onClick={(e) => {
+            onSelectDocument?.(item.id);
+          }}
+        >
+          <FileText size={14} className={`shrink-0 ${selectedDocumentId === item.id ? 'text-blue-400' : 'text-zinc-500'}`} />
+          <span className="truncate text-sm">{item.title}</span>
+        </div>
+
+        {/* Hover Actions */}
+        <div className="hidden group-hover:flex items-center gap-0.5 pr-2 absolute right-0 top-1/2 -translate-y-1/2">
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); }}
+            className="p-0.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 rounded transition-colors"
+          >
+            <MoreHorizontal size={14} />
+          </button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onAddSubPage) onAddSubPage(groupId, item.id);
+            }}
+            className="p-0.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 rounded transition-colors"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SortableItem({
   item,
   groupId,
   depth = 0,
   onSelectDocument,
   selectedDocumentId,
-  onQuickCreate,
-  onCreateFolder
+  onToggleExpand,
+  onAddSubPage,
+  dragState,
+  onItemMouseMove,
+  onItemMouseLeave
 }: {
   item: DocumentItem;
   groupId: string;
   depth?: number;
   onSelectDocument?: (id: string) => void;
   selectedDocumentId?: string;
-  onQuickCreate?: (groupId: string, folderId?: string) => void;
-  onCreateFolder?: (groupId: string, parentFolderId?: string) => void;
+  onToggleExpand: (groupId: string, itemId: string) => void;
+  onAddSubPage?: (groupId: string, parentId: string) => void;
+  dragState: { activeId: string | null, overId: string | null, position: DropPosition | null };
+  onItemMouseMove: (e: React.MouseEvent, item: DocumentItem) => void;
+  onItemMouseLeave: () => void;
 }) {
   const {
     attributes,
@@ -85,83 +219,61 @@ function SortableItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id });
+  } = useSortable({
+    id: item.id,
+    data: { type: 'item', item, groupId, depth }
+  });
 
+  const isOver = dragState.overId === item.id;
+  const position = isOver ? dragState.position : null;
+  const dragOverInfo = isOver ? { position: position as DropPosition } : null;
+
+  // Stabilize DnD: ONLY apply transform if we are dragging THIS item.
+  // This prevents the list from shuffling around while dragging over it.
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: isDragging ? CSS.Translate.toString(transform) : undefined,
     transition,
-    opacity: isDragging ? 0.5 : 1,
   };
 
-  if (item.type === 'folder') {
-    return (
-      <div ref={setNodeRef} style={style}>
-        <div
-          className="flex items-center group hover:bg-zinc-900 rounded-md transition-colors"
-          style={{ paddingLeft: `${depth * 16 + 4}px` }}
-        >
-          {depth > 0 && <div className="w-px h-4 bg-zinc-700 mr-1" />}
-          <button
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50 -mr-0.5"
-          >
-            <GripVertical size={10} />
-          </button>
-          <button className="flex-1 flex items-center gap-1 py-1.5 text-left text-zinc-400">
-            <span className="text-zinc-500">
-              {item.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            </span>
-            <Folder size={14} className="text-yellow-600 shrink-0" />
-            <span className="flex-1 text-sm truncate">{item.title}</span>
-          </button>
-          {/* Hover actions */}
-          <div className="hidden group-hover:flex items-center gap-0.5 pr-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); onQuickCreate?.(groupId, item.id); }}
-              className="p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
-              title="Quick add document"
-            >
-              <FilePlus size={14} />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onCreateFolder?.(groupId, item.id); }}
-              className="p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
-              title="New folder"
-            >
-              <FolderPlus size={14} />
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div ref={setNodeRef} style={style}>
-      <div
-        className="flex items-center group hover:bg-zinc-900 rounded-md transition-colors"
-        style={{ paddingLeft: `${depth * 16 + 4}px` }}
-      >
-        {depth > 0 && <div className="w-px h-4 bg-zinc-700 mr-1" />}
-        <button
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50 -mr-0.5"
-        >
-          <GripVertical size={10} />
-        </button>
-        <button
-          onClick={() => onSelectDocument?.(item.id)}
-          className={`flex-1 flex items-center gap-2 py-1.5 text-left rounded-md transition-colors text-sm ${selectedDocumentId === item.id
-            ? 'text-blue-400'
-            : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-        >
-          <FileText size={14} className="text-zinc-500 shrink-0" />
-          <span className="truncate">{item.title}</span>
-        </button>
-      </div>
+    <div className="mb-0.5">
+      <ItemContent
+        item={item}
+        groupId={groupId}
+        depth={depth}
+        isDragging={isDragging}
+        selectedDocumentId={selectedDocumentId}
+        onSelectDocument={onSelectDocument}
+        onToggleExpand={onToggleExpand}
+        onAddSubPage={onAddSubPage}
+        dragOverInfo={dragOverInfo}
+
+        setNodeRef={setNodeRef}
+        style={style}
+        attributes={attributes}
+        listeners={listeners}
+        onMouseMove={onItemMouseMove}
+        onMouseLeave={onItemMouseLeave}
+      />
+      {item.expanded && item.children && (
+        <SortableContext items={item.children.map(c => c.id)} strategy={verticalListSortingStrategy}>
+          {item.children.map(child => (
+            <SortableItem
+              key={child.id}
+              item={child}
+              groupId={groupId}
+              depth={depth + 1}
+              onSelectDocument={onSelectDocument}
+              selectedDocumentId={selectedDocumentId}
+              onToggleExpand={onToggleExpand}
+              onAddSubPage={onAddSubPage}
+              dragState={dragState}
+              onItemMouseMove={onItemMouseMove}
+              onItemMouseLeave={onItemMouseLeave}
+            />
+          ))}
+        </SortableContext>
+      )}
     </div>
   );
 }
@@ -172,15 +284,23 @@ function SortableGroup({
   onToggle,
   onSelectDocument,
   selectedDocumentId,
-  onQuickCreate,
-  onCreateFolder
+  onToggleExpandInfo,
+  onAddSubPage,
+  onOpenGroupSettings,
+  dragState,
+  onItemMouseMove,
+  onItemMouseLeave
 }: {
   group: DocumentGroup;
   onToggle: (id: string) => void;
   onSelectDocument?: (id: string) => void;
   selectedDocumentId?: string;
-  onQuickCreate: (groupId: string, folderId?: string) => void;
-  onCreateFolder: (groupId: string, parentFolderId?: string) => void;
+  onToggleExpandInfo: (groupId: string, itemId: string) => void;
+  onAddSubPage: (groupId: string, parentId?: string) => void;
+  onOpenGroupSettings: (groupId: string) => void;
+  dragState: { activeId: string | null, overId: string | null, position: DropPosition | null };
+  onItemMouseMove: (e: React.MouseEvent, item: DocumentItem) => void;
+  onItemMouseLeave: () => void;
 }) {
   const {
     attributes,
@@ -188,73 +308,72 @@ function SortableGroup({
     setNodeRef,
     transform,
     transition,
-    isDragging,
-  } = useSortable({ id: group.id });
+    isDragging: isGroupDragging,
+  } = useSortable({
+    id: group.id,
+    data: { type: 'group', group }
+  });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isGroupDragging ? 0.5 : 1
   };
 
-  const itemIds = group.items.map(item => item.id);
-
   return (
-    <div ref={setNodeRef} style={style}>
-      <div className="flex items-center group hover:bg-zinc-900 rounded-md transition-colors">
-        <button
-          {...attributes}
-          {...listeners}
-          className="p-1 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-50 ml-2"
+    <div ref={setNodeRef} style={style} className="mb-1">
+      {/* Group Header */}
+      <div
+        className="flex items-center group hover:bg-zinc-900 rounded-md transition-colors px-2 py-1 relative min-h-[30px]"
+        {...attributes}
+        {...listeners}
+      >
+        <div
+          className={`mr-1 cursor-pointer text-zinc-500 hover:text-zinc-300 w-5 flex justify-center`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onToggle(group.id); }}
         >
-          <GripVertical size={12} />
-        </button>
-        <button
-          onClick={() => onToggle(group.id)}
-          className="flex-1 flex items-center gap-2 px-2 py-1.5 text-left text-zinc-400"
-        >
-          <span className="text-zinc-500">
-            {group.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </span>
-          {group.type === 'department' ? (
-            <Building2 size={14} className="text-blue-400 shrink-0" />
-          ) : (
-            <FolderKanban size={14} className="text-purple-400 shrink-0" />
-          )}
-          <span className="flex-1 text-sm truncate">{group.name}</span>
-        </button>
-        {/* Hover actions */}
-        <div className="hidden group-hover:flex items-center gap-0.5 pr-1">
+          {group.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </div>
+
+        <div className="flex-1 flex items-center gap-2 overflow-hidden cursor-pointer select-none" onClick={() => onToggle(group.id)}>
+          <span className="text-sm font-medium text-zinc-400 truncate">{group.name}</span>
+        </div>
+
+        <div className="hidden group-hover:flex items-center gap-0.5 absolute right-2">
           <button
-            onClick={(e) => { e.stopPropagation(); onQuickCreate(group.id); }}
-            className="p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
-            title="Quick add document"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onOpenGroupSettings(group.id); }}
+            className="p-0.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
           >
-            <FilePlus size={14} />
+            <Info size={16} />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onCreateFolder(group.id); }}
-            className="p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
-            title="New folder"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onAddSubPage(group.id); }}
+            className="p-0.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
           >
-            <FolderPlus size={14} />
+            <Plus size={16} />
           </button>
         </div>
       </div>
 
       {group.expanded && (
-        <div className="ml-4">
-          <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+        <div className="">
+          <SortableContext items={group.items.map(i => i.id)} strategy={verticalListSortingStrategy}>
             {group.items.map(item => (
               <SortableItem
                 key={item.id}
                 item={item}
                 groupId={group.id}
-                depth={0}
+                depth={1}
                 onSelectDocument={onSelectDocument}
                 selectedDocumentId={selectedDocumentId}
-                onQuickCreate={onQuickCreate}
-                onCreateFolder={onCreateFolder}
+                onToggleExpand={onToggleExpandInfo}
+                onAddSubPage={(gId, pId) => onAddSubPage(gId, pId)}
+                dragState={dragState}
+                onItemMouseMove={onItemMouseMove}
+                onItemMouseLeave={onItemMouseLeave}
               />
             ))}
           </SortableContext>
@@ -269,331 +388,321 @@ export const DocumentList = ({
   selectedDocumentId,
   mode = 'folder'
 }: DocumentListProps) => {
+  // --- State ---
   const [groups, setGroups] = useState<DocumentGroup[]>([
     {
       id: 'dept-1',
-      name: '개발팀',
+      name: 'Engineering Dept',
       type: 'department',
       expanded: true,
       items: [
-        { id: 'doc-1', type: 'document', title: '팀 회의록.md', path: '개발팀/', isFavorite: true },
-        { id: 'doc-2', type: 'document', title: '코딩 가이드.md', path: '개발팀/', isFavorite: false },
+        { id: 'doc-1', title: 'Onboarding Guide', path: '', isFavorite: true, children: [] },
         {
-          id: 'folder-1', type: 'folder', title: '문서함', path: '개발팀/', expanded: true, children: [
-            { id: 'doc-6', type: 'document', title: '규정.md', path: '개발팀/문서함/', isFavorite: false },
+          id: 'doc-2', title: 'Tech Stack', path: '', isFavorite: false, expanded: true, children: [
+            { id: 'doc-2-1', title: 'Frontend (React)', path: '', children: [] },
+            { id: 'doc-2-2', title: 'Backend (Go)', path: '', children: [] }
           ]
         },
       ]
     },
     {
       id: 'proj-1',
-      name: 'Project Alpha',
+      name: 'Project Phoenix',
       type: 'project',
       expanded: true,
       items: [
-        { id: 'doc-3', type: 'document', title: '요구사항.md', path: 'Project Alpha/', isFavorite: true },
-        { id: 'doc-4', type: 'document', title: 'API 설계.md', path: 'Project Alpha/', isFavorite: false },
+        { id: 'doc-p1-1', title: 'Project Plan', path: '', children: [] },
+        { id: 'doc-p1-2', title: 'Meeting Notes', path: '', children: [] },
       ]
     },
     {
       id: 'proj-2',
-      name: 'Project Beta',
+      name: 'Marketing Campaign',
       type: 'project',
-      expanded: true,
+      expanded: false,
       items: [
-        { id: 'doc-5', type: 'document', title: '마일스톤.md', path: 'Project Beta/', isFavorite: false },
+        { id: 'doc-p2-1', title: 'Q1 Strategy', path: '', children: [] },
+        { id: 'doc-p2-2', title: 'Assets Links', path: '', children: [] },
       ]
-    },
+    }
   ]);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [allExpanded, setAllExpanded] = useState(true);
   const [showNewDocDialog, setShowNewDocDialog] = useState(false);
   const [showGroupLinkDialog, setShowGroupLinkDialog] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [showGroupInfoDialog, setShowGroupInfoDialog] = useState(false);
+  const [activeGroupForInfo, setActiveGroupForInfo] = useState<DocumentGroup | null>(null);
+  const [dragState, setDragState] = useState<{ activeId: string | null, overId: string | null, position: DropPosition | null }>({ activeId: null, overId: null, position: null });
 
+  // DnD Sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 5, // 5px movement starts drag
       },
     })
   );
 
+  // --- Handlers ---
   const toggleGroup = (groupId: string) => {
-    setGroups(prev => prev.map(g =>
-      g.id === groupId ? { ...g, expanded: !g.expanded } : g
-    ));
+    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, expanded: !g.expanded } : g));
   };
 
   const toggleAllGroups = () => {
-    const newState = !allExpanded;
-    setAllExpanded(newState);
-    setGroups(prev => prev.map(g => ({ ...g, expanded: newState })));
+    // Check if any is collapsed, if so expand all. If all expanded, collapse all.
+    const anyCollapsed = groups.some(g => !g.expanded);
+    setGroups(prev => prev.map(g => ({ ...g, expanded: anyCollapsed })));
   };
 
-  const handleQuickCreateDocument = (groupId: string, _folderId?: string) => {
-    const group = groups.find(g => g.id === groupId);
-    if (!group) return;
+  const toggleExpandItem = (groupId: string, itemId: string) => {
+    setGroups(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      // Recursive toggle
+      const toggle = (items: DocumentItem[]): DocumentItem[] => {
+        return items.map(i => {
+          if (i.id === itemId) return { ...i, expanded: !i.expanded };
+          if (i.children) return { ...i, children: toggle(i.children) };
+          return i;
+        });
+      }
+      return { ...g, items: toggle(g.items) };
+    }));
+  };
 
+  const handleAddSubPage = (groupId: string, parentId?: string) => {
     const newDoc: DocumentItem = {
       id: `doc-${Date.now()}`,
-      type: 'document',
-      title: `Untitled-${Date.now() % 1000}.md`,
-      path: `${group.name}/`,
-      isFavorite: false
+      title: 'Untitled',
+      path: '',
+      children: [],
+      expanded: true
     };
 
-    setGroups(prev => prev.map(g =>
-      g.id === groupId
-        ? { ...g, items: [...g.items, newDoc] }
-        : g
-    ));
+    setGroups(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      if (!parentId) return { ...g, items: [...g.items, newDoc] };
+
+      const add = (items: DocumentItem[]): DocumentItem[] => {
+        return items.map(i => {
+          if (i.id === parentId) return { ...i, expanded: true, children: [...(i.children || []), newDoc] };
+          if (i.children) return { ...i, children: add(i.children) };
+          return i;
+        });
+      }
+      return { ...g, items: add(g.items) };
+    }));
   };
 
-  const handleCreateFolder = (groupId: string, parentFolderId?: string) => {
+  const handleOpenGroupSettings = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
-    if (!group) return;
-
-    const newFolder: DocumentItem = {
-      id: `folder-${Date.now()}`,
-      type: 'folder',
-      title: `새 폴더`,
-      path: `${group.name}/`,
-      expanded: true,
-      children: []
-    };
-
-    if (parentFolderId) {
-      // Add as subfolder
-      const addToFolder = (items: DocumentItem[]): DocumentItem[] => {
-        return items.map(item => {
-          if (item.id === parentFolderId && item.type === 'folder') {
-            return { ...item, children: [...(item.children || []), newFolder] };
-          }
-          if (item.children) {
-            return { ...item, children: addToFolder(item.children) };
-          }
-          return item;
-        });
-      };
-      setGroups(prev => prev.map(g =>
-        g.id === groupId
-          ? { ...g, items: addToFolder(g.items) }
-          : g
-      ));
-    } else {
-      setGroups(prev => prev.map(g =>
-        g.id === groupId
-          ? { ...g, items: [...g.items, newFolder] }
-          : g
-      ));
+    if (group) {
+      setActiveGroupForInfo(group);
+      setShowGroupInfoDialog(true);
     }
   };
 
-  const handleCreateDocument = (data: { group: string; template: string; title: string }) => {
-    const newDoc: DocumentItem = {
-      id: `doc-${Date.now()}`,
-      type: 'document',
-      title: `${data.title}.md`,
-      path: `${data.group}/`,
-      isFavorite: false
-    };
-
-    setGroups(prev => prev.map(g =>
-      g.name === data.group
-        ? { ...g, items: [...g.items, newDoc] }
-        : g
-    ));
-  };
+  // --- Drag & Drop Logic ---
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+    setDragState({ activeId: event.active.id as string, overId: null, position: null });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveId(null);
+    const position = dragState.position;
+    setDragState({ activeId: null, overId: null, position: null });
 
     if (!over || active.id === over.id) return;
+    if (!position) return;
 
-    // Check if it's a group drag
-    const activeGroupIndex = groups.findIndex(g => g.id === active.id);
-    const overGroupIndex = groups.findIndex(g => g.id === over.id);
+    const activeId = active.id as string;
+    const overId = over.id as string;
 
-    if (activeGroupIndex !== -1 && overGroupIndex !== -1) {
-      // Reordering groups
-      setGroups(prev => arrayMove(prev, activeGroupIndex, overGroupIndex));
-      return;
-    }
+    // Helper to traverse and update
+    setGroups(prevGroups => {
+      let activeItem: DocumentItem | null = null;
 
-    // Check if it's an item drag within a group
-    for (const group of groups) {
-      const activeIndex = group.items.findIndex(i => i.id === active.id);
-      const overIndex = group.items.findIndex(i => i.id === over.id);
-
-      if (activeIndex !== -1 && overIndex !== -1) {
-        setGroups(prev => prev.map(g => {
-          if (g.id !== group.id) return g;
-          return { ...g, items: arrayMove(g.items, activeIndex, overIndex) };
-        }));
-        return;
+      // Remove Logic
+      const remove = (items: DocumentItem[]): DocumentItem[] => {
+        const result: DocumentItem[] = [];
+        for (const item of items) {
+          if (item.id === activeId) {
+            activeItem = item; // Capture it
+          } else {
+            if (item.children) {
+              item.children = remove(item.children); // Recurse
+            }
+            result.push(item);
+          }
+        }
+        return result;
       }
-    }
-  };
 
-  const getAllDocuments = (items: DocumentItem[]): DocumentItem[] => {
-    return items.flatMap(item => {
-      if (item.type === 'folder' && item.children) {
-        return [item, ...getAllDocuments(item.children)];
-      }
-      return [item];
+      const newGroups = prevGroups.map(g => ({ ...g, items: remove(g.items) }));
+
+      if (!activeItem) return prevGroups; // Should not happen
+
+      // Insert Logic
+      const insert = (items: DocumentItem[]): DocumentItem[] => {
+        const result: DocumentItem[] = [];
+        for (const item of items) {
+          // Check if this item is the target
+          if (item.id === overId) {
+            if (position === 'top') {
+              result.push(activeItem!);
+              result.push(item);
+            } else if (position === 'bottom') {
+              result.push(item);
+              result.push(activeItem!);
+            } else if (position === 'inside') {
+              item.children = [...(item.children || []), activeItem!];
+              item.expanded = true; // Auto expand when dropping inside
+              result.push(item);
+            }
+          } else {
+            if (item.children) {
+              item.children = insert(item.children);
+            }
+            result.push(item);
+          }
+        }
+        return result;
+      };
+
+      const finalGroups = newGroups.map(g => ({ ...g, items: insert(g.items) }));
+      return finalGroups;
     });
   };
 
-  const allDocuments = groups.flatMap(g => getAllDocuments(g.items)).filter(i => i.type === 'document');
-  const favoriteDocuments = allDocuments.filter(doc => doc.isFavorite);
-  const groupsForDialog = groups.map(g => ({
-    id: g.id,
-    name: g.name,
-    type: g.type,
-    expanded: g.expanded,
-    folders: g.items.filter(i => i.type === 'folder').map(f => ({
-      id: f.id,
-      name: f.title,
-      expanded: f.expanded,
-      children: f.children
-    })) as any
-  }));
+  const onItemMouseMove = (e: React.MouseEvent, item: DocumentItem) => {
+    if (!dragState.activeId || dragState.activeId === item.id) return;
 
-  const groupIds = groups.map(g => g.id);
+    // Calculate position
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const h = rect.height;
 
-  const toolbarButtonClass = "w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded-md transition-colors";
+    let pos: DropPosition = 'inside';
 
-  // Favorites View
-  if (mode === 'star') {
-    return (
-      <div className="w-full bg-zinc-950 flex flex-col h-full">
-        <div className="px-3 py-2">
-          <h3 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-            <Star size={14} className="text-yellow-500" />
-            Favorites
-          </h3>
-        </div>
+    // 25% top, 50% middle, 25% bottom
+    if (y < h * 0.25) pos = 'top';
+    else if (y > h * 0.75) pos = 'bottom';
+    else pos = 'inside';
 
-        <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 custom-scrollbar">
-          {favoriteDocuments.map((doc) => (
-            <button
-              key={doc.id}
-              onClick={() => onSelectDocument?.(doc.id)}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded-md transition-colors text-sm ${selectedDocumentId === doc.id
-                ? 'bg-blue-500/20 text-blue-400'
-                : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
-                }`}
-            >
-              <Star size={14} className="text-yellow-500 shrink-0" />
-              <span className="truncate">{doc.title}</span>
-            </button>
-          ))}
-          {favoriteDocuments.length === 0 && (
-            <div className="text-center text-zinc-600 text-sm py-4">
-              No favorites yet
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+    // Provide debounce or only update if changed to avoid render thrashing
+    if (dragState.overId !== item.id || dragState.position !== pos) {
+      setDragState(prev => ({ ...prev, overId: item.id, position: pos }));
+    }
+  };
 
-  // Folder View (default)
-  const filteredGroups = groups.map(group => ({
-    ...group,
-    items: group.items.filter(item =>
-      item.title.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }));
+  // Helper to find item for Preview
+  const activeItem = useMemo(() => {
+    if (!dragState.activeId) return null;
+    const allItems = groups.flatMap(g => g.items); // Should use recursive finder
+    return findItem(allItems, dragState.activeId);
+  }, [dragState.activeId, groups]);
 
   return (
-    <div className="w-full bg-zinc-950 flex flex-col h-full">
+    <div className="w-full bg-zinc-950 flex flex-col h-full font-sans">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-2 py-2">
-        <div className="flex items-center">
-          <button className={toolbarButtonClass} title="New Document" onClick={() => setShowNewDocDialog(true)}>
-            <FilePlus size={18} />
+      <div className="flex items-center justify-between px-2 py-2 shrink-0">
+        <div className="flex items-center gap-1">
+          <button
+            className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-800 rounded"
+            onClick={() => setShowGroupLinkDialog(true)}
+            title="Link Settings"
+          >
+            <Share2 size={18} />
           </button>
         </div>
-        <div className="flex items-center">
-          <button className={toolbarButtonClass} title="Sort">
-            <ArrowUpDown size={18} />
-          </button>
-          <button className={toolbarButtonClass} title={allExpanded ? "Collapse All" : "Expand All"} onClick={toggleAllGroups}>
+        <div className="flex items-center gap-1">
+          <button
+            className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-800 rounded"
+            onClick={toggleAllGroups}
+            title="Expand/Collapse All"
+          >
             <ChevronsUpDown size={18} />
           </button>
-          <button className={toolbarButtonClass} title="Link Groups" onClick={() => setShowGroupLinkDialog(true)}>
-            <Link size={18} />
+          <button
+            className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-800 rounded"
+            onClick={() => setShowNewDocDialog(true)}
+            title="New Document"
+          >
+            <FilePlus size={18} />
           </button>
         </div>
       </div>
 
       {/* Search */}
-      <div className="px-2 pb-2">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search..."
-          className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-700 rounded-md text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500"
-        />
+      <div className="px-3 pb-3 shrink-0">
+        <div className="relative group">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search..."
+            className="w-full pl-9 pr-4 py-1.5 bg-zinc-900/50 border border-zinc-800 rounded-md text-sm text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-700 focus:bg-zinc-900 transition-colors"
+          />
+        </div>
       </div>
 
-      {/* Document Groups with DnD */}
-      <div className="flex-1 overflow-y-auto px-2 py-1 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto px-2 pb-2 custom-scrollbar">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
-            {filteredGroups.map((group) => (
+          <SortableContext items={groups.map(g => g.id)} strategy={verticalListSortingStrategy}>
+            {groups.map(group => (
               <SortableGroup
                 key={group.id}
                 group={group}
                 onToggle={toggleGroup}
                 onSelectDocument={onSelectDocument}
                 selectedDocumentId={selectedDocumentId}
-                onQuickCreate={handleQuickCreateDocument}
-                onCreateFolder={handleCreateFolder}
+                onToggleExpandInfo={toggleExpandItem}
+                onAddSubPage={handleAddSubPage}
+                onOpenGroupSettings={handleOpenGroupSettings}
+                dragState={dragState}
+                onItemMouseMove={onItemMouseMove}
+                onItemMouseLeave={() => setDragState(prev => prev.activeId ? prev : { ...prev, overId: null, position: null })}
               />
             ))}
           </SortableContext>
+
           <DragOverlay>
-            {activeId ? (
-              <div className="bg-zinc-800 px-3 py-2 rounded-md text-sm text-zinc-300 shadow-lg">
-                {groups.find(g => g.id === activeId)?.name ||
-                  groups.flatMap(g => g.items).find(i => i.id === activeId)?.title}
+            {activeItem ? (
+              <div className="bg-zinc-900/90 backdrop-blur border border-zinc-700 rounded-md p-2 shadow-xl flex items-center gap-2 w-[200px]">
+                <FileText size={14} className="text-zinc-400" />
+                <span className="text-sm text-zinc-200 truncate">{activeItem.title}</span>
               </div>
             ) : null}
           </DragOverlay>
         </DndContext>
       </div>
 
-      {/* Bottom gap */}
-      <div className="py-2" />
-
       <NewDocumentDialog
         isOpen={showNewDocDialog}
         onClose={() => setShowNewDocDialog(false)}
-        onCreate={handleCreateDocument}
-        groups={groupsForDialog}
+        onCreate={() => { }}
+        groups={[]}
       />
 
       <GroupLinkDialog
         isOpen={showGroupLinkDialog}
         onClose={() => setShowGroupLinkDialog(false)}
       />
+
+      <GroupInfoDialog
+        isOpen={showGroupInfoDialog}
+        onClose={() => setShowGroupInfoDialog(false)}
+        groupName={activeGroupForInfo?.name}
+        groupType={activeGroupForInfo?.type}
+      />
     </div>
   );
-};
+}
 
 export default DocumentList;
