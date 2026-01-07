@@ -716,9 +716,10 @@ type ListUsersRequest struct {
 	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	Page          int32                  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
 	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	Query         string                 `protobuf:"bytes,4,opt,name=query,proto3" json:"query,omitempty"`
+	Query         string                 `protobuf:"bytes,4,opt,name=query,proto3" json:"query,omitempty"` // Search by name/email
 	SortBy        string                 `protobuf:"bytes,5,opt,name=sort_by,json=sortBy,proto3" json:"sort_by,omitempty"`
 	SortDesc      bool                   `protobuf:"varint,6,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	DepartmentId  string                 `protobuf:"bytes,7,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"` // Filter by department
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -793,6 +794,13 @@ func (x *ListUsersRequest) GetSortDesc() bool {
 		return x.SortDesc
 	}
 	return false
+}
+
+func (x *ListUsersRequest) GetDepartmentId() string {
+	if x != nil {
+		return x.DepartmentId
+	}
+	return ""
 }
 
 type ListUsersResponse struct {
@@ -1366,14 +1374,15 @@ const file_auth_user_proto_rawDesc = "" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\"1\n" +
 	"\x0fGetUserResponse\x12\x1e\n" +
 	"\x04user\x18\x01 \x01(\v2\n" +
-	".auth.UserR\x04user\"\xac\x01\n" +
+	".auth.UserR\x04user\"\xd1\x01\n" +
 	"\x10ListUsersRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x14\n" +
 	"\x05query\x18\x04 \x01(\tR\x05query\x12\x17\n" +
 	"\asort_by\x18\x05 \x01(\tR\x06sortBy\x12\x1b\n" +
-	"\tsort_desc\x18\x06 \x01(\bR\bsortDesc\"V\n" +
+	"\tsort_desc\x18\x06 \x01(\bR\bsortDesc\x12#\n" +
+	"\rdepartment_id\x18\a \x01(\tR\fdepartmentId\"V\n" +
 	"\x11ListUsersResponse\x12 \n" +
 	"\x05users\x18\x01 \x03(\v2\n" +
 	".auth.UserR\x05users\x12\x1f\n" +

@@ -12,7 +12,10 @@ message Project {
   string id = 1;
   string name = 2;
   string description = 3;
-  string manager_id = 4;
+  string manager_id = 4;          // Deprecated: use owner_id
+  string owner_id = 12;           // Project owner
+  repeated string member_ids = 13; // Project members
+  string owner_name = 14;          // Project owner name
   // No hierarchy
   string created_at = 6;
   string updated_at = 7;
@@ -27,7 +30,9 @@ message Project {
 message CreateProjectRequest {
   string name = 1;
   string description = 2;
-  string manager_id = 3;
+  string manager_id = 3;          // Deprecated: use owner_id
+  string owner_id = 8;            // Project owner
+  repeated string member_ids = 9; // Project members
   string tenant_id = 5; // Multi-tenancy
   VisibilityLevel default_visibility_level = 6;
   string id = 7; // Optional
@@ -61,7 +66,9 @@ message UpdateProjectRequest {
   string id = 1;
   string name = 2;
   string description = 3;
-  string manager_id = 4;
+  string manager_id = 4;          // Deprecated: use owner_id
+  string owner_id = 7;            // Project owner
+  repeated string member_ids = 8; // Project members
   VisibilityLevel default_visibility_level = 6;
 }
 

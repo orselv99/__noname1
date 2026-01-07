@@ -27,7 +27,10 @@ type Project struct {
 	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name        string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	ManagerId   string                 `protobuf:"bytes,4,opt,name=manager_id,json=managerId,proto3" json:"manager_id,omitempty"`
+	ManagerId   string                 `protobuf:"bytes,4,opt,name=manager_id,json=managerId,proto3" json:"manager_id,omitempty"`  // Deprecated: use owner_id
+	OwnerId     string                 `protobuf:"bytes,12,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`       // Project owner
+	MemberIds   []string               `protobuf:"bytes,13,rep,name=member_ids,json=memberIds,proto3" json:"member_ids,omitempty"` // Project members
+	OwnerName   string                 `protobuf:"bytes,14,opt,name=owner_name,json=ownerName,proto3" json:"owner_name,omitempty"` // Project owner name
 	// No hierarchy
 	CreatedAt              string          `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt              string          `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
@@ -98,6 +101,27 @@ func (x *Project) GetManagerId() string {
 	return ""
 }
 
+func (x *Project) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
+	}
+	return ""
+}
+
+func (x *Project) GetMemberIds() []string {
+	if x != nil {
+		return x.MemberIds
+	}
+	return nil
+}
+
+func (x *Project) GetOwnerName() string {
+	if x != nil {
+		return x.OwnerName
+	}
+	return ""
+}
+
 func (x *Project) GetCreatedAt() string {
 	if x != nil {
 		return x.CreatedAt
@@ -144,8 +168,10 @@ type CreateProjectRequest struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Name                   string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description            string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	ManagerId              string                 `protobuf:"bytes,3,opt,name=manager_id,json=managerId,proto3" json:"manager_id,omitempty"`
-	TenantId               string                 `protobuf:"bytes,5,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"` // Multi-tenancy
+	ManagerId              string                 `protobuf:"bytes,3,opt,name=manager_id,json=managerId,proto3" json:"manager_id,omitempty"` // Deprecated: use owner_id
+	OwnerId                string                 `protobuf:"bytes,8,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`       // Project owner
+	MemberIds              []string               `protobuf:"bytes,9,rep,name=member_ids,json=memberIds,proto3" json:"member_ids,omitempty"` // Project members
+	TenantId               string                 `protobuf:"bytes,5,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`    // Multi-tenancy
 	DefaultVisibilityLevel VisibilityLevel        `protobuf:"varint,6,opt,name=default_visibility_level,json=defaultVisibilityLevel,proto3,enum=auth.VisibilityLevel" json:"default_visibility_level,omitempty"`
 	Id                     string                 `protobuf:"bytes,7,opt,name=id,proto3" json:"id,omitempty"` // Optional
 	unknownFields          protoimpl.UnknownFields
@@ -201,6 +227,20 @@ func (x *CreateProjectRequest) GetManagerId() string {
 		return x.ManagerId
 	}
 	return ""
+}
+
+func (x *CreateProjectRequest) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
+	}
+	return ""
+}
+
+func (x *CreateProjectRequest) GetMemberIds() []string {
+	if x != nil {
+		return x.MemberIds
+	}
+	return nil
 }
 
 func (x *CreateProjectRequest) GetTenantId() string {
@@ -481,7 +521,9 @@ type UpdateProjectRequest struct {
 	Id                     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name                   string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Description            string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	ManagerId              string                 `protobuf:"bytes,4,opt,name=manager_id,json=managerId,proto3" json:"manager_id,omitempty"`
+	ManagerId              string                 `protobuf:"bytes,4,opt,name=manager_id,json=managerId,proto3" json:"manager_id,omitempty"` // Deprecated: use owner_id
+	OwnerId                string                 `protobuf:"bytes,7,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`       // Project owner
+	MemberIds              []string               `protobuf:"bytes,8,rep,name=member_ids,json=memberIds,proto3" json:"member_ids,omitempty"` // Project members
 	DefaultVisibilityLevel VisibilityLevel        `protobuf:"varint,6,opt,name=default_visibility_level,json=defaultVisibilityLevel,proto3,enum=auth.VisibilityLevel" json:"default_visibility_level,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
@@ -543,6 +585,20 @@ func (x *UpdateProjectRequest) GetManagerId() string {
 		return x.ManagerId
 	}
 	return ""
+}
+
+func (x *UpdateProjectRequest) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
+	}
+	return ""
+}
+
+func (x *UpdateProjectRequest) GetMemberIds() []string {
+	if x != nil {
+		return x.MemberIds
+	}
+	return nil
 }
 
 func (x *UpdateProjectRequest) GetDefaultVisibilityLevel() VisibilityLevel {
@@ -926,13 +982,18 @@ var File_auth_project_proto protoreflect.FileDescriptor
 
 const file_auth_project_proto_rawDesc = "" +
 	"\n" +
-	"\x12auth/project.proto\x12\x04auth\x1a\x0fauth/user.proto\x1a\x0eauth/acl.proto\"\xe5\x02\n" +
+	"\x12auth/project.proto\x12\x04auth\x1a\x0fauth/user.proto\x1a\x0eauth/acl.proto\"\xbe\x03\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1d\n" +
 	"\n" +
-	"manager_id\x18\x04 \x01(\tR\tmanagerId\x12\x1d\n" +
+	"manager_id\x18\x04 \x01(\tR\tmanagerId\x12\x19\n" +
+	"\bowner_id\x18\f \x01(\tR\aownerId\x12\x1d\n" +
+	"\n" +
+	"member_ids\x18\r \x03(\tR\tmemberIds\x12\x1d\n" +
+	"\n" +
+	"owner_name\x18\x0e \x01(\tR\townerName\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
@@ -943,12 +1004,15 @@ const file_auth_project_proto_rawDesc = "" +
 	"sort_order\x18\v \x01(\x05R\tsortOrder\x12$\n" +
 	"\amanager\x18\b \x01(\v2\n" +
 	".auth.UserR\amanager\x12!\n" +
-	"\fmember_count\x18\t \x01(\x05R\vmemberCount\"\xe9\x01\n" +
+	"\fmember_count\x18\t \x01(\x05R\vmemberCount\"\xa3\x02\n" +
 	"\x14CreateProjectRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1d\n" +
 	"\n" +
-	"manager_id\x18\x03 \x01(\tR\tmanagerId\x12\x1b\n" +
+	"manager_id\x18\x03 \x01(\tR\tmanagerId\x12\x19\n" +
+	"\bowner_id\x18\b \x01(\tR\aownerId\x12\x1d\n" +
+	"\n" +
+	"member_ids\x18\t \x03(\tR\tmemberIds\x12\x1b\n" +
 	"\ttenant_id\x18\x05 \x01(\tR\btenantId\x12O\n" +
 	"\x18default_visibility_level\x18\x06 \x01(\x0e2\x15.auth.VisibilityLevelR\x16defaultVisibilityLevel\x12\x0e\n" +
 	"\x02id\x18\a \x01(\tR\x02id\"@\n" +
@@ -965,13 +1029,16 @@ const file_auth_project_proto_rawDesc = "" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12!\n" +
 	"\fsearch_query\x18\x02 \x01(\tR\vsearchQuery\"A\n" +
 	"\x14ListProjectsResponse\x12)\n" +
-	"\bprojects\x18\x01 \x03(\v2\r.auth.ProjectR\bprojects\"\xcc\x01\n" +
+	"\bprojects\x18\x01 \x03(\v2\r.auth.ProjectR\bprojects\"\x86\x02\n" +
 	"\x14UpdateProjectRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1d\n" +
 	"\n" +
-	"manager_id\x18\x04 \x01(\tR\tmanagerId\x12O\n" +
+	"manager_id\x18\x04 \x01(\tR\tmanagerId\x12\x19\n" +
+	"\bowner_id\x18\a \x01(\tR\aownerId\x12\x1d\n" +
+	"\n" +
+	"member_ids\x18\b \x03(\tR\tmemberIds\x12O\n" +
 	"\x18default_visibility_level\x18\x06 \x01(\x0e2\x15.auth.VisibilityLevelR\x16defaultVisibilityLevel\"@\n" +
 	"\x15UpdateProjectResponse\x12'\n" +
 	"\aproject\x18\x01 \x01(\v2\r.auth.ProjectR\aproject\"&\n" +

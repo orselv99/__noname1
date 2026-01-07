@@ -35,6 +35,16 @@ func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.L
 		query = query.Where("username ILIKE ? OR email ILIKE ?", "%"+req.Query+"%", "%"+req.Query+"%")
 	}
 
+	// Department filter
+	if req.DepartmentId != "" {
+		query = query.Where("department_id = ?", req.DepartmentId)
+	}
+
+	// Filter by IDs (Specific Users)
+	if len(req.Ids) > 0 {
+		query = query.Where("id IN ?", req.Ids)
+	}
+
 	query.Count(&total)
 
 	// Default sort by CreatedAt DESC

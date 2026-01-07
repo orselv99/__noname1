@@ -193,3 +193,27 @@ func (p *Position) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	return
 }
+
+// Project Model (no parent, flat list)
+type Project struct {
+	ID                     string         `gorm:"type:uuid;primaryKey"`
+	TenantID               string         `gorm:"type:varchar(50);not null;index"`
+	Name                   string         `gorm:"type:varchar(100);not null"`
+	Description            string         `gorm:"type:text"`
+	OwnerID                *string        `gorm:"type:uuid;index"` // Project owner
+	OwnerRel               *User          `gorm:"foreignKey:OwnerID;references:ID"`
+	OwnerName              string         `gorm:"-"`               // Join
+	MemberIDs              pq.StringArray `gorm:"type:text[]"`     // Array of member UUIDs
+	ManagerID              *string        `gorm:"type:uuid;index"` // Deprecated: use OwnerID
+	SortOrder              int            `gorm:"default:0;not null"`
+	DefaultVisibilityLevel int            `gorm:"default:1;not null"` // 1: Hidden (default)
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+}
+
+func (proj *Project) BeforeCreate(tx *gorm.DB) (err error) {
+	if proj.ID == "" {
+		proj.ID = uuid.New().String()
+	}
+	return
+}

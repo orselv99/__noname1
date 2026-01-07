@@ -11,19 +11,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Project struct (GORM model)
-type Project struct {
-	ID                     string  `gorm:"type:uuid;primary_key;"`
-	TenantID               string  `gorm:"type:varchar(50);index;not null"`
-	Name                   string  `gorm:"type:varchar(100);not null"`
-	Description            string  `gorm:"type:string"`
-	ManagerID              *string `gorm:"type:uuid"`
-	DefaultVisibilityLevel int     `gorm:"default:1"`
-	SortOrder              int     `gorm:"default:0"`
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
-}
-
 // CreateProject
 func (s *server) CreateProject(ctx context.Context, req *pb.CreateProjectRequest) (*pb.CreateProjectResponse, error) {
 	if req.Name == "" {
@@ -48,15 +35,19 @@ func (s *server) CreateProject(ctx context.Context, req *pb.CreateProjectRequest
 		TenantID:               req.TenantId,
 		Name:                   req.Name,
 		Description:            req.Description,
+		OwnerID:                stringPtr(req.OwnerId),
+		MemberIDs:              req.MemberIds,
 		ManagerID:              stringPtr(req.ManagerId),
 		DefaultVisibilityLevel: visibility,
 		CreatedAt:              time.Now(),
 		UpdatedAt:              time.Now(),
 	}
 
+	// Re-fetch with OwnerRel to populate return
 	if err := s.db.Create(&proj).Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create project: %v", err)
 	}
+	s.db.Preload("OwnerRel").First(&proj, "id = ?", proj.ID)
 
 	return &pb.CreateProjectResponse{
 		Project: convertProjectToPB(&proj),
@@ -145,7 +136,7 @@ func (s *server) ListProjects(ctx context.Context, req *pb.ListProjectsRequest) 
 	}
 
 	// Flat list order
-	if err := query.Order("sort_order asc, created_at desc").Find(&projs).Error; err != nil {
+	if err := query.Preload("OwnerRel").Order("sort_order asc, created_at desc").Find(&projs).Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list projects: %v", err)
 	}
 
@@ -166,15 +157,31 @@ func (s *server) UpdateProject(ctx context.Context, req *pb.UpdateProjectRequest
 		return nil, status.Errorf(codes.NotFound, "project not found")
 	}
 
-	proj.Name = req.Name
-	proj.Description = req.Description
-	proj.ManagerID = stringPtr(req.ManagerId)
-	proj.DefaultVisibilityLevel = int(req.DefaultVisibilityLevel)
+	// Only update fields that are provided (non-empty values)
+	if req.Name != "" {
+		proj.Name = req.Name
+	}
+	if req.Description != "" {
+		proj.Description = req.Description
+	}
+	if req.OwnerId != "" {
+		proj.OwnerID = stringPtr(req.OwnerId)
+	}
+	if len(req.MemberIds) > 0 {
+		proj.MemberIDs = req.MemberIds
+	}
+	if req.ManagerId != "" {
+		proj.ManagerID = stringPtr(req.ManagerId)
+	}
+	if req.DefaultVisibilityLevel != 0 {
+		proj.DefaultVisibilityLevel = int(req.DefaultVisibilityLevel)
+	}
 	proj.UpdatedAt = time.Now()
 
 	if err := s.db.Save(&proj).Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update project: %v", err)
 	}
+	s.db.Preload("OwnerRel").First(&proj, "id = ?", proj.ID)
 
 	return &pb.UpdateProjectResponse{
 		Project: convertProjectToPB(&proj),
@@ -195,7 +202,7 @@ func (s *server) DeleteProject(ctx context.Context, req *pb.DeleteProjectRequest
 // GetProject
 func (s *server) GetProject(ctx context.Context, req *pb.GetProjectRequest) (*pb.GetProjectResponse, error) {
 	var proj Project
-	if err := s.db.First(&proj, "id = ?", req.Id).Error; err != nil {
+	if err := s.db.Preload("OwnerRel").First(&proj, "id = ?", req.Id).Error; err != nil {
 		return nil, status.Errorf(codes.NotFound, "project not found")
 	}
 
@@ -252,10 +259,20 @@ func (s *server) ReorderProjects(ctx context.Context, req *pb.ReorderProjectsReq
 
 // Helper: Convert Model to PB
 func convertProjectToPB(p *Project) *pb.Project {
+	ownerName := ""
+	if p.OwnerRel != nil {
+		ownerName = p.OwnerRel.Username
+	} else if p.OwnerName != "" { // Fallback if manually joined
+		ownerName = p.OwnerName
+	}
+
 	return &pb.Project{
 		Id:                     p.ID,
+		OwnerName:              ownerName,
 		Name:                   p.Name,
 		Description:            p.Description,
+		OwnerId:                ptrString(p.OwnerID),
+		MemberIds:              p.MemberIDs,
 		ManagerId:              ptrString(p.ManagerID),
 		DefaultVisibilityLevel: pb.VisibilityLevel(p.DefaultVisibilityLevel),
 		SortOrder:              int32(p.SortOrder),

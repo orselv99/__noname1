@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Lock, User } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import Nav from '@/components/admin/Nav';
+import { MotionDiv } from '@/components/admin/ui/Motion';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -23,10 +24,12 @@ export default function LoginPage() {
     setError('');
 
     try {
+      const tenantId = window.location.hostname.split('.')[0];
       const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Tenant-ID': tenantId,
         },
         body: JSON.stringify({
           email,
@@ -58,7 +61,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-black flex flex-col">
       <Nav isAuthenticated={false} />
       <div className="flex-1 flex items-center justify-center">
-        <motion.div
+        <MotionDiv
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-zinc-900/50 p-8 rounded-2xl border border-zinc-800 w-full max-w-md backdrop-blur-xl"
@@ -110,7 +113,7 @@ export default function LoginPage() {
               {t.admin.login.submit}
             </button>
           </form>
-        </motion.div>
+        </MotionDiv>
       </div>
     </div>
   );

@@ -36,12 +36,20 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Get tenant ID from header
+	tenantID := c.GetHeader("X-Tenant-ID")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	resp, err := h.client.Login(ctx, &pb.LoginRequest{
 		Email:    req.Email,
 		Password: req.Password,
+		TenantId: tenantID,
 	})
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()}) // 보통 로그인 실패는 401

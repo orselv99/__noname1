@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	pb "server/.protos/auth"
@@ -64,15 +65,30 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	}
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	departmentID := c.Query("department_id")
+	query := c.Query("search")
+	sortBy := c.Query("sort_by")
+	sortDesc := c.Query("sort_desc") == "true"
+
+	idsStr := c.Query("ids")
+	var ids []string
+	if idsStr != "" {
+		ids = strings.Split(idsStr, ",")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	res, err := h.authClient.ListUsers(ctx, &pb.ListUsersRequest{
-		TenantId: tenantID,
-		Page:     int32(page),
-		PageSize: int32(limit),
+		TenantId:     tenantID,
+		Page:         int32(page),
+		PageSize:     int32(limit),
+		DepartmentId: departmentID,
+		Query:        query,
+		SortBy:       sortBy,
+		SortDesc:     sortDesc,
+		Ids:          ids,
 	})
 
 	if err != nil {

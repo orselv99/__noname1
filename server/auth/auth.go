@@ -19,13 +19,18 @@ type server struct {
 
 func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	// 비밀번호 검색 및 디버깅 로그
-	log.Printf("[DEBUG] Login attempt - Email: %s", req.Email)
+	log.Printf("[DEBUG] Login attempt - Email: %s, TenantID: %s", req.Email, req.TenantId)
 
 	var user User
-	result := s.db.Where("email = ?", req.Email).First(&user)
+	// Add tenant_id filter for tenant isolation
+	query := s.db.Where("email = ?", req.Email)
+	if req.TenantId != "" {
+		query = query.Where("tenant_id = ?", req.TenantId)
+	}
+	result := query.First(&user)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			log.Printf("[DEBUG] User not found: %s", req.Email)
+			log.Printf("[DEBUG] User not found: %s in tenant: %s", req.Email, req.TenantId)
 			return nil, errors.New("invalid email or password")
 		}
 		log.Printf("[DEBUG] DB Error: %v", result.Error)

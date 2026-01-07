@@ -14,10 +14,6 @@ import {
   ChevronDown,
   FolderTree,
   GripVertical,
-  Eye,
-  EyeOff,
-  FileText,
-  Globe,
   Layers
 } from 'lucide-react';
 import CreateDepartmentModal from '@/components/admin/departments/CreateDepartmentModal';
@@ -44,6 +40,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import TitleLabel from '@/components/admin/ui/TitleLabel';
 import { MotionDiv } from '@/components/admin/ui/Motion';
+import { VisibilityDropdown } from '@/components/admin/ui/VisibilityLevel';
 
 interface Department {
   id: string;
@@ -119,68 +116,6 @@ function SortableDepartmentItem({
   const hasChildren = node.children.length > 0;
   const isExpanded = expandedIds.has(node.id);
   const isHighlighted = highlightedId === node.id;
-  const [showVisibilityDropdown, setShowVisibilityDropdown] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
-  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
-  const dropdownContentRef = useRef<HTMLDivElement>(null);
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  const toggleDropdown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!showVisibilityDropdown && dropdownTriggerRef.current) {
-      const rect = dropdownTriggerRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const height = 150; // Increased safety margin
-      const openUpwards = spaceBelow < height;
-
-      setDropdownPosition({
-        top: openUpwards ? rect.top - height + 15 /* padding 추가 */ : rect.bottom + 4,
-        left: Math.max(10, rect.right - 140), // Prevent going off-screen left
-      });
-    }
-    setShowVisibilityDropdown(!showVisibilityDropdown);
-  };
-
-
-  // Close dropdown on scroll
-  useEffect(() => {
-    if (showVisibilityDropdown) {
-      const handleScroll = () => setShowVisibilityDropdown(false);
-      window.addEventListener('scroll', handleScroll, true);
-      return () => window.removeEventListener('scroll', handleScroll, true);
-    }
-  }, [showVisibilityDropdown]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (
-        dropdownTriggerRef.current && !dropdownTriggerRef.current.contains(target) &&
-        dropdownContentRef.current && !dropdownContentRef.current.contains(target)
-      ) {
-        setShowVisibilityDropdown(false);
-      }
-    };
-
-    if (showVisibilityDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showVisibilityDropdown]);
-
-  const { t } = useLanguage();
-
-  const VISIBILITY_LEVELS = [
-    { value: 1, label: t.admin.departments.visibility.level_1, icon: EyeOff, color: 'bg-gray-700 text-gray-300', hoverColor: 'hover:bg-gray-600' },
-    { value: 2, label: t.admin.departments.visibility.level_2, icon: FileText, color: 'bg-blue-900/50 text-blue-300', hoverColor: 'hover:bg-blue-800/50' },
-    { value: 3, label: t.admin.departments.visibility.level_3, icon: Eye, color: 'bg-amber-900/50 text-amber-300', hoverColor: 'hover:bg-amber-800/50' },
-    { value: 4, label: t.admin.departments.visibility.level_4, icon: Globe, color: 'bg-green-900/50 text-green-300', hoverColor: 'hover:bg-green-800/50' },
-  ];
 
   const {
     attributes,
@@ -246,58 +181,10 @@ function SortableDepartmentItem({
           </div>
 
           {/* Visibility Level Badge with Dropdown */}
-          <div className="relative">
-            {(() => {
-              const currentLevel = VISIBILITY_LEVELS.find(v => v.value === (node.default_visibility_level || 4)) || VISIBILITY_LEVELS[3];
-              const Icon = currentLevel.icon;
-              return (
-                <button
-                  ref={dropdownTriggerRef}
-                  onClick={toggleDropdown}
-                  className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full transition-all ${currentLevel.color} ${currentLevel.hoverColor} cursor-pointer`}
-                >
-                  <Icon size={12} />
-                  {currentLevel.label}
-                  <ChevronDown size={10} className="opacity-50" />
-                </button>
-              );
-            })()}
-
-            {showVisibilityDropdown && isMounted && createPortal(
-              <div
-                ref={dropdownContentRef}
-                style={{
-                  position: 'fixed',
-                  top: dropdownPosition.top,
-                  left: dropdownPosition.left,
-                  width: '140px',
-                  zIndex: 99999,
-                }}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
-              >
-                {VISIBILITY_LEVELS.map((level) => {
-                  const Icon = level.icon;
-                  const isSelected = (node.default_visibility_level || 4) === level.value;
-                  return (
-                    <button
-                      key={level.value}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onVisibilityChange(node.id, level.value);
-                        setShowVisibilityDropdown(false);
-                      }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${isSelected ? level.color : 'text-gray-300 hover:bg-zinc-700'
-                        }`}
-                    >
-                      <Icon size={14} />
-                      {level.label}
-                    </button>
-                  );
-                })}
-              </div>,
-              document.body
-            )}
-          </div>
+          <VisibilityDropdown
+            currentLevel={node.default_visibility_level || 4}
+            onLevelChange={(level) => onVisibilityChange(node.id, level)}
+          />
 
           {/* Actions - Delete only */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

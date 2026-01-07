@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   Briefcase,
-  Plus,
   Search,
   Pencil,
   Trash2,
-  GripVertical
+  GripVertical,
+  Users,
+  User
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
@@ -31,6 +32,7 @@ import CreateProjectModal from '@/components/admin/projects/CreateProjectModal';
 import EditProjectModal from '@/components/admin/projects/EditProjectModal';
 import AddButton from '@/components/admin/ui/AddButton';
 import TitleLabel from '@/components/admin/ui/TitleLabel';
+import { VisibilityDropdown } from '@/components/admin/ui/VisibilityLevel';
 
 interface Project {
   id: string;
@@ -38,6 +40,9 @@ interface Project {
   description: string;
   default_visibility_level?: number;
   sort_order?: number;
+  owner_id?: string;
+  owner_name?: string;
+  member_ids?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -45,11 +50,13 @@ interface Project {
 function SortableProjectItem({
   project,
   onEdit,
-  onDelete
+  onDelete,
+  onVisibilityChange
 }: {
   project: Project;
   onEdit: (proj: Project) => void;
   onDelete: (id: string) => void;
+  onVisibilityChange: (id: string, level: number) => void;
 }) {
   const {
     attributes,
@@ -89,25 +96,36 @@ function SortableProjectItem({
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-white">{project.name}</span>
+          <span className="text-white font-medium">{project.name}</span>
+          {project.description && (
+            <span className="text-zinc-500 text-sm truncate ml-2">- {project.description}</span>
+          )}
         </div>
-        {project.description && (
-          <p className="text-xs text-gray-500 truncate">{project.description}</p>
-        )}
+        <div className="flex items-center gap-2 mt-0.5">
+          {project.owner_id ? (
+            <span className="text-xs text-blue-400 flex items-center gap-1">
+              <User size={12} />
+              {project.owner_name || 'Owner'}
+              {(project.member_ids?.length || 0) > 0 && (
+                <span className="text-gray-500"> 외 {project.member_ids?.length}명</span>
+              )}
+            </span>
+          ) : (
+            <span className="text-xs text-gray-500 flex items-center gap-1">
+              <Users size={12} />
+              담당자 없음
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Visibility Badge */}
-      {project.default_visibility_level && (
-        <span className={`text-xs px-2 py-0.5 rounded-full ${project.default_visibility_level === 1 ? 'bg-gray-700 text-gray-300' :
-          project.default_visibility_level === 2 ? 'bg-blue-900/50 text-blue-300' :
-            project.default_visibility_level === 3 ? 'bg-amber-900/50 text-amber-300' :
-              'bg-green-900/50 text-green-300'
-          }`}>
-          {project.default_visibility_level === 1 ? 'Hidden' :
-            project.default_visibility_level === 2 ? 'Metadata' :
-              project.default_visibility_level === 3 ? 'Snippet' : 'Public'}
-        </span>
-      )}
+
+
+      {/* Visibility Level Badge with Dropdown */}
+      <VisibilityDropdown
+        currentLevel={project.default_visibility_level || 4}
+        onLevelChange={(level) => onVisibilityChange(project.id, level)}
+      />
 
       {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -237,6 +255,32 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleVisibilityChange = async (id: string, level: number) => {
+    // Optimistic update
+    setProjects(prev => prev.map(p =>
+      p.id === id ? { ...p, default_visibility_level: level } : p
+    ));
+
+    try {
+      const res = await fetch(`/api/v1/projects/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          'X-Tenant-ID': window.location.hostname.split('.')[0]
+        },
+        body: JSON.stringify({ default_visibility_level: level })
+      });
+
+      if (!res.ok) {
+        fetchProjects(); // Revert on failure
+      }
+    } catch (error) {
+      console.error('Failed to update visibility:', error);
+      fetchProjects(); // Revert on failure
+    }
+  };
+
   const filteredProjects = projects; // Search is handled by backend query mostly, but if we want client side filtering on top:
   // Note: ListProjects API handles 'search' param, so we use 'projects' directly. But if we drag drop, we should probably disable search or drag drop while searching.
   // For simplicity, let's disable drag drop when searching if search query is present? 
@@ -300,6 +344,7 @@ export default function ProjectsPage() {
                           setIsEditModalOpen(true);
                         }}
                         onDelete={handleDelete}
+                        onVisibilityChange={handleVisibilityChange}
                       />
                     ))}
                   </div>
