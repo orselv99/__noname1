@@ -1,7 +1,14 @@
 import { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { TenantSelector } from './TenantSelector';
+
+interface TenantInfo {
+  tenant_id: string;
+  name: string;
+}
 
 interface LoginFormProps {
-  onLogin: (email: string, password: string) => Promise<void>;
+  onLogin: (email: string, password: string, tenantId?: string) => Promise<void>;
 }
 
 export const LoginForm = ({ onLogin }: LoginFormProps) => {
@@ -10,22 +17,83 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Tenant selection state
+  const [showTenantSelector, setShowTenantSelector] = useState(false);
+  const [tenants, setTenants] = useState<TenantInfo[]>([]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
     try {
-      await onLogin(email, password);
-    } catch (err: any) {
-      setError(typeof err === 'string' ? err : err.message || 'Login failed');
+      // Step 1: Check if we have a cached tenant for this email
+      const cachedTenant = await invoke<string | null>('get_saved_tenant', { email });
+
+      if (cachedTenant) {
+        // Try login with cached tenant first
+        try {
+          await onLogin(email, password, cachedTenant);
+          return; // Success!
+        } catch {
+          // Cached tenant login failed - clear cache and show selector
+          console.log('Cached tenant login failed, clearing cache...');
+          await invoke('clear_saved_tenant', { email });
+        }
+      }
+
+      // Step 2: Lookup tenants for this email
+      const foundTenants = await invoke<TenantInfo[]>('lookup_tenants', { email });
+
+      if (foundTenants.length === 0) {
+        // No tenant found - show error
+        setError('No organization found for this email');
+      } else if (foundTenants.length === 1) {
+        // Single tenant - proceed directly
+        await onLogin(email, password, foundTenants[0].tenant_id);
+      } else {
+        // Multiple tenants - show selector
+        setTenants(foundTenants);
+        setShowTenantSelector(true);
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message :
+        typeof err === 'string' ? err : 'Login failed';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTenantSelect = async (tenantId: string) => {
+    setShowTenantSelector(false);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await onLogin(email, password, tenantId);
+      // Success - tenant will be saved by the login flow (save_user in Rust)
+    } catch (err: unknown) {
+      // Login failed - clear any cached tenant
+      await invoke('clear_saved_tenant', { email });
+      const errorMessage = err instanceof Error ? err.message :
+        typeof err === 'string' ? err : 'Login failed';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md w-full space-y-8 bg-zinc-900 p-8 rounded-xl border border-zinc-800 shadow-2xl">
+    <div className="relative max-w-md w-full space-y-8 bg-zinc-900 p-8 rounded-xl border border-zinc-800 shadow-2xl">
+      {/* Tenant Selector Overlay */}
+      <TenantSelector
+        isOpen={showTenantSelector}
+        tenants={tenants}
+        onSelect={handleTenantSelect}
+        onClose={() => setShowTenantSelector(false)}
+      />
+
       <header className="space-y-2 text-center">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-600 text-transparent bg-clip-text">
           Fiery Client

@@ -240,41 +240,42 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
         >
-          {/* Owner Picker Panel - overlays modal */}
-          <UserPickerPanel
-            isOpen={showOwnerPicker}
-            onClose={() => setShowOwnerPicker(false)}
-            mode="single"
-            selectedId={ownerId}
-            onSelect={(id, username) => {
-              setOwnerId(id);
-              setOwnerName(username || id.slice(0, 8) + '...');
-            }}
-            title="Select Owner"
-          />
-
-          {/* Member Picker Panel - overlays modal */}
-          <UserPickerPanel
-            isOpen={showMemberPicker}
-            onClose={() => setShowMemberPicker(false)}
-            mode="multi"
-            selectedIds={memberIds}
-            selectedUsers={members}
-            onSelect={() => { }}
-            onMultiSelect={(ids, users) => {
-              setMemberIds(ids);
-              setMembers(users);
-            }}
-            title="Select Members"
-            excludeIds={ownerId ? [ownerId] : []}
-          />
-
           <MotionDiv
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
           >
+            {/* Owner Picker Panel - overlays modal */}
+            <UserPickerPanel
+              isOpen={showOwnerPicker}
+              onClose={() => setShowOwnerPicker(false)}
+              mode="single"
+              selectedId={ownerId}
+              onSelect={(id, username) => {
+                setOwnerId(id);
+                setOwnerName(username || id.slice(0, 8) + '...');
+              }}
+              title="Select Owner"
+              renderInline
+            />
+
+            {/* Member Picker Panel - overlays modal */}
+            <UserPickerPanel
+              isOpen={showMemberPicker}
+              onClose={() => setShowMemberPicker(false)}
+              mode="multi"
+              selectedIds={memberIds}
+              selectedUsers={members}
+              onSelect={() => { }}
+              onMultiSelect={(ids, users) => {
+                setMemberIds(ids);
+                setMembers(users);
+              }}
+              title="Select Members"
+              excludeIds={ownerId ? [ownerId] : []}
+              renderInline
+            />
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
               <h2 className="text-xl font-semibold text-white flex items-center gap-2">

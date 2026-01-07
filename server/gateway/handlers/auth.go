@@ -59,6 +59,28 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// LookupTenant looks up tenant(s) by email for client apps without subdomain.
+func (h *AuthHandler) LookupTenant(c *gin.Context) {
+	email := c.Query("email")
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email query parameter is required"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.client.LookupTenantByEmail(ctx, &pb.LookupTenantByEmailRequest{
+		Email: email,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 // ChangePasswordRequest는 비밀번호 변경 요청 구조체입니다.
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password" binding:"required"`

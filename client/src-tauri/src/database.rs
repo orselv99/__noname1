@@ -283,3 +283,34 @@ pub fn update_cached_password(
   println!("Debug: Updated cached password for: {}", email);
   Ok(())
 }
+
+/// Get the saved tenant_id for an email (for auto-login without tenant lookup)
+pub fn get_saved_tenant(conn: &Connection, email: &str) -> Option<String> {
+  let result: SqliteResult<String> = conn.query_row(
+    "SELECT tenant_id FROM users WHERE email = ?1",
+    [email],
+    |row| row.get(0),
+  );
+  
+  match result {
+    Ok(tenant_id) => {
+      println!("Debug: Found cached tenant for {}: {}", email, tenant_id);
+      Some(tenant_id)
+    }
+    Err(_) => {
+      println!("Debug: No cached tenant found for: {}", email);
+      None
+    }
+  }
+}
+
+/// Clear saved tenant for an email (called on login failure to force re-selection)
+pub fn clear_saved_tenant(conn: &Connection, email: &str) -> Result<(), String> {
+  conn.execute(
+    "DELETE FROM users WHERE email = ?1",
+    [email],
+  ).map_err(|e| format!("Failed to clear saved tenant: {}", e))?;
+  
+  println!("Debug: Cleared cached tenant for: {}", email);
+  Ok(())
+}

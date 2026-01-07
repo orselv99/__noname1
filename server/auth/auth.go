@@ -148,3 +148,48 @@ func (s *server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 	log.Printf("[INFO] User logged out. AccessToken: %s...", req.AccessToken[:10])
 	return &pb.LogoutResponse{Success: true}, nil
 }
+
+// LookupTenantByEmail finds tenant(s) associated with an email address.
+// Used by client apps (like Tauri desktop) that don't have subdomain-based tenant identification.
+func (s *server) LookupTenantByEmail(ctx context.Context, req *pb.LookupTenantByEmailRequest) (*pb.LookupTenantByEmailResponse, error) {
+	log.Printf("[DEBUG] LookupTenantByEmail - Email: %s", req.Email)
+
+	// Find all users with this email across all tenants
+	var users []User
+	if err := s.db.Where("email = ?", req.Email).Find(&users).Error; err != nil {
+		log.Printf("[ERROR] LookupTenantByEmail DB error: %v", err)
+		return nil, err
+	}
+
+	if len(users) == 0 {
+		log.Printf("[DEBUG] No users found for email: %s", req.Email)
+		return &pb.LookupTenantByEmailResponse{Tenants: []*pb.TenantInfo{}}, nil
+	}
+
+	// Get unique tenant IDs
+	tenantIDs := make(map[string]struct{})
+	for _, user := range users {
+		tenantIDs[user.TenantID] = struct{}{}
+	}
+
+	// Fetch tenant details
+	var tenants []*pb.TenantInfo
+	for tenantID := range tenantIDs {
+		var tenant Tenant
+		if err := s.db.Where("id = ?", tenantID).First(&tenant).Error; err != nil {
+			// If tenant not found, use tenant ID as name
+			tenants = append(tenants, &pb.TenantInfo{
+				TenantId: tenantID,
+				Name:     tenantID,
+			})
+		} else {
+			tenants = append(tenants, &pb.TenantInfo{
+				TenantId: tenant.ID,
+				Name:     tenant.Name,
+			})
+		}
+	}
+
+	log.Printf("[DEBUG] Found %d tenant(s) for email: %s", len(tenants), req.Email)
+	return &pb.LookupTenantByEmailResponse{Tenants: tenants}, nil
+}

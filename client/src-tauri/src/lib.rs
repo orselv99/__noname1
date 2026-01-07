@@ -23,6 +23,9 @@ pub fn run() {
       greet,
       commands::ai::extract_info,
       commands::auth::login,
+      commands::auth::lookup_tenants,
+      commands::auth::get_saved_tenant,
+      commands::auth::clear_saved_tenant,
       commands::auth::change_password,
       commands::auth::logout
     ])

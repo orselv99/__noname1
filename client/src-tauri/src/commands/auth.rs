@@ -57,21 +57,38 @@ struct ChangePasswordRequest {
     new_password: String,
 }
 
+// Tenant lookup response types
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TenantInfo {
+    pub tenant_id: String,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct LookupTenantResponse {
+    tenants: Vec<TenantInfo>,
+}
+
 #[tauri::command]
 pub async fn login(
     app: AppHandle,
     state: State<'_, Mutex<AuthState>>,
     db_state: State<'_, Mutex<DatabaseState>>,
     email: String, 
-    password: String
+    password: String,
+    tenant_id: Option<String>  // Now accepts optional tenant_id
 ) -> Result<LoginResponse, String> {
     let client = reqwest::Client::new();
     
-    // Try online login first
-    let online_result = client.post("http://localhost:8080/api/v1/auth/login")
-        .json(&LoginRequest { email: email.clone(), password: password.clone() })
-        .send()
-        .await;
+    // Build login request with tenant_id header if provided
+    let mut request = client.post("http://localhost:8080/api/v1/auth/login")
+        .json(&LoginRequest { email: email.clone(), password: password.clone() });
+    
+    if let Some(ref tid) = tenant_id {
+        request = request.header("X-Tenant-ID", tid);
+    }
+    
+    let online_result = request.send().await;
     
     match online_result {
         Ok(res) if res.status().is_success() => {
@@ -290,4 +307,54 @@ pub async fn logout(app: AppHandle, state: State<'_, Mutex<AuthState>>) -> Resul
     auth.user_id = None;
     auth.username = None;
     Ok(())
+}
+
+/// Lookup tenants by email - returns list of tenants the email belongs to
+#[tauri::command]
+pub async fn lookup_tenants(email: String) -> Result<Vec<TenantInfo>, String> {
+    let client = reqwest::Client::new();
+    
+    let url = format!("http://localhost:8080/api/v1/auth/lookup-tenant?email={}", 
+        urlencoding::encode(&email));
+    
+    let res = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+    
+    if !res.status().is_success() {
+        let err_text = res.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(err_text);
+    }
+    
+    let response: LookupTenantResponse = res.json().await.map_err(|e| e.to_string())?;
+    Ok(response.tenants)
+}
+
+/// Get saved tenant from local DB (for auto-login without tenant lookup)
+#[tauri::command]
+pub fn get_saved_tenant(
+    db_state: State<'_, Mutex<DatabaseState>>,
+    email: String
+) -> Option<String> {
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+        database::get_saved_tenant(conn, &email)
+    } else {
+        None
+    }
+}
+
+/// Clear saved tenant from local DB (on login failure requiring re-selection)
+#[tauri::command]
+pub fn clear_saved_tenant(
+    db_state: State<'_, Mutex<DatabaseState>>,
+    email: String
+) -> Result<(), String> {
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+        database::clear_saved_tenant(conn, &email)
+    } else {
+        Ok(()) // No DB connection, nothing to clear
+    }
 }

@@ -131,8 +131,8 @@ function AppContent() {
   }, [handleMouseMoveRight]);
 
   // Auth handlers
-  const handleLogin = async (email: string, password: string) => {
-    const data = await invoke<LoginResponse>('login', { email, password });
+  const handleLogin = async (email: string, password: string, tenantId?: string) => {
+    const data = await invoke<LoginResponse>('login', { email, password, tenantId });
     setCurrentPassword(password);
 
     if (data.force_change_password) {

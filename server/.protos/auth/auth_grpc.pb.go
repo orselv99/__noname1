@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	AuthService_Login_FullMethodName                    = "/auth.AuthService/Login"
+	AuthService_LookupTenantByEmail_FullMethodName      = "/auth.AuthService/LookupTenantByEmail"
 	AuthService_ValidateToken_FullMethodName            = "/auth.AuthService/ValidateToken"
 	AuthService_RefreshToken_FullMethodName             = "/auth.AuthService/RefreshToken"
 	AuthService_CreateUser_FullMethodName               = "/auth.AuthService/CreateUser"
@@ -74,6 +75,7 @@ type AuthServiceClient interface {
 	// 인증 (Authentication)
 	//
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
+	LookupTenantByEmail(ctx context.Context, in *LookupTenantByEmailRequest, opts ...grpc.CallOption) (*LookupTenantByEmailResponse, error)
 	ValidateToken(ctx context.Context, in *ValidateTokenRequest, opts ...grpc.CallOption) (*ValidateTokenResponse, error)
 	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*RefreshTokenResponse, error)
 	//
@@ -159,6 +161,16 @@ func (c *authServiceClient) Login(ctx context.Context, in *LoginRequest, opts ..
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LoginResponse)
 	err := c.cc.Invoke(ctx, AuthService_Login_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) LookupTenantByEmail(ctx context.Context, in *LookupTenantByEmailRequest, opts ...grpc.CallOption) (*LookupTenantByEmailResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LookupTenantByEmailResponse)
+	err := c.cc.Invoke(ctx, AuthService_LookupTenantByEmail_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -613,6 +625,7 @@ type AuthServiceServer interface {
 	// 인증 (Authentication)
 	//
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
+	LookupTenantByEmail(context.Context, *LookupTenantByEmailRequest) (*LookupTenantByEmailResponse, error)
 	ValidateToken(context.Context, *ValidateTokenRequest) (*ValidateTokenResponse, error)
 	RefreshToken(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error)
 	//
@@ -696,6 +709,9 @@ type UnimplementedAuthServiceServer struct{}
 
 func (UnimplementedAuthServiceServer) Login(context.Context, *LoginRequest) (*LoginResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Login not implemented")
+}
+func (UnimplementedAuthServiceServer) LookupTenantByEmail(context.Context, *LookupTenantByEmailRequest) (*LookupTenantByEmailResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LookupTenantByEmail not implemented")
 }
 func (UnimplementedAuthServiceServer) ValidateToken(context.Context, *ValidateTokenRequest) (*ValidateTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ValidateToken not implemented")
@@ -864,6 +880,24 @@ func _AuthService_Login_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).Login(ctx, req.(*LoginRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_LookupTenantByEmail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LookupTenantByEmailRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).LookupTenantByEmail(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_LookupTenantByEmail_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).LookupTenantByEmail(ctx, req.(*LookupTenantByEmailRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1670,6 +1704,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Login",
 			Handler:    _AuthService_Login_Handler,
+		},
+		{
+			MethodName: "LookupTenantByEmail",
+			Handler:    _AuthService_LookupTenantByEmail_Handler,
 		},
 		{
 			MethodName: "ValidateToken",

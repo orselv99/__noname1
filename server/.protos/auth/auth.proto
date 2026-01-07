@@ -17,6 +17,7 @@ service AuthService {
   // 인증 (Authentication)
   //
   rpc Login(LoginRequest) returns (LoginResponse);
+  rpc LookupTenantByEmail(LookupTenantByEmailRequest) returns (LookupTenantByEmailResponse);
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
 
@@ -171,4 +172,18 @@ message LogoutRequest {
 
 message LogoutResponse {
   bool success = 1;
+}
+
+// Tenant lookup by email (for client apps without subdomain)
+message LookupTenantByEmailRequest {
+  string email = 1;
+}
+
+message TenantInfo {
+  string tenant_id = 1;
+  string name = 2;  // Display name for UI
+}
+
+message LookupTenantByEmailResponse {
+  repeated TenantInfo tenants = 1;
 }

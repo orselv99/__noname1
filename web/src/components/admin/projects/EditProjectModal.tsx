@@ -129,7 +129,7 @@ export default function EditProjectModal({ isOpen, onClose, onSuccess, project }
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
           >
             {/* Owner Picker Panel */}
             <UserPickerPanel
@@ -142,6 +142,7 @@ export default function EditProjectModal({ isOpen, onClose, onSuccess, project }
                 setOwnerName(username || id.slice(0, 8) + '...');
               }}
               title="Select Owner"
+              renderInline
             />
 
             {/* Member Picker Panel */}
@@ -158,6 +159,7 @@ export default function EditProjectModal({ isOpen, onClose, onSuccess, project }
               }}
               title="Select Members"
               excludeIds={ownerId ? [ownerId] : []}
+              renderInline
             />
 
             {/* Header */}
