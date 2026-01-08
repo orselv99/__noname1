@@ -45,6 +45,7 @@ message CreateProjectResponse {
 message BatchCreateProjectsRequest {
   string tenant_id = 1;
   repeated CreateProjectRequest requests = 2;
+  string import_mode = 3;
 }
 
 message BatchCreateProjectsResponse {

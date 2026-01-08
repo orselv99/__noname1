@@ -37,7 +37,7 @@ pub fn get_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
   std::fs::create_dir_all(&client_dir)
     .map_err(|e| format!("Failed to create client dir: {}", e))?;
 
-  Ok(client_dir.join("fiery_horizon.db"))
+  Ok(client_dir.join("fiery_horizon_v2.db"))
 }
 
 /// Initialize the SQLite database and create tables
@@ -71,11 +71,8 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Failed to create users table: {}", e))?;
 
-  // Create documents table for AI-processed content
-  // All fields except id, user_id, document_state, visibility_level, group_type, group_id are encrypted (BLOB)
-  // state: 0=UNSPECIFIED, 1=DRAFT, 2=FEEDBACK, 3=PUBLISHED
-  // visibility: 0=UNSPECIFIED, 1=HIDDEN, 2=METADATA, 3=SNIPPET, 4=PUBLIC
-  // group_type: 0=DEPARTMENT, 1=PROJECT, 2=PRIVATE
+  // Create documents table (Core Metadata & Content)
+  // Keeps 'summary' as the USER's active version.
   conn
     .execute(
       "CREATE TABLE IF NOT EXISTS documents (
@@ -87,10 +84,10 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
             group_id TEXT,
             title BLOB,
             content BLOB NOT NULL,
-            embedding BLOB,
             summary BLOB,
-            contributors BLOB,
             size BLOB,
+            current_version INTEGER DEFAULT 0,
+            is_favorite INTEGER DEFAULT 0,
             created_at BLOB,
             updated_at BLOB,
             accessed_at BLOB,
@@ -100,7 +97,85 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Failed to create documents table: {}", e))?;
 
-  // Create document_tags table for tags with evidence paragraphs
+  // MANUAL MIGRATION: Attempt to add columns for existing databases.
+  // We ignore errors (e.g., "duplicate column name") by using .ok()
+  let _ = conn.execute(
+    "ALTER TABLE documents ADD COLUMN current_version INTEGER DEFAULT 0",
+    [],
+  );
+  let _ = conn.execute(
+    "ALTER TABLE documents ADD COLUMN is_favorite INTEGER DEFAULT 0",
+    [],
+  );
+
+  // Create document_deltas table (Versioning)
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS document_deltas (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            delta BLOB NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id)
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create document_deltas table: {}", e))?;
+
+  // Create document_snapshots table (Full Backup)
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS document_snapshots (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            full_content BLOB NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id)
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create document_snapshots table: {}", e))?;
+
+  // Create document_ai_queue table (Task Queue)
+  // status: 0=PENDING, 1=PROCESSING, 2=COMPLETED, 3=FAILED
+  // task_type: 0=ALL, 1=EMBEDDING, 2=SUMMARY, 3=TAGS
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS document_ai_queue (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            task_type INTEGER DEFAULT 0,
+            status INTEGER DEFAULT 0,
+            error_message TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create document_ai_queue table: {}", e))?;
+
+  // Create document_ai_data table (Extracted Data - Read Only / Reset Source)
+  // Stores original AI outputs: embedding, draft summary, draft tags
+  // content_hash: To check if re-extraction is needed
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS document_ai_data (
+            document_id TEXT PRIMARY KEY,
+            content_hash TEXT,
+            embedding BLOB,
+            ai_summary BLOB,
+            ai_tags BLOB,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create document_ai_data table: {}", e))?;
+
+  // Create document_tags table (User Active Tags + Evidence)
   // All fields except id, document_id are encrypted (BLOB)
   conn
     .execute(
@@ -291,7 +366,7 @@ pub fn get_saved_tenant(conn: &Connection, email: &str) -> Option<String> {
     [email],
     |row| row.get(0),
   );
-  
+
   match result {
     Ok(tenant_id) => {
       println!("Debug: Found cached tenant for {}: {}", email, tenant_id);
@@ -306,11 +381,10 @@ pub fn get_saved_tenant(conn: &Connection, email: &str) -> Option<String> {
 
 /// Clear saved tenant for an email (called on login failure to force re-selection)
 pub fn clear_saved_tenant(conn: &Connection, email: &str) -> Result<(), String> {
-  conn.execute(
-    "DELETE FROM users WHERE email = ?1",
-    [email],
-  ).map_err(|e| format!("Failed to clear saved tenant: {}", e))?;
-  
+  conn
+    .execute("DELETE FROM users WHERE email = ?1", [email])
+    .map_err(|e| format!("Failed to clear saved tenant: {}", e))?;
+
   println!("Debug: Cleared cached tenant for: {}", email);
   Ok(())
 }

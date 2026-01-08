@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 pub mod commands;
+pub mod crypto;
 pub mod database;
 pub mod sidecar;
 
@@ -27,7 +28,10 @@ pub fn run() {
       commands::auth::get_saved_tenant,
       commands::auth::clear_saved_tenant,
       commands::auth::change_password,
-      commands::auth::logout
+      commands::auth::logout,
+      commands::documents::save_document,
+      commands::documents::list_documents,
+      commands::documents::get_document
     ])
     .setup(|app| {
       // Kill any existing sidecar processes to prevent orphans on startup

@@ -55,6 +55,7 @@ func (s *server) CreateProject(ctx context.Context, req *pb.CreateProjectRequest
 }
 
 // BatchCreateProjects
+// BatchCreateProjects
 func (s *server) BatchCreateProjects(ctx context.Context, req *pb.BatchCreateProjectsRequest) (*pb.BatchCreateProjectsResponse, error) {
 	tx := s.db.Begin()
 	defer func() {
@@ -66,9 +67,37 @@ func (s *server) BatchCreateProjects(ctx context.Context, req *pb.BatchCreatePro
 	var failureReasons []string
 	var successCount int32
 
+	// Handle import_mode
+	importMode := req.ImportMode
+	if importMode == "" {
+		importMode = "upsert" // Default mode
+	}
+
+	existingNames := make(map[string]bool)
+
+	if importMode == "replace" {
+		// Delete all existing projects for this tenant
+		if err := tx.Where("tenant_id = ?", req.TenantId).Delete(&Project{}).Error; err != nil {
+			tx.Rollback()
+			return nil, status.Errorf(codes.Internal, "failed to clear existing projects: %v", err)
+		}
+	} else {
+		// upsert mode: keep existing, skip duplicates
+		var existingProjs []Project
+		tx.Where("tenant_id = ?", req.TenantId).Find(&existingProjs)
+		for _, p := range existingProjs {
+			existingNames[p.Name] = true
+		}
+	}
+
 	for _, projReq := range req.Requests {
 		if projReq.Name == "" {
 			failureReasons = append(failureReasons, "project name is required")
+			continue
+		}
+
+		// Skip if already exists (upsert mode)
+		if existingNames[projReq.Name] {
 			continue
 		}
 
@@ -89,6 +118,8 @@ func (s *server) BatchCreateProjects(ctx context.Context, req *pb.BatchCreatePro
 			TenantID:               req.TenantId,
 			Name:                   projReq.Name,
 			Description:            projReq.Description,
+			OwnerID:                stringPtr(projReq.OwnerId),
+			MemberIDs:              projReq.MemberIds,
 			ManagerID:              stringPtr(projReq.ManagerId),
 			DefaultVisibilityLevel: visibility,
 			CreatedAt:              time.Now(),
@@ -104,6 +135,8 @@ func (s *server) BatchCreateProjects(ctx context.Context, req *pb.BatchCreatePro
 			}, status.Errorf(codes.Internal, "transaction failed: %v", err)
 		}
 
+		// Update locally to prevent duplicates within the same batch
+		existingNames[proj.Name] = true
 		successCount++
 	}
 

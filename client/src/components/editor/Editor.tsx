@@ -6,7 +6,9 @@ import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { useEffect, useState } from 'react';
-import { ChevronDown, Eye, EyeOff, FileText, Globe, FilePen, MessageSquareText, FileCheck } from 'lucide-react';
+import { useDocumentStore } from '../../stores/documentStore';
+import { FileText, Save, Star, MoreHorizontal } from 'lucide-react';
+import { SaveDocumentRequest, GroupType, DocumentState, VisibilityLevel } from '../../types';
 
 const colors = ['#958DF1', '#F98181', '#FBBC88', '#FAF594', '#70CFF8', '#94FADB', '#B9F18D'];
 
@@ -86,6 +88,7 @@ export const CollaborativeEditor = () => {
 
 
 const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProvider }) => {
+  const { fetchDocuments, activeTabId, documents, toggleFavorite } = useDocumentStore();
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -107,6 +110,42 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
   const [aiResult, setAiResult] = useState<any>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [title, setTitle] = useState('');
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load content when active tab changes
+  useEffect(() => {
+    if (!editor) return;
+
+    if (activeTabId) {
+      const doc = documents.find(d => d.id === activeTabId);
+      if (doc) {
+        setTitle(doc.title);
+        setIsFavorite(!!doc.is_favorite);
+
+        let gName = 'Unknown';
+        if (doc.group_type === GroupType.Private) gName = 'Private';
+        else if (doc.group_type === GroupType.Project) gName = 'Project'; // Simplify for now
+        else if (doc.group_type === GroupType.Department) gName = 'Department';
+        setGroupName(gName);
+
+        // Only set content if it's different to prevent cursor jumps or loops
+        // For simplicity in this prototype, just set it. 
+        // In real app, check if different.
+        if (editor.getHTML() !== doc.content) {
+          editor.commands.setContent(doc.content);
+        }
+      }
+    } else {
+      // Clear editor if no active tab
+      setTitle('');
+      // Check if not empty to avoid unnecessary updates
+      if (editor.getText().trim() !== '') {
+        editor.commands.clearContent();
+      }
+    }
+  }, [activeTabId, documents, editor]);
 
   // NOTE: Metadata state has been moved to RightSidebar (conceptually)
   // In a real app, we would sync state via Context or lifting state up.
@@ -131,8 +170,75 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
     }
   };
 
+  const handleSave = async () => {
+    if (!editor) return;
+    const content = editor.getHTML();
+    setTitle((prev) => prev.trim() || 'Untitled');
+    const finalTitle = title.trim() || 'Untitled';
+
+    setIsSaving(true);
+    try {
+      // Use activeTabId if available (update), otherwise create new
+      const req: SaveDocumentRequest = {
+        id: activeTabId || undefined,
+        title: finalTitle,
+        content: content,
+        // summary will be auto-generated or managed separately
+        group_type: GroupType.Private,
+        document_state: DocumentState.Draft,
+        visibility_level: VisibilityLevel.Hidden
+      };
+      await invoke('save_document', { req });
+      console.log('Document saved successfully');
+      // Update global store
+      await fetchDocuments();
+    } catch (e) {
+      console.error('Failed to save document:', e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (activeTabId) {
+      await toggleFavorite(activeTabId);
+    }
+  };
+
+  if (!activeTabId) {
+    return (
+      <div className="flex flex-col h-full bg-zinc-900 items-center justify-center text-zinc-500">
+        <FileText size={48} className="mb-4 opacity-20" />
+        <p>Select a document to edit</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-zinc-900 relative">
+      <div className="flex items-center justify-end p-2 relative">
+        <div className="flex items-center absolute left-4 top-4 text-xs text-zinc-500 font-mono">
+          {groupName} <span className="mx-2 text-zinc-500">&gt;</span> <span className="text-zinc-500">{title || 'Untitled'}</span>
+        </div>
+
+        <div className="flex items-center">
+          {/* Right-aligned actions */}
+          <button
+            onClick={handleToggleFavorite}
+            className={`p-1.5 rounded transition-colors ${isFavorite ? 'text-yellow-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+            title="Toggle Favorite"
+          >
+            <Star size={18} fill={isFavorite ? "currentColor" : "none"} />
+          </button>
+
+          <button
+            className="p-1.5 rounded transition-colors text-zinc-500 hover:text-zinc-300 ml-1"
+            title="More Actions"
+          >
+            <MoreHorizontal size={18} />
+          </button>
+        </div>
+      </div>
 
       {/* Document Title (Optional, Obsidian puts it in header or file) */}
       <div className="px-8 pt-6 pb-2">
@@ -169,6 +275,17 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
         <div className="h-4 w-px bg-zinc-800 mx-2" />
 
         <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className={`p-1.5 rounded transition-colors ${isSaving ? 'text-zinc-600' : 'text-green-500 hover:bg-green-500/20 hover:text-green-400'}`}
+          title="Save (Ctrl+S)"
+        >
+          <Save size={18} />
+        </button>
+
+        <div className="h-4 w-px bg-zinc-800 mx-2" />
+
+        <button
           onClick={handleAiExtraction}
           disabled={isExtracting}
           className={`text-xs font-medium transition-colors ${isExtracting
@@ -185,13 +302,15 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
         <EditorContent editor={editor} className="prose prose-invert max-w-none h-full outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[200px] text-lg leading-relaxed text-zinc-300" />
       </div>
 
-      {aiResult && (
-        <div className="mx-8 mb-4 p-4 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-400 max-h-40 overflow-auto">
-          <h4 className="text-zinc-500 font-bold mb-2">AI Extraction Result:</h4>
-          <pre className="whitespace-pre-wrap">{JSON.stringify(aiResult, null, 2)}</pre>
-        </div>
-      )}
-    </div>
+      {
+        aiResult && (
+          <div className="mx-8 mb-4 p-4 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-400 max-h-40 overflow-auto">
+            <h4 className="text-zinc-500 font-bold mb-2">AI Extraction Result:</h4>
+            <pre className="whitespace-pre-wrap">{JSON.stringify(aiResult, null, 2)}</pre>
+          </div>
+        )
+      }
+    </div >
   );
 };
 

@@ -58,25 +58,28 @@ func (h *ProjectHandler) BatchCreateProjects(c *gin.Context) {
 		return
 	}
 
-	var items []pb.CreateProjectRequest
-	if err := c.ShouldBindJSON(&items); err != nil {
+	var body struct {
+		Requests   []pb.CreateProjectRequest `json:"requests"`
+		ImportMode string                    `json:"import_mode"` // "replace" or "upsert"
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	var pbRequests []*pb.CreateProjectRequest
-	for _, item := range items {
-		val := item
-		val.TenantId = tenantID
-		pbRequests = append(pbRequests, &val)
+	for i := range body.Requests {
+		body.Requests[i].TenantId = tenantID
+		pbRequests = append(pbRequests, &body.Requests[i])
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	resp, err := h.client.BatchCreateProjects(ctx, &pb.BatchCreateProjectsRequest{
-		TenantId: tenantID,
-		Requests: pbRequests,
+		TenantId:   tenantID,
+		Requests:   pbRequests,
+		ImportMode: body.ImportMode,
 	})
 
 	if err != nil {

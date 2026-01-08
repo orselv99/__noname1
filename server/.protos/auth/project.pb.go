@@ -312,6 +312,7 @@ type BatchCreateProjectsRequest struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
 	TenantId      string                  `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	Requests      []*CreateProjectRequest `protobuf:"bytes,2,rep,name=requests,proto3" json:"requests,omitempty"`
+	ImportMode    string                  `protobuf:"bytes,3,opt,name=import_mode,json=importMode,proto3" json:"import_mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -358,6 +359,13 @@ func (x *BatchCreateProjectsRequest) GetRequests() []*CreateProjectRequest {
 		return x.Requests
 	}
 	return nil
+}
+
+func (x *BatchCreateProjectsRequest) GetImportMode() string {
+	if x != nil {
+		return x.ImportMode
+	}
+	return ""
 }
 
 type BatchCreateProjectsResponse struct {
@@ -1017,10 +1025,12 @@ const file_auth_project_proto_rawDesc = "" +
 	"\x18default_visibility_level\x18\x06 \x01(\x0e2\x15.auth.VisibilityLevelR\x16defaultVisibilityLevel\x12\x0e\n" +
 	"\x02id\x18\a \x01(\tR\x02id\"@\n" +
 	"\x15CreateProjectResponse\x12'\n" +
-	"\aproject\x18\x01 \x01(\v2\r.auth.ProjectR\aproject\"q\n" +
+	"\aproject\x18\x01 \x01(\v2\r.auth.ProjectR\aproject\"\x92\x01\n" +
 	"\x1aBatchCreateProjectsRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x126\n" +
-	"\brequests\x18\x02 \x03(\v2\x1a.auth.CreateProjectRequestR\brequests\"\x90\x01\n" +
+	"\brequests\x18\x02 \x03(\v2\x1a.auth.CreateProjectRequestR\brequests\x12\x1f\n" +
+	"\vimport_mode\x18\x03 \x01(\tR\n" +
+	"importMode\"\x90\x01\n" +
 	"\x1bBatchCreateProjectsResponse\x12#\n" +
 	"\rsuccess_count\x18\x01 \x01(\x05R\fsuccessCount\x12#\n" +
 	"\rfailure_count\x18\x02 \x01(\x05R\ffailureCount\x12'\n" +

@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useDocumentStore } from '../../stores/documentStore';
+import { Document, GroupType } from '../../types';
 import {
   ChevronDown,
   ChevronRight,
@@ -51,9 +53,6 @@ interface DocumentGroup {
 }
 
 interface DocumentListProps {
-  onSelectDocument?: (docId: string) => void;
-  selectedDocumentId?: string;
-  mode?: SidebarMode;
 }
 
 type DropPosition = 'top' | 'bottom' | 'inside';
@@ -384,48 +383,39 @@ function SortableGroup({
 }
 
 export const DocumentList = ({
-  onSelectDocument,
-  selectedDocumentId,
-  mode = 'folder'
 }: DocumentListProps) => {
   // --- State ---
-  const [groups, setGroups] = useState<DocumentGroup[]>([
-    {
-      id: 'dept-1',
-      name: 'Engineering Dept',
-      type: 'department',
-      expanded: true,
-      items: [
-        { id: 'doc-1', title: 'Onboarding Guide', path: '', isFavorite: true, children: [] },
-        {
-          id: 'doc-2', title: 'Tech Stack', path: '', isFavorite: false, expanded: true, children: [
-            { id: 'doc-2-1', title: 'Frontend (React)', path: '', children: [] },
-            { id: 'doc-2-2', title: 'Backend (Go)', path: '', children: [] }
-          ]
-        },
-      ]
-    },
-    {
-      id: 'proj-1',
-      name: 'Project Phoenix',
-      type: 'project',
-      expanded: true,
-      items: [
-        { id: 'doc-p1-1', title: 'Project Plan', path: '', children: [] },
-        { id: 'doc-p1-2', title: 'Meeting Notes', path: '', children: [] },
-      ]
-    },
-    {
-      id: 'proj-2',
-      name: 'Marketing Campaign',
-      type: 'project',
-      expanded: false,
-      items: [
-        { id: 'doc-p2-1', title: 'Q1 Strategy', path: '', children: [] },
-        { id: 'doc-p2-2', title: 'Assets Links', path: '', children: [] },
-      ]
-    }
-  ]);
+  const { documents, createDocument, fetchDocuments, addTab, activeTabId } = useDocumentStore();
+
+  // State for real groups
+  const [groups, setGroups] = useState<DocumentGroup[]>([]);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
+  // Sync store documents to groups
+  useEffect(() => {
+    // Group documents
+    const privateDocs = documents.filter(d => d.group_type === GroupType.Private);
+    // const deptDocs = documents.filter(d => d.group_type === GroupType.Department);
+
+    const newGroups: DocumentGroup[] = [
+      {
+        id: 'private',
+        name: 'Private Documents',
+        type: 'department', // Reusing type for icon
+        expanded: true,
+        items: privateDocs.map(d => ({
+          id: d.id,
+          title: d.title,
+          path: '',
+          children: []
+        }))
+      }
+    ];
+    setGroups(newGroups);
+  }, [documents]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewDocDialog, setShowNewDocDialog] = useState(false);
@@ -470,27 +460,14 @@ export const DocumentList = ({
   };
 
   const handleAddSubPage = (groupId: string, parentId?: string) => {
-    const newDoc: DocumentItem = {
-      id: `doc-${Date.now()}`,
-      title: 'Untitled',
-      path: '',
-      children: [],
-      expanded: true
-    };
+    // Determine GroupType based on groupId (simplified for now)
+    // In real app, groupId would map to a type.
+    // For 'private' group, use GroupType.Private
+    const groupType = groupId === 'private' ? GroupType.Private : GroupType.Project; // Default fallback
 
-    setGroups(prev => prev.map(g => {
-      if (g.id !== groupId) return g;
-      if (!parentId) return { ...g, items: [...g.items, newDoc] };
-
-      const add = (items: DocumentItem[]): DocumentItem[] => {
-        return items.map(i => {
-          if (i.id === parentId) return { ...i, expanded: true, children: [...(i.children || []), newDoc] };
-          if (i.children) return { ...i, children: add(i.children) };
-          return i;
-        });
-      }
-      return { ...g, items: add(g.items) };
-    }));
+    // We don't need to manually update local state 'groups' here because
+    // createDocument will update the store, and the useEffect[documents] will update 'groups'
+    createDocument('Untitled', parentId || undefined, groupType);
   };
 
   const handleOpenGroupSettings = (groupId: string) => {
@@ -660,8 +637,11 @@ export const DocumentList = ({
                 key={group.id}
                 group={group}
                 onToggle={toggleGroup}
-                onSelectDocument={onSelectDocument}
-                selectedDocumentId={selectedDocumentId}
+                onSelectDocument={(id) => {
+                  const doc = documents.find(d => d.id === id);
+                  if (doc) addTab(doc);
+                }}
+                selectedDocumentId={activeTabId || undefined}
                 onToggleExpandInfo={toggleExpandItem}
                 onAddSubPage={handleAddSubPage}
                 onOpenGroupSettings={handleOpenGroupSettings}

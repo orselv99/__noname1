@@ -1,17 +1,13 @@
 // AI commands module for document processing
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
-};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rusqlite::Connection;
-use sha2::{Digest, Sha256};
 use std::sync::Mutex;
 use tauri::State;
 use uuid::Uuid;
 
 use crate::commands::auth::AuthState;
 use crate::database::DatabaseState;
+use crate::crypto::{self, encrypt_content, decrypt_content}; // Import from crypto
+use sha2::{Digest, Sha256}; // Re-add for hashing content
 
 // ============================================================================
 // Types and Responses
@@ -40,57 +36,7 @@ pub struct ExtractInfoResult {
     pub tags: Vec<DocumentTag>,
 }
 
-// ============================================================================
-// AES Encryption Helpers
-// ============================================================================
-
-/// Derive a 256-bit key from user_id using SHA-256
-fn derive_key(user_id: &str) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(user_id.as_bytes());
-    hasher.finalize().into()
-}
-
-/// Encrypt text using AES-256-GCM with user_id derived key
-fn encrypt_content(user_id: &str, plaintext: &str) -> Result<Vec<u8>, String> {
-    let key = derive_key(user_id);
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
-
-    // Generate random nonce (12 bytes)
-    let nonce_bytes: [u8; 12] = rand::random();
-    let nonce = Nonce::from_slice(&nonce_bytes);
-
-    let ciphertext = cipher
-        .encrypt(nonce, plaintext.as_bytes())
-        .map_err(|e| format!("Encryption failed: {}", e))?;
-
-    // Prepend nonce to ciphertext for later decryption
-    let mut result = nonce_bytes.to_vec();
-    result.extend(ciphertext);
-    Ok(result)
-}
-
-/// Decrypt content using AES-256-GCM with user_id derived key
-pub fn decrypt_content(user_id: &str, encrypted: &[u8]) -> Result<String, String> {
-    if encrypted.len() < 12 {
-        return Err("Invalid encrypted data".to_string());
-    }
-
-    let key = derive_key(user_id);
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
-
-    let nonce = Nonce::from_slice(&encrypted[..12]);
-    let ciphertext = &encrypted[12..];
-
-    let plaintext = cipher
-        .decrypt(nonce, ciphertext)
-        .map_err(|e| format!("Decryption failed: {}", e))?;
-
-    String::from_utf8(plaintext).map_err(|e| format!("Invalid UTF-8: {}", e))
-}
-
+// Encryption logic moved to crypto.rs
 // ============================================================================
 // Embedding Helpers
 // ============================================================================
@@ -205,6 +151,50 @@ pub enum GroupType {
     Private = 2,
 }
 
+
+/// Calculate SHA-256 hash of content for change detection
+fn calculate_content_hash(content: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+/// Check if we already have AI data for this content hash
+fn check_existing_ai_data(
+    conn: &Connection,
+    document_id: &str,
+    content_hash: &str,
+    user_id: &str,
+) -> Result<Option<(String, Vec<DocumentTag>)>, String> {
+    let mut stmt = conn.prepare(
+        "SELECT ai_summary, ai_tags FROM document_ai_data 
+         WHERE document_id = ?1 AND content_hash = ?2"
+    ).map_err(|e| e.to_string())?;
+
+    let exists = stmt.exists([document_id, content_hash])
+        .map_err(|e| e.to_string())?;
+
+    if exists {
+        let (summary_blob, tags_blob): (Option<Vec<u8>>, Option<Vec<u8>>) = stmt.query_row(
+            [document_id, content_hash], 
+            |row| Ok((row.get(0)?, row.get(1)?))
+        ).map_err(|e| e.to_string())?;
+
+        let summary = summary_blob
+            .and_then(|b| decrypt_content(user_id, &b).ok())
+            .unwrap_or_default();
+            
+        let tags: Vec<DocumentTag> = tags_blob
+            .and_then(|b| decrypt_content(user_id, &b).ok())
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+
+        return Ok(Some((summary, tags)));
+    }
+
+    Ok(None)
+}
+
 fn save_document(
     conn: &Connection,
     user_id: &str,
@@ -213,9 +203,7 @@ fn save_document(
     group_id: Option<&str>,
     title: Option<&[u8]>,
     content: &[u8],
-    embedding: &[u8],
-    summary: Option<&[u8]>,
-    contributors: Option<&[u8]>,
+    summary: Option<&[u8]>, // User active summary
     size: &[u8],
     created_at: &[u8],
     document_state: DocumentState,
@@ -224,8 +212,13 @@ fn save_document(
     conn.execute(
         "INSERT INTO documents (
             id, user_id, document_state, visibility_level, group_type, group_id,
-            title, content, embedding, summary, contributors, size, created_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            title, content, summary, size, created_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        ON CONFLICT(id) DO UPDATE SET
+            title = excluded.title,
+            content = excluded.content,
+            summary = excluded.summary, 
+            updated_at = CURRENT_TIMESTAMP", // Simple update for AI flow
         rusqlite::params![
             doc_id,
             user_id,
@@ -235,14 +228,48 @@ fn save_document(
             group_id,
             title,
             content,
-            embedding,
             summary,
-            contributors,
             size,
             created_at
         ],
     )
     .map_err(|e| format!("Failed to save document: {}", e))?;
+    Ok(())
+}
+
+fn save_ai_data(
+    conn: &Connection,
+    document_id: &str,
+    content_hash: &str,
+    user_id: &str,
+    embedding: &[u8],
+    summary: Option<&str>,
+    tags: &[DocumentTag],
+) -> Result<(), String> {
+    let summary_enc = summary.map(|s| encrypt_content(user_id, s)).transpose()?;
+    
+    let tags_json = serde_json::to_string(tags).map_err(|e| e.to_string())?;
+    let tags_enc = encrypt_content(user_id, &tags_json)?;
+
+    conn.execute(
+        "INSERT INTO document_ai_data (
+            document_id, content_hash, embedding, ai_summary, ai_tags
+        ) VALUES (?1, ?2, ?3, ?4, ?5)
+        ON CONFLICT(document_id) DO UPDATE SET
+            content_hash = excluded.content_hash,
+            embedding = excluded.embedding,
+            ai_summary = excluded.ai_summary,
+            ai_tags = excluded.ai_tags,
+            updated_at = CURRENT_TIMESTAMP",
+        rusqlite::params![
+            document_id,
+            content_hash,
+            embedding,
+            summary_enc,
+            tags_enc
+        ],
+    ).map_err(|e| format!("Failed to save AI data: {}", e))?;
+
     Ok(())
 }
 
@@ -252,6 +279,10 @@ fn save_document_tags(
     user_id: &str,
     tags: &[DocumentTag],
 ) -> Result<(), String> {
+    // Clear existing tags first (full replace strategy for active tags)
+    conn.execute("DELETE FROM document_tags WHERE document_id = ?1", [document_id])
+        .map_err(|e| format!("Failed to clear tags: {}", e))?;
+
     for tag in tags {
         let tag_id = Uuid::new_v4().to_string();
         
@@ -298,6 +329,26 @@ pub async fn extract_info(
         let auth = auth_state.lock().unwrap();
         auth.user_id.clone().ok_or("Not authenticated")?
     };
+
+    // Calculate content hash
+    let content_hash = calculate_content_hash(&text);
+    
+    // Check for existing AI data (Optimization)
+    let doc_id = Uuid::new_v4().to_string(); // In real app, we might want to pass ID or reuse it
+    
+    // NOTE: In a 'save' flow, we usually know the ID. 
+    // If this is just 'extract_info', we are generating a draft.
+    // However, if we want to check PREVIOUSLY generated data for the SAME content, we need to query by content_hash OR doc_id?
+    // Since this is a specialized extract command, let's check the DB.
+    
+    {
+        let db = db_state.lock().unwrap();
+        if let Some(ref conn) = db.conn {
+             // We can check if ANY document (or maybe specifically THIS document if ID was passed) has this hash.
+             // For now, let's assume we are creating a new doc or updating one. 
+             // If the user wants to "extract", we check if we already have it.
+        }
+    }
 
     // 1. Generate embedding
     let chunk_size = 2000;
@@ -394,12 +445,17 @@ pub async fn extract_info(
     let created_at_enc = encrypt_content(&user_id, &now)?;
 
     // 4. Save to database
-    let doc_id = Uuid::new_v4().to_string();
     let embedding_bytes = embedding_to_bytes(&normalized_vector);
 
     {
         let db = db_state.lock().unwrap();
         if let Some(ref conn) = db.conn {
+            // Check optimization again inside lock or just proceed (locking scope is small)
+            
+            // A. Save Draft/AI Data
+            save_ai_data(conn, &doc_id, &content_hash, &user_id, &embedding_bytes, Some(&summary), &tags)?;
+
+            // B. Save Active Document (User Visible)
             save_document(
                 conn,
                 &user_id,
@@ -408,14 +464,14 @@ pub async fn extract_info(
                 None, // group_id
                 title_enc.as_deref(),
                 &content_enc,
-                &embedding_bytes,
-                summary_enc.as_deref(),
-                None, // contributors
+                summary_enc.as_deref(), // Copy AI summary to Active User Summary
                 &size_enc,
                 &created_at_enc,
                 DocumentState::Draft,
                 VisibilityLevel::Hidden,
             )?;
+            
+            // C. Save Active Tags (User Visible)
             save_document_tags(conn, &doc_id, &user_id, &tags)?;
         } else {
             return Err("Database not initialized".to_string());
@@ -431,20 +487,4 @@ pub async fn extract_info(
     })
 }
 
-// Random number generation for nonce
-mod rand {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    
-    pub fn random<const N: usize>() -> [u8; N] {
-        let mut result = [0u8; N];
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        
-        for (i, byte) in result.iter_mut().enumerate() {
-            *byte = ((seed >> (i * 8)) & 0xFF) as u8;
-        }
-        result
-    }
-}
+// rand module removed

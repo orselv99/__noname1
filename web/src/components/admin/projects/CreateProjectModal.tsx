@@ -6,6 +6,7 @@ import { AnimatePresence } from 'framer-motion';
 import Papa from 'papaparse';
 import { MotionDiv } from '../ui/Motion';
 import UserPickerPanel, { UserData } from '../ui/UserPickerPanel';
+import { useLanguage } from '@/context/LanguageContext';
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface CreateProjectModalProps {
 
 
 export default function CreateProjectModal({ isOpen, onClose, onSuccess }: CreateProjectModalProps) {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
 
   // Single Create States
@@ -35,6 +37,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<any[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [importMode, setImportMode] = useState<'upsert' | 'replace'>('upsert');
 
   // Common
   const [isLoading, setIsLoading] = useState(false);
@@ -107,15 +110,31 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
       // Transform CSV Data with user lookup
       const requests = [];
       for (const row of csvPreview) {
-        const rowName = row.name || row.Name;
+        let rowName = row['name'];
+        let rowDesc = row['description'];
+        let rowOwner = row['owner'];
+        let rowMembers = row['members'];
+
+        // Handle "Single Column" edge case where the entire line is quoted
+        const compositeKey = Object.keys(row).find(k => k.includes('name') && k.includes('description'));
+        if (!rowName && compositeKey) {
+          const val = row[compositeKey];
+          if (typeof val === 'string') {
+            const parts = val.split(',');
+            if (parts.length >= 1) rowName = parts[0].trim();
+            if (parts.length >= 2) rowDesc = parts[1].trim();
+            if (parts.length >= 3) rowOwner = parts[2].trim();
+            if (parts.length >= 4) rowMembers = parts[3].trim();
+          }
+        }
+
         if (!rowName) continue;
 
         // Lookup owner by email/username
-        const ownerIdentifier = row.owner || row.Owner || '';
-        const resolvedOwnerId = await lookupUser(ownerIdentifier);
+        const resolvedOwnerId = await lookupUser(rowOwner || '');
 
         // Parse and lookup members
-        const membersRaw = row.members || row.Members || '';
+        const membersRaw = rowMembers || '';
         const memberIdentifiers = membersRaw
           .split(/[|;]/)
           .map((id: string) => id.trim())
@@ -124,7 +143,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
 
         requests.push({
           name: rowName,
-          description: row.description || row.Description || '',
+          description: rowDesc || '',
           owner_id: resolvedOwnerId,
           member_ids: resolvedMemberIds.length > 0 ? resolvedMemberIds : undefined,
           default_visibility_level: 1
@@ -137,7 +156,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
         return;
       }
 
-      await batchCreateProjects(requests);
+      await batchCreateProjects(requests, importMode);
 
       onSuccess({ bulkCount: requests.length });
       onClose();
@@ -149,14 +168,19 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
     }
   };
 
-  const batchCreateProjects = async (items: any[]) => {
+  const batchCreateProjects = async (items: any[], mode: string) => {
     const res = await fetch('/api/v1/projects/batch', {
       method: 'POST',
       headers,
-      body: JSON.stringify(items),
+      body: JSON.stringify({
+        requests: items,
+        import_mode: mode
+      }),
     });
 
     const data = await res.json();
+
+    console.log('batchCreateProjects', data);
 
     if (!res.ok) {
       throw new Error(data.error || 'Failed to batch create projects');
@@ -189,6 +213,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (h) => h.trim().toLowerCase().replace(/^[\uFEFF\u200B"']+|["']+$/g, ''),
       complete: (results) => {
         setCsvPreview(results.data);
         setError('');
@@ -218,6 +243,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
     setShowMemberPicker(false);
     setCsvFile(null);
     setCsvPreview([]);
+    setImportMode('upsert');
     setActiveTab('single');
     setError('');
   };
@@ -440,6 +466,62 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
                 </form>
               ) : (
                 <div className="space-y-4">
+                  {/* Import Mode Selection */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-400">Import Mode</label>
+                    <div className="flex bg-zinc-800/50 p-1 rounded-lg border border-zinc-700/50">
+                      <label
+                        className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-md cursor-pointer transition-all ${importMode === 'upsert'
+                          ? 'bg-blue-600 shadow-lg ring-1 ring-blue-500'
+                          : 'hover:bg-zinc-700/50 text-gray-400'
+                          }`}
+                      >
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="upsert"
+                          checked={importMode === 'upsert'}
+                          onChange={() => setImportMode('upsert')}
+                          className="hidden"
+                        />
+                        <span className={`text-xs font-semibold ${importMode === 'upsert' ? 'text-white' : 'text-gray-300'}`}>
+                          Upsert
+                        </span>
+                        <span className={`text-[10px] mt-0.5 ${importMode === 'upsert' ? 'text-blue-200' : 'text-gray-500'}`}>
+                          Update existing entries, create new ones
+                        </span>
+                      </label>
+
+                      <label
+                        className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-md cursor-pointer transition-all ml-1 ${importMode === 'replace'
+                          ? 'bg-red-600 shadow-lg ring-1 ring-red-500'
+                          : 'hover:bg-zinc-700/50 text-gray-400'
+                          }`}
+                      >
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="replace"
+                          checked={importMode === 'replace'}
+                          onChange={() => setImportMode('replace')}
+                          className="hidden"
+                        />
+                        <span className={`text-xs font-semibold ${importMode === 'replace' ? 'text-white' : 'text-gray-300'}`}>
+                          Replace
+                        </span>
+                        <span className={`text-[10px] mt-0.5 ${importMode === 'replace' ? 'text-red-200' : 'text-gray-500'}`}>
+                          Delete ALL existing, then import
+                        </span>
+                      </label>
+                    </div>
+                    {importMode === 'replace' && (
+                      <div className="mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                        <AlertCircle size={14} />
+                        Warning: This will delete all existing projects!
+                      </div>
+                    )}
+                  </div>
+
                   {/* Download Template */}
                   <div className="flex justify-end">
                     <button
@@ -454,28 +536,47 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
 
                   {/* Drag & Drop Zone */}
                   <div
-                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                    onDragLeave={() => setIsDragging(false)}
+                    className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-gray-400 transition-colors bg-zinc-800/50 ${isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:border-zinc-500'
+                      }`}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                    }}
                     onDrop={(e) => {
                       e.preventDefault();
                       setIsDragging(false);
                       const file = e.dataTransfer.files[0];
-                      if (file) processFile(file);
+                      if (file && file.type === 'text/csv' || file?.name.endsWith('.csv')) {
+                        processFile(file);
+                      } else {
+                        setError('Please upload a valid CSV file.');
+                      }
                     }}
-                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${isDragging ? 'border-blue-500 bg-blue-500/5' : 'border-zinc-700 hover:border-zinc-600'
-                      }`}
+
                   >
-                    <Upload className="mx-auto mb-3 text-gray-500" size={40} />
-                    <p className="text-gray-400 mb-2">Drag & drop CSV file here</p>
-                    <p className="text-gray-500 text-sm mb-4">or</p>
-                    <label className="cursor-pointer inline-block">
-                      <input type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
-                      <span className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg transition-colors text-sm">
-                        Browse Files
-                      </span>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="csv-upload"
+                    />
+
+                    <label htmlFor="csv-upload" className="cursor-pointer flex flex-col items-center w-full h-full">
+                      <Upload size={32} className="mb-2" />
+                      <span className="text-sm font-medium">{t.admin.departments.create.bulk.drag_drop}</span>
+                      <span className="text-xs text-gray-500 mt-1 center text-center">Headers: name, description, owner, members</span>
                     </label>
+
                     {csvFile && (
-                      <p className="mt-4 text-sm text-blue-400">{csvFile.name} ({csvPreview.length} rows)</p>
+                      <div className="text-sm text-gray-300 flex items-center gap-2 mt-2">
+                        <FileType size={16} />
+                        {csvFile.name} ({csvPreview.length} rows)
+                      </div>
                     )}
                   </div>
 
@@ -483,8 +584,8 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
                   <div className="text-xs text-gray-500 bg-zinc-800/50 rounded-lg p-3">
                     <p className="font-medium text-gray-400 mb-1">CSV Format:</p>
                     <code className="text-blue-400">name,description,owner,members</code>
-                    <p className="mt-2">• <strong>owner</strong>: User email or username (will be looked up)</p>
-                    <p>• <strong>members</strong>: Multiple emails/usernames separated by <code>|</code> or <code>;</code></p>
+                    <p className="mt-2">• <strong>owner</strong>: User email or username</p>
+                    <p>• <strong>members</strong>: Emails/users separated by <code>|</code> or <code>;</code></p>
                   </div>
 
                   {/* Preview */}
@@ -505,9 +606,9 @@ export default function CreateProjectModal({ isOpen, onClose, onSuccess }: Creat
                           <tbody>
                             {csvPreview.slice(0, 5).map((row, i) => (
                               <tr key={i} className="border-t border-zinc-800">
-                                <td className="px-4 py-2 text-gray-300">{row.name || row.Name}</td>
-                                <td className="px-4 py-2 text-gray-400">{row.owner || row.Owner || '-'}</td>
-                                <td className="px-4 py-2 text-gray-400">{row.members || row.Members || '-'}</td>
+                                <td className="px-4 py-2 text-gray-300">{row.name || '-'}</td>
+                                <td className="px-4 py-2 text-gray-400">{row.owner || '-'}</td>
+                                <td className="px-4 py-2 text-gray-400">{row.members || '-'}</td>
                               </tr>
                             ))}
                           </tbody>
