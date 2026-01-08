@@ -28,6 +28,7 @@ rusqlite = { version = "0.32", features = ["bundled", "blob"] }
 bcrypt = "0.16"
 aes-gcm = "0.10"
 uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 sha2 = "0.10"
 urlencoding = "2"

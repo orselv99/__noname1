@@ -22,6 +22,8 @@ import { useEffect, useState } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { FileText, Star, Save, MoreVertical } from 'lucide-react';
 import { EditorToolbar } from './EditorToolbar';
+import { Document } from '../../types';
+import { useToast } from '../Toast';
 
 const colors = ['#958DF1', '#F98181', '#FBBC88', '#FAF594', '#70CFF8', '#94FADB', '#B9F18D'];
 
@@ -61,6 +63,7 @@ export const CollaborativeEditor = () => {
 
 
 const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProvider }) => {
+  const { showToast } = useToast();
   const { fetchDocuments, activeTabId, documents, highlightedEvidence, toggleFavorite, updateDocument, setAiAnalysisStatus } = useDocumentStore();
   const activeDoc = documents.find(d => d.id === activeTabId);
   const editor = useEditor({
@@ -108,6 +111,7 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
   const [, setAiResult] = useState<any>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [title, setTitle] = useState('');
+  const [isDirty, setIsDirty] = useState(false);
 
   // Load content when active tab changes
   useEffect(() => {
@@ -117,25 +121,46 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
       const doc = documents.find(d => d.id === activeTabId);
       if (doc) {
         setTitle(doc.title);
-        // setIsFavorite and setGroupName logic removed as internal state is no longer used in Editor
-
-        // Only set content if it's different to prevent cursor jumps or loops
-        // For simplicity in this prototype, just set it. 
-        // In real app, check if different.
         if (editor && activeTabId) {
-          // Simple check to avoid reset if content is "same"
-          // ...
-          // For now, force set content on tab switch
-          editor.commands.setContent(doc.content);
+          // Force set content on tab switch and resetting dirty state
+          editor.commands.setContent(doc.content, true);
+          // Set dirty to false strictly after content load
+          setIsDirty(false);
         }
       }
     } else {
       setTitle('Untitled');
       if (editor) {
         editor.commands.clearContent();
+        setIsDirty(false);
       }
     }
   }, [activeTabId, documents, editor]);
+
+  // Track changes
+  useEffect(() => {
+    if (!editor) return;
+
+    editor.on('update', () => {
+      setIsDirty(true);
+    });
+
+    return () => {
+      editor.off('update');
+    }
+  }, [editor]);
+
+  // Keyboard Shortcuts (Ctrl+S)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editor, activeTabId, activeDoc, title, isDirty]); // Dependencies for handleSave
 
   // Handle highlighting evidence from MetadataPanel
   useEffect(() => {
@@ -286,29 +311,30 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
 
     try {
       const content = editor.getHTML();
-      const updatedDoc = {
-        ...activeDoc,
+
+      const req = {
+        id: activeTabId,
         title: title,
         content: content,
+        group_type: activeDoc.group_type || 2,
+        group_id: activeDoc.group_id, // Ensure group_id is passed
+        parent_id: activeDoc.parent_id, // Preserve parent_id
+        document_state: activeDoc.document_state || 1,
+        visibility_level: activeDoc.visibility_level || 1,
+        is_favorite: activeDoc.is_favorite || false,
       };
 
-      await invoke('save_document', {
-        req: {
-          id: activeTabId,
-          title: title,
-          content: content,
-          group_type: activeDoc.group_type || 2,
-          document_state: activeDoc.document_state || 1,
-          visibility_level: activeDoc.visibility_level || 1,
-          is_favorite: activeDoc.is_favorite || false,
-        }
-      });
+      const savedDoc = await invoke<Document>('save_document', { req });
 
-      // 저장 성공 후 스토어 업데이트
-      updateDocument(updatedDoc);
-      console.log('Document saved and synced successfully');
+      // 저장 성공 후 스토어 업데이트 (서버 응답 사용)
+      // 서버에서 계산된 updated_at, size 등이 포함된 savedDoc으로 업데이트해야 형상이 동기화됨.
+      updateDocument(savedDoc);
+      setIsDirty(false); // Reset dirty state on save
+      showToast('저장되었습니다.', 'success');
+      console.log('Document saved and synced successfully', savedDoc);
     } catch (error) {
       console.error('Failed to save document:', error);
+      showToast('저장 실패: ' + String(error), 'error');
     }
   };
 
@@ -316,12 +342,75 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
     <div className="flex flex-col h-full bg-zinc-950 relative">
       {/* Action Icons */}
       <div className="flex items-center justify-between gap-1 pt-2 pl-4 pr-2 shrink-0">
-        <p className='text-xs text-zinc-500'>{activeDoc?.group_type === 2 ? 'Private' : 'Public'} / {title}</p>
+        <div className='flex items-center gap-1 text-xs text-zinc-500 overflow-hidden whitespace-nowrap'>
+          {(() => {
+            if (!activeDoc) return null;
+
+            // Breadcrumb Logic
+            const path: Document[] = [];
+            let current = activeDoc;
+            // Prevent infinite loop with max depth safety
+            let safety = 0;
+            while (current && safety < 20) {
+              path.unshift(current);
+              if (current.parent_id) {
+                const parent = documents.find(d => d.id === current.parent_id);
+                if (parent) {
+                  current = parent;
+                } else {
+                  break;
+                }
+              } else {
+                break;
+              }
+              safety++;
+            }
+
+            // Group Label (First item)
+            const groupLabel = activeDoc.group_type === 2 ? 'Private' : 'Public';
+
+            // We want to show: Group / [Optionally ...] / Parent 2 / Parent 1 / Current
+            // Limit to 3 parents + Current
+            // Path includes Current. So max length = 4 items allowed.
+            let displayPath = path;
+            let truncated = false;
+
+            if (path.length > 4) {
+              displayPath = path.slice(-4);
+              truncated = true;
+            }
+
+            return (
+              <>
+                <span className="shrink-0">{groupLabel}</span>
+                <span className="select-none">/</span>
+                {truncated && (
+                  <>
+                    <span className="shrink-0">...</span>
+                    <span className="select-none">/</span>
+                  </>
+                )}
+                {displayPath.map((item, idx) => {
+                  const isLast = idx === displayPath.length - 1;
+                  return (
+                    <div key={item.id} className="flex items-center gap-1">
+                      <span className={isLast ? "text-zinc-300 font-medium" : "shrink-0"}>
+                        {item.id === activeDoc.id ? title : item.title}
+                      </span>
+                      {!isLast && <span className="select-none">/</span>}
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })()}
+        </div>
         <div>
           <button
             onClick={handleSave}
-            className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-            title="저장"
+            disabled={!isDirty} // Disable if not dirty
+            className={`p-2 rounded-lg transition-colors ${!isDirty ? 'text-zinc-700 cursor-not-allowed' : 'hover:bg-zinc-800 text-zinc-400 hover:text-white'}`}
+            title="저장 (Ctrl+S)"
           >
             <Save size={18} />
           </button>

@@ -1,11 +1,12 @@
 use crate::commands::auth::AuthState;
 use crate::crypto::{self, encrypt_content, decrypt_content};
 use crate::database::DatabaseState;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::State;
 use uuid::Uuid;
+use chrono::{Utc, DateTime};
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
 #[repr(i32)]
@@ -45,15 +46,18 @@ pub struct DocumentTag {
 pub struct Document {
     pub id: String,
     pub user_id: String,
+    pub creator_name: Option<String>,
     pub title: String,
     pub content: String,
     pub document_state: i32,
     pub visibility_level: i32,
     pub group_type: i32,
     pub group_id: Option<String>,
+    pub parent_id: Option<String>, // Added for hierarchy
     pub summary: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
+    pub last_synced_at: Option<i64>, // Renamed from updated_at_ts
     pub accessed_at: Option<String>,
     pub size: Option<String>,
     pub is_favorite: bool,
@@ -68,6 +72,7 @@ pub struct SaveDocumentRequest {
     pub summary: Option<String>,
     pub group_type: i32,
     pub group_id: Option<String>,
+    pub parent_id: Option<String>, // Added for hierarchy
     pub document_state: i32,
     pub visibility_level: i32,
     pub is_favorite: Option<bool>,
@@ -85,7 +90,8 @@ pub async fn save_document(
     };
 
     let doc_id = req.id.unwrap_or_else(|| Uuid::new_v4().to_string());
-    let now = chrono_now();
+    let now = chrono_now(); // ISO String
+    let ts = Utc::now().timestamp(); // Integer timestamp
     let size_str = req.content.len().to_string();
 
     // Encrypt fields
@@ -98,16 +104,24 @@ pub async fn save_document(
     let updated_at_enc = encrypt_content(&user_id, &now)?;
     let size_enc = encrypt_content(&user_id, &size_str)?;
 
-    // Note: Embedding is handled by AI logic separately.
+    let mut creator_name = None;
 
     {
         let db = db_state.lock().unwrap();
         if let Some(ref conn) = db.conn {
+            // 1. Get username
+             creator_name = conn.query_row(
+                "SELECT username FROM users WHERE id = ?1",
+                [&user_id],
+                |row| row.get(0),
+            ).optional().unwrap_or(None);
+
+            // 2. Insert/Update
             conn.execute(
                 "INSERT INTO documents (
                     id, user_id, document_state, visibility_level, group_type, group_id,
-                    title, content, summary, size, created_at, updated_at, is_favorite
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                    title, content, summary, size, created_at, updated_at, is_favorite, last_synced_at, parent_id
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                 ON CONFLICT(id) DO UPDATE SET
                     title = excluded.title,
                     content = excluded.content,
@@ -116,9 +130,11 @@ pub async fn save_document(
                     visibility_level = excluded.visibility_level,
                     group_type = excluded.group_type,
                     group_id = excluded.group_id,
+                    parent_id = excluded.parent_id,
                     size = excluded.size,
                     is_favorite = COALESCE(excluded.is_favorite, documents.is_favorite),
-                    updated_at = excluded.updated_at
+                    updated_at = excluded.updated_at,
+                    last_synced_at = excluded.last_synced_at
                 ",
                 rusqlite::params![
                     doc_id,
@@ -133,7 +149,9 @@ pub async fn save_document(
                     size_enc,
                     created_at_enc,
                     updated_at_enc,
-                    req.is_favorite.unwrap_or(false)
+                    req.is_favorite.unwrap_or(false),
+                    ts, // Plaintext timestamp
+                    req.parent_id
                 ],
             )
             .map_err(|e| format!("Failed to save document: {}", e))?;
@@ -146,20 +164,29 @@ pub async fn save_document(
     Ok(Document {
         id: doc_id,
         user_id,
+        creator_name,
         title: req.title,
         content: req.content,
         document_state: req.document_state,
         visibility_level: req.visibility_level,
         group_type: req.group_type,
         group_id: req.group_id,
+        parent_id: req.parent_id,
         summary: None,
         created_at: Some(now.clone()),
         updated_at: Some(now),
+        last_synced_at: Some(ts),
         accessed_at: None,
         size: Some(size_str),
         is_favorite: req.is_favorite.unwrap_or(false),
         tags: None,
     })
+}
+
+#[derive(Serialize)]
+pub struct ListDocumentsResponse {
+    pub docs: Vec<Document>,
+    pub last_synced_at: i64,
 }
 
 #[tauri::command]
@@ -168,31 +195,48 @@ pub async fn list_documents(
     db_state: State<'_, Mutex<DatabaseState>>,
     group_type: Option<i32>,
     group_id: Option<String>,
-) -> Result<Vec<Document>, String> {
+    last_synced_at: Option<i64>, // Incremental Sync
+) -> Result<ListDocumentsResponse, String> {
     let user_id = {
         let auth = auth_state.lock().unwrap();
         auth.user_id.clone().ok_or("Not authenticated")?
     };
 
+    let server_time = Utc::now().timestamp();
+
     let db = db_state.lock().unwrap();
     if let Some(ref conn) = db.conn {
+        // Prepare Query (unchanged logic)
         let mut query = "SELECT 
-            id, user_id, document_state, visibility_level, group_type, group_id,
-            title, content, summary, created_at, updated_at, accessed_at, size, is_favorite
-            FROM documents WHERE user_id = ?1".to_string();
+            d.id, d.user_id, d.document_state, d.visibility_level, d.group_type, d.group_id,
+            d.title, d.content, d.summary, d.created_at, d.updated_at, d.accessed_at, d.size, d.is_favorite,
+            u.username, d.last_synced_at, d.parent_id
+            FROM documents d
+            LEFT JOIN users u ON d.user_id = u.id
+            WHERE d.user_id = ?1".to_string();
         
-        // Basic filtering
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        params.push(Box::new(user_id.clone()));
+
+        // Group filters
         if let Some(gt) = group_type {
-            query.push_str(&format!(" AND group_type = {}", gt));
+            query.push_str(&format!(" AND d.group_type = {}", gt));
         }
         if let Some(ref gid) = group_id {
-             query.push_str(&format!(" AND group_id = '{}'", gid));
+             query.push_str(" AND d.group_id = ?");
+             params.push(Box::new(gid.clone()));
+        }
+
+        // Incremental Sync
+        if let Some(last_sync) = last_synced_at {
+             query.push_str(" AND d.last_synced_at >= ?");
+             params.push(Box::new(last_sync));
         }
 
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
         
         // 1. Fetch basic document info
-        let rows = stmt.query_map([&user_id], |row| {
+        let rows = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
              let id: String = row.get(0)?;
              let uid: String = row.get(1)?;
              let state: i32 = row.get(2)?;
@@ -208,20 +252,29 @@ pub async fn list_documents(
              let accessed_blob: Option<Vec<u8>> = row.get(11).ok();
              let size_blob: Option<Vec<u8>> = row.get(12).ok();
              let is_favorite: bool = row.get(13).unwrap_or(false);
+             let username: Option<String> = row.get(14).ok();
+             // Index 15 is last_synced_at
+             let last_synced_at: Option<i64> = row.get(15).ok();
+             let parent_id: Option<String> = row.get(16).ok();
 
-             Ok((id, uid, state, vis, gtype, gid, title_blob, content_blob, summary_blob, created_blob, updated_blob, accessed_blob, size_blob, is_favorite))
+             Ok((id, uid, state, vis, gtype, gid, title_blob, content_blob, summary_blob, created_blob, updated_blob, accessed_blob, size_blob, is_favorite, username, last_synced_at, parent_id))
         }).map_err(|e| e.to_string())?;
 
-        let mut docs = Vec::new();
-        // pre-collect to avoid borrow issues when fetching tags
         let mut temp_docs = Vec::new();
-
         for row_res in rows {
             temp_docs.push(row_res.map_err(|e| e.to_string())?);
         }
 
+        println!("DEBUG: list_documents params - gt: {:?}, gid: {:?}, last_sync: {:?}", group_type, group_id, last_synced_at);
+        println!("DEBUG: found {} rows", temp_docs.len());
+        for (id, _, _, _, gtype, gid, _, _, _, _, _, _, _, _, _, _, pid) in &temp_docs {
+             println!("DEBUG: DOC id={}, gtype={}, gid={:?}, pid={:?}", id, gtype, gid, pid);
+        }
+
+        let mut docs = Vec::new();
+
         // 2. Process and fetch tags
-        for (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav) in temp_docs {
+        for (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav, username, ls_at, pid) in temp_docs {
 
             // Fetch tags for this doc
             let mut tags = Vec::new();
@@ -237,8 +290,8 @@ pub async fn list_documents(
                 for r in tag_rows {
                     if let Ok((t_blob, e_blob)) = r {
                          if let Ok(tag) = decrypt_content(&uid, &t_blob) {
-                              let evidence = e_blob.and_then(|b| decrypt_content(&uid, &b).ok());
-                              tags.push(DocumentTag { tag, evidence });
+                               let evidence = e_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+                               tags.push(DocumentTag { tag, evidence });
                          }
                     }
                 }
@@ -256,22 +309,29 @@ pub async fn list_documents(
             docs.push(Document {
                 id,
                 user_id: uid,
+                creator_name: username,
                 title,
                 content,
                 document_state: state,
                 visibility_level: vis,
                 group_type: gtype,
                 group_id: gid,
+                parent_id: pid,
                 summary,
                 created_at,
                 updated_at,
+                last_synced_at: ls_at, // Renamed
                 accessed_at,
                 size,
                 is_favorite: is_fav,
                 tags: Some(tags),
             });
         }
-        Ok(docs)
+        
+        Ok(ListDocumentsResponse {
+            docs,
+            last_synced_at: server_time,
+        })
     } else {
         Err("Database not initialized".to_string())
     }
@@ -291,9 +351,12 @@ pub async fn get_document(
     let db = db_state.lock().unwrap();
     if let Some(ref conn) = db.conn {
         let mut stmt = conn.prepare("SELECT 
-            id, user_id, document_state, visibility_level, group_type, group_id,
-            title, content, summary, created_at, updated_at, accessed_at, size, is_favorite
-            FROM documents WHERE id = ?1 AND user_id = ?2").map_err(|e| e.to_string())?;
+            d.id, d.user_id, d.document_state, d.visibility_level, d.group_type, d.group_id,
+            d.title, d.content, d.summary, d.created_at, d.updated_at, d.accessed_at, d.size, d.is_favorite,
+            u.username, d.last_synced_at, d.parent_id
+            FROM documents d
+            LEFT JOIN users u ON d.user_id = u.id
+            WHERE d.id = ?1 AND d.user_id = ?2").map_err(|e| e.to_string())?;
         
         let row = stmt.query_row([&id, &user_id], |row| {
              let id: String = row.get(0)?;
@@ -311,11 +374,14 @@ pub async fn get_document(
              let accessed_blob: Option<Vec<u8>> = row.get(11).ok();
              let size_blob: Option<Vec<u8>> = row.get(12).ok();
              let is_favorite: bool = row.get(13).unwrap_or(false);
+             let username: Option<String> = row.get(14).ok();
+             let last_synced_at: Option<i64> = row.get(15).ok();
+             let parent_id: Option<String> = row.get(16).ok();
 
-             Ok((id, uid, state, vis, gtype, gid, title_blob, content_blob, summary_blob, created_blob, updated_blob, accessed_blob, size_blob, is_favorite))
+             Ok((id, uid, state, vis, gtype, gid, title_blob, content_blob, summary_blob, created_blob, updated_blob, accessed_blob, size_blob, is_favorite, username, last_synced_at, parent_id))
         }).map_err(|e| e.to_string())?;
 
-        let (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav) = row;
+        let (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav, username, ls_at, pid) = row;
         let mut tags = Vec::new();
         {
             let mut tag_stmt = conn.prepare("SELECT tag, evidence FROM document_tags WHERE document_id = ?1").map_err(|e| e.to_string())?;
@@ -347,15 +413,18 @@ pub async fn get_document(
         Ok(Document {
             id,
             user_id: uid,
+            creator_name: username,
             title,
             content,
             document_state: state,
             visibility_level: vis,
             group_type: gtype,
             group_id: gid,
+            parent_id: pid,
             summary,
             created_at,
             updated_at,
+            last_synced_at: ls_at,
             accessed_at,
             size,
             is_favorite: is_fav,
@@ -367,8 +436,55 @@ pub async fn get_document(
 }
 
 fn chrono_now() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let secs = duration.as_secs();
-    format!("1970-01-01T00:00:00Z+{}s", secs)
+    Utc::now().to_rfc3339()
+}
+
+#[tauri::command]
+pub async fn delete_document(
+    auth_state: State<'_, Mutex<AuthState>>,
+    db_state: State<'_, Mutex<DatabaseState>>,
+    id: String,
+) -> Result<(), String> {
+    let user_id = {
+        let auth = auth_state.lock().unwrap();
+        auth.user_id.clone().ok_or("Not authenticated")?
+    };
+
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+        // Use CTE to find all descendant IDs
+        let mut stmt = conn.prepare(
+            "WITH RECURSIVE descendants(id) AS (
+                VALUES(?1)
+                UNION
+                SELECT d.id FROM documents d JOIN descendants p ON d.parent_id = p.id
+             )
+             SELECT id FROM descendants"
+        ).map_err(|e| e.to_string())?;
+
+        let rows = stmt.query_map([&id], |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
+        
+        let mut ids_to_delete = Vec::new();
+        for r in rows {
+            ids_to_delete.push(r.map_err(|e| e.to_string())?);
+        }
+
+        // Delete dependencies for each ID
+        for target_id in &ids_to_delete {
+             let _ = conn.execute("DELETE FROM document_tags WHERE document_id = ?1", [target_id]);
+             let _ = conn.execute("DELETE FROM document_deltas WHERE document_id = ?1", [target_id]);
+             let _ = conn.execute("DELETE FROM document_snapshots WHERE document_id = ?1", [target_id]);
+             let _ = conn.execute("DELETE FROM document_ai_queue WHERE document_id = ?1", [target_id]);
+             
+             // Finally delete the document. Ensure user owns it.
+             conn.execute(
+                 "DELETE FROM documents WHERE id = ?1 AND user_id = ?2",
+                 [target_id, &user_id]
+             ).map_err(|e| e.to_string())?;
+        }
+
+        Ok(())
+    } else {
+        Err("Database not initialized".to_string())
+    }
 }

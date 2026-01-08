@@ -17,14 +17,15 @@ export enum GroupType {
   Private = 2,
 }
 
-// 고정 그룹 ID (서버 UUID와 충돌 방지를 위해 접두사 사용)
-export const FIXED_GROUP_IDS = {
-  PRIVATE: '__fixed_private__',
-  RECYCLE_BIN: '__fixed_recycle_bin__',
-} as const;
+
 
 // 정렬 옵션
-export type SortOption = 'date' | 'name' | 'state';
+export enum SortOption {
+  NameAsc = 'name_asc',
+  NameDesc = 'name_desc',
+  DateNewest = 'date_newest',
+  DateOldest = 'date_oldest',
+}
 
 
 export interface DocumentTag {
@@ -35,15 +36,18 @@ export interface DocumentTag {
 export interface Document {
   id: string;
   user_id: string;
+  creator_name?: string; // Added from backend
   title: string;
   content: string; // HTML content or JSON string
   document_state: DocumentState;
   visibility_level: VisibilityLevel;
   group_type: GroupType;
   group_id?: string;
+  parent_id?: string; // Added for hierarchy
   summary?: string;
   created_at?: string;
   updated_at?: string;
+  last_synced_at?: number; // Renamed from updated_at_ts
   accessed_at?: string;
   size?: string;
   is_favorite?: boolean;
@@ -55,10 +59,38 @@ export interface SaveDocumentRequest {
   title: string;
   content: string;
   summary?: string;
-  group_type: number;
+  group_type: GroupType;
   group_id?: string;
-  document_state: number;
+  parent_id?: string;
+  document_state: DocumentState;
   visibility_level: number;
   is_favorite?: boolean;
   tags?: DocumentTag[];
+  creator_name?: string;
+}
+
+export interface ListDocumentsResponse {
+  docs: Document[];
+  last_synced_at: number;
+}
+
+export interface UserInfo {
+  user_id: string;
+  username: string;
+  department_id?: string;
+  department_name?: string;
+  position_id?: string;
+  role: string;
+  tenant_id: string;
+}
+
+export interface LoginResponse extends UserInfo {
+  access_token: string;
+  force_change_password: boolean;
+  is_offline: boolean;
+  phone_numbers: string[];
+  contact?: string;
+  birthday?: string;
+  created_at?: string;
+  updated_at?: string;
 }

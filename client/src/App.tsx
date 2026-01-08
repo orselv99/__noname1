@@ -11,6 +11,8 @@ import { ResizeHandle } from './components/layout/ResizeHandle';
 import { IconBar } from './components/sidebar/IconBar';
 import { DocumentList, SidebarMode } from './components/sidebar/DocumentList';
 import { MetadataPanel } from './components/sidebar/MetadataPanel';
+import { useDocumentStore } from './stores/documentStore';
+import { LoginResponse } from './types';
 
 // Dialog Components
 import { SearchDialog } from './components/dialogs/SearchDialog';
@@ -30,12 +32,7 @@ import { EditorTabs } from './components/editor/EditorTabs';
 import { ToastProvider, useToast } from './components/Toast';
 import { StatusBar } from './components/StatusBar';
 
-interface LoginResponse {
-  access_token: string;
-  force_change_password: boolean;
-  tenant_id: string;
-  role: string;
-}
+// LoginResponse imported from types
 
 function AppContent() {
   const { showToast } = useToast();
@@ -133,6 +130,7 @@ function AppContent() {
     if (data.force_change_password) {
       setView('change_password');
     } else {
+      useDocumentStore.getState().setCurrentUser(data);
       showToast('Login successful', 'success');
       setView('main');
     }

@@ -17,6 +17,7 @@ const SortableTab = ({ title, isActive, isDirty, onSelect, onClose }: SortableTa
         ? 'bg-zinc-900 border-t-2 border-t-blue-500 text-white'
         : 'text-zinc-500 hover:bg-zinc-900 border-t-2 border-t-transparent'
         }`}
+      onMouseDown={(e) => e.stopPropagation()} // Prevent window drag
       onClick={onSelect}
     >
       <span className="truncate select-none">

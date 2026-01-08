@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
-import { Document, GroupType, SaveDocumentRequest, DocumentState, VisibilityLevel } from '../types';
+import { Document, GroupType, SaveDocumentRequest, DocumentState, VisibilityLevel, ListDocumentsResponse, UserInfo } from '../types';
 
 export interface Tab {
   id: string; // usually document id
@@ -26,11 +26,20 @@ interface DocumentStore {
   aiAnalysisStatus: string | null;
 
   // Actions
+  lastSyncedAt: number | null; // Added for incremental sync
+
+  // Actions
   fetchDocuments: () => Promise<void>;
   addDocument: (doc: Document) => void;
   updateDocument: (doc: Document) => void;
   toggleFavorite: (docId: string) => Promise<void>;
-  createDocument: (title?: string, groupId?: string, groupType?: GroupType) => Promise<void>;
+  createDocument: (title?: string, groupId?: string, groupType?: GroupType, parentId?: string) => Promise<void>;
+  deleteDocument: (docId: string) => Promise<void>;
+  renameDocument: (docId: string, newTitle: string) => Promise<void>;
+
+  // User
+  currentUser: UserInfo | null;
+  setCurrentUser: (user: UserInfo) => void;
 
   // Tab Actions
   addTab: (doc: Document) => void;
@@ -50,6 +59,7 @@ export const useDocumentStore = create<DocumentStore>()(
       documents: [],
       isLoading: false,
       error: null,
+      lastSyncedAt: null,
 
       tabs: [],
       activeTabId: null,
@@ -59,16 +69,52 @@ export const useDocumentStore = create<DocumentStore>()(
       fetchDocuments: async () => {
         set({ isLoading: true, error: null });
         try {
-          const docs = await invoke<Document[]>('list_documents', { groupType: null, groupId: null });
+          // If we have no documents, force full sync regardless of lastSyncedAt
+          const currentDocs = get().documents;
+          const lastOne = get().lastSyncedAt;
+          const effectiveLastSync = currentDocs.length > 0 ? lastOne : null;
+
+          const response = await invoke<ListDocumentsResponse>('list_documents', {
+            groupType: null,
+            groupId: null,
+            lastSyncedAt: effectiveLastSync
+          });
+
+          const deltaDocs = response.docs;
+          const serverTime = response.last_synced_at;
+
           set((state) => {
-            // Also update tabs titles if documents changed
-            // This is crucial for persistence: if a doc title changed in DB but localStorage has old title,
-            // this sync will fix it upon fetch.
+            let newDocs = [...state.documents];
+
+            if (effectiveLastSync) {
+              // Merge delta
+              console.log(`Incremental sync: received ${deltaDocs.length} updates`);
+              deltaDocs.forEach(d => {
+                const idx = newDocs.findIndex(e => e.id === d.id);
+                if (idx !== -1) {
+                  newDocs[idx] = d;
+                } else {
+                  newDocs.push(d);
+                }
+              });
+            } else {
+              // Full replace
+              console.log(`Full sync: received ${deltaDocs.length} documents`);
+              newDocs = deltaDocs;
+            }
+
+            // Update tabs titles if changed
             const newTabs = state.tabs.map(tab => {
-              const found = docs.find(d => d.id === tab.docId);
+              const found = newDocs.find(d => d.id === tab.docId);
               return found ? { ...tab, title: found.title } : tab;
             });
-            return { documents: docs, tabs: newTabs, isLoading: false };
+
+            return {
+              documents: newDocs,
+              tabs: newTabs,
+              isLoading: false,
+              lastSyncedAt: serverTime
+            };
           });
         } catch (error) {
           console.error('Failed to fetch documents:', error);
@@ -242,12 +288,13 @@ export const useDocumentStore = create<DocumentStore>()(
         }
       },
 
-      createDocument: async (title = 'Untitled', groupId, groupType = GroupType.Private) => {
+      createDocument: async (title = 'Untitled', groupId, groupType = GroupType.Private, parentId) => {
         const req: SaveDocumentRequest = {
           title,
           content: '',
           group_type: groupType,
           group_id: groupId || undefined, // Ensure explicit undefined for optional
+          parent_id: parentId || undefined,
           document_state: DocumentState.Draft,
           visibility_level: VisibilityLevel.Hidden,
         };
@@ -262,13 +309,85 @@ export const useDocumentStore = create<DocumentStore>()(
           console.error('Failed to create document:', error);
         }
       },
+
+      deleteDocument: async (docId: string) => {
+        // Optimistic delete (recursive)
+        const allDocs = get().documents;
+        const toDeleteIds = new Set<string>();
+
+        const collect = (id: string) => {
+          toDeleteIds.add(id);
+          const children = allDocs.filter(d => d.parent_id === id);
+          children.forEach(c => collect(c.id));
+        };
+        collect(docId);
+
+        set((state) => {
+          const newDocs = state.documents.filter(d => !toDeleteIds.has(d.id));
+          const newTabs = state.tabs.filter(t => !toDeleteIds.has(t.docId));
+
+          let newActiveId = state.activeTabId;
+          if (newActiveId && toDeleteIds.has(newActiveId)) {
+            newActiveId = null;
+            // Ideally switch to neighbor? For now null is fine.
+          }
+
+          return {
+            documents: newDocs,
+            tabs: newTabs,
+            activeTabId: newActiveId
+          };
+        });
+
+        try {
+          await invoke('delete_document', { id: docId });
+        } catch (error) {
+          console.error('Failed to delete document:', error);
+          // Revert? Hard to revert recursive delete without backup.
+          // For now, reload from server.
+          get().fetchDocuments();
+        }
+      },
+
+      renameDocument: async (docId: string, newTitle: string) => {
+        const doc = get().documents.find(d => d.id === docId);
+        if (!doc) return;
+
+        // Optimistic update
+        set(state => ({
+          documents: state.documents.map(d => d.id === docId ? { ...d, title: newTitle } : d),
+          // Also update tabs if open
+          tabs: state.tabs.map(t => t.docId === docId ? { ...t, title: newTitle } : t)
+        }));
+
+        try {
+          const req: SaveDocumentRequest = {
+            id: doc.id,
+            title: newTitle,
+            content: doc.content || "", // Ensure content is preserved
+            group_type: doc.group_type,
+            group_id: doc.group_id,
+            parent_id: doc.parent_id,
+            document_state: doc.document_state,
+            visibility_level: doc.visibility_level,
+            creator_name: doc.creator_name
+          };
+          await invoke('save_document', { req });
+        } catch (error) {
+          console.error("Failed to rename document:", error);
+          get().fetchDocuments();
+        }
+      },
+
+      currentUser: null,
+      setCurrentUser: (user: UserInfo) => set({ currentUser: user }),
     }),
     {
-      name: 'document-storage', // key in localStorage
+      name: 'document-storage-v1', // key in localStorage
       partialize: (state) => ({
         tabs: state.tabs.map(t => ({ ...t, isDirty: false })), // Don't persist dirty state, reset to false
         activeTabId: state.activeTabId,
-      }), // Only persist tabs and activeTabId
+      }),
     }
   )
 );

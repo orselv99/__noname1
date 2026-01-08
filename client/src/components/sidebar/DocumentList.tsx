@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { Trash2, Edit2 } from 'lucide-react';
+
 import { useDocumentStore } from '../../stores/documentStore';
-import { GroupType, FIXED_GROUP_IDS, SortOption } from '../../types';
+import { GroupType, SortOption } from '../../types';
 import {
   ChevronDown,
   ChevronRight,
@@ -107,8 +110,15 @@ function ItemContent({
   listeners,
   setNodeRef,
   onMouseMove,
-  onMouseLeave
-}: ItemProps) {
+  onMouseLeave,
+  onMenuClick, // New Prop
+  isRenaming,
+  onRenameSubmit
+}: ItemProps & {
+  onMenuClick?: (e: React.MouseEvent, id: string) => void;
+  isRenaming?: boolean;
+  onRenameSubmit?: (id: string, newTitle: string) => void;
+}) {
   const hasChildren = item.children && item.children.length > 0;
 
   // Visual feedback for 'inside' drop
@@ -138,8 +148,8 @@ function ItemContent({
       >
         {/* Toggle Expand */}
         <div
-          className={`w-5 h-5 flex items-center justify-center shrink-0 cursor-pointer text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-800 transition-colors mr-0.5`}
-          onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on toggle
+          className={`w-5 h-5 flex items-center justify-center shrink-0 cursor-pointer text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-800 transition-colors mr-0.5 ${hasChildren ? 'opacity-0 group-hover:opacity-100 transition-opacity' : 'invisible'}`}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             if (hasChildren || !item.expanded) {
@@ -147,11 +157,7 @@ function ItemContent({
             }
           }}
         >
-          {hasChildren ? (
-            item.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
-          ) : (
-            <div className="w-1 h-1 rounded-full bg-zinc-700 group-hover:bg-zinc-600" />
-          )}
+          {hasChildren && (item.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />)}
         </div>
 
         {/* Icon & Title */}
@@ -162,14 +168,39 @@ function ItemContent({
           }}
         >
           <FileText size={14} className={`shrink-0 ${selectedDocumentId === item.id ? 'text-blue-400' : 'text-zinc-500'}`} />
-          <span className="truncate text-sm">{item.title}</span>
+          {isRenaming ? (
+            <input
+              autoFocus
+              defaultValue={item.title}
+              className="bg-zinc-800 text-zinc-100 text-sm px-1 py-0.5 rounded w-full border border-blue-500 focus:outline-none"
+              onClick={(e) => e.stopPropagation()}
+              onBlur={(e) => onRenameSubmit?.(item.id, e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.currentTarget.blur();
+                } else if (e.key === 'Escape') {
+                  onRenameSubmit?.(item.id, item.title); // Cancel/Reset (though renamingSubmit overwrites, maybe just cancel logic needed?)
+                  // For simplicity, submitting original title is neutral.
+                  // But to really cancel we need a separate onCancel. 
+                  // Let's rely on blur handling it or submitting same title.
+                  e.currentTarget.value = item.title;
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+          ) : (
+            <span className="truncate text-sm">{item.title}</span>
+          )}
         </div>
 
         {/* Hover Actions */}
         <div className="hidden group-hover:flex items-center gap-0.5 pr-2 absolute right-0 top-1/2 -translate-y-1/2">
           <button
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMenuClick?.(e, item.id);
+            }}
             className="p-0.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700 rounded transition-colors"
           >
             <MoreHorizontal size={14} />
@@ -200,7 +231,10 @@ function SortableItem({
   onAddSubPage,
   dragState,
   onItemMouseMove,
-  onItemMouseLeave
+  onItemMouseLeave,
+  onMenuClick,
+  renamingId,
+  onRenameSubmit
 }: {
   item: DocumentItem;
   groupId: string;
@@ -212,6 +246,9 @@ function SortableItem({
   dragState: { activeId: string | null, overId: string | null, position: DropPosition | null };
   onItemMouseMove: (e: React.MouseEvent, item: DocumentItem) => void;
   onItemMouseLeave: () => void;
+  onMenuClick?: (e: React.MouseEvent, id: string) => void;
+  renamingId?: string | null;
+  onRenameSubmit?: (id: string, newTitle: string) => void;
 }) {
   const {
     attributes,
@@ -255,6 +292,9 @@ function SortableItem({
         listeners={listeners}
         onMouseMove={onItemMouseMove}
         onMouseLeave={onItemMouseLeave}
+        onMenuClick={onMenuClick}
+        isRenaming={renamingId === item.id}
+        onRenameSubmit={onRenameSubmit}
       />
       {item.expanded && item.children && (
         <SortableContext items={item.children.map(c => c.id)} strategy={verticalListSortingStrategy}>
@@ -271,6 +311,9 @@ function SortableItem({
               dragState={dragState}
               onItemMouseMove={onItemMouseMove}
               onItemMouseLeave={onItemMouseLeave}
+              onMenuClick={onMenuClick}
+              renamingId={renamingId}
+              onRenameSubmit={onRenameSubmit}
             />
           ))}
         </SortableContext>
@@ -291,7 +334,10 @@ function SortableGroup({
   onItemMouseMove,
   onItemMouseLeave,
   sortBy,
-  onSortChange
+  onSortChange,
+  onMenuClick,
+  renamingId,
+  onRenameSubmit
 }: {
   group: DocumentGroup;
   onToggle: (id: string) => void;
@@ -304,6 +350,9 @@ function SortableGroup({
   onItemMouseLeave: () => void;
   sortBy: SortOption;
   onSortChange: (groupId: string, sort: SortOption) => void;
+  onMenuClick?: (e: React.MouseEvent, id: string) => void;
+  renamingId?: string | null;
+  onRenameSubmit?: (id: string, newTitle: string) => void;
 }) {
   const [showSortMenu, setShowSortMenu] = useState(false);
 
@@ -363,22 +412,28 @@ function SortableGroup({
                 onMouseLeave={() => setShowSortMenu(false)}
               >
                 <button
-                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, 'date'); setShowSortMenu(false); }}
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === 'date' ? 'text-blue-400' : 'text-zinc-300'}`}
+                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, SortOption.DateNewest); setShowSortMenu(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === SortOption.DateNewest ? 'text-blue-400' : 'text-zinc-300'}`}
                 >
-                  날짜순
+                  최신순
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, 'name'); setShowSortMenu(false); }}
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === 'name' ? 'text-blue-400' : 'text-zinc-300'}`}
+                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, SortOption.DateOldest); setShowSortMenu(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === SortOption.DateOldest ? 'text-blue-400' : 'text-zinc-300'}`}
                 >
-                  이름순
+                  오래된순
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, 'state'); setShowSortMenu(false); }}
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === 'state' ? 'text-blue-400' : 'text-zinc-300'}`}
+                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, SortOption.NameAsc); setShowSortMenu(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === SortOption.NameAsc ? 'text-blue-400' : 'text-zinc-300'}`}
                 >
-                  상태순
+                  이름 (A-Z)
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, SortOption.NameDesc); setShowSortMenu(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === SortOption.NameDesc ? 'text-blue-400' : 'text-zinc-300'}`}
+                >
+                  이름 (Z-A)
                 </button>
               </div>
             )}
@@ -416,6 +471,9 @@ function SortableGroup({
                 dragState={dragState}
                 onItemMouseMove={onItemMouseMove}
                 onItemMouseLeave={onItemMouseLeave}
+                onMenuClick={onMenuClick}
+                renamingId={renamingId}
+                onRenameSubmit={onRenameSubmit}
               />
             ))}
           </SortableContext>
@@ -425,48 +483,181 @@ function SortableGroup({
   );
 }
 
-export const DocumentList = ({
-}: DocumentListProps) => {
+export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
   // --- State ---
-  const { documents, createDocument, fetchDocuments, addTab, activeTabId } = useDocumentStore();
+  const { documents, createDocument, renameDocument, deleteDocument, fetchDocuments, addTab, activeTabId, currentUser } = useDocumentStore();
+
+  // State Hoisting
+  const [groupSortOptions, setGroupSortOptions] = useState<Record<string, SortOption>>({});
+  const handleSortChange = (groupId: string, sort: SortOption) => {
+    setGroupSortOptions(prev => ({ ...prev, [groupId]: sort }));
+  };
+
+  const [contextMenu, setContextMenu] = useState<{ id: string, x: number, y: number } | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
+
+  const handleMenuClick = (e: React.MouseEvent, id: string) => {
+    const button = e.currentTarget as HTMLElement;
+    const rect = button.getBoundingClientRect();
+    setContextMenu({
+      id,
+      x: rect.right + 4,
+      y: rect.top
+    });
+  };
+
+  const handleRename = (id: string) => {
+    setRenamingId(id);
+    setContextMenu(null);
+  };
+
+  const handleRenameSubmit = async (id: string, newTitle: string) => {
+    if (newTitle.trim()) {
+      await renameDocument(id, newTitle);
+    }
+    setRenamingId(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this document?')) {
+      await deleteDocument(id);
+    }
+    setContextMenu(null);
+  };
 
   // State for real groups
   const [groups, setGroups] = useState<DocumentGroup[]>([]);
-
+  console.log(documents);
   useEffect(() => {
     fetchDocuments();
   }, []);
 
   // Sync store documents to groups
   useEffect(() => {
-    // Group documents
-    const privateDocs = documents.filter(d => d.group_type === GroupType.Private);
-    // const deptDocs = documents.filter(d => d.group_type === GroupType.Department);
+    // Preserve expansion state
+    const expandedIds = new Set<string>();
+    const collectExpanded = (items: DocumentItem[]) => {
+      items.forEach(i => {
+        if (i.expanded) expandedIds.add(i.id);
+        if (i.children) collectExpanded(i.children);
+      });
+    };
+    groups.forEach(g => collectExpanded(g.items));
 
-    const newGroups: DocumentGroup[] = [
-      {
-        id: FIXED_GROUP_IDS.PRIVATE,
-        name: 'Private Documents',
-        type: 'department', // Reusing type for icon
-        expanded: true,
-        items: privateDocs.map(d => ({
+    // Recursive tree builder with Sort
+    const buildTree = (docs: typeof documents, sortOpt: SortOption = SortOption.NameAsc, parentId?: string): DocumentItem[] => {
+      const comparator = (a: any, b: any) => {
+        switch (sortOpt) {
+          case SortOption.NameAsc: return a.title.localeCompare(b.title);
+          case SortOption.NameDesc: return b.title.localeCompare(a.title);
+          case SortOption.DateNewest: return (b.updated_at || b.created_at || '').localeCompare(a.updated_at || a.created_at || '');
+          case SortOption.DateOldest: return (a.updated_at || a.created_at || '').localeCompare(b.updated_at || b.created_at || '');
+          default: return 0;
+        }
+      };
+
+      return docs
+        .filter(d => {
+          if (parentId) return d.parent_id === parentId;
+          return !d.parent_id;
+        })
+        .sort(comparator)
+        .map(d => ({
           id: d.id,
           title: d.title,
           path: '',
-          children: []
-        }))
+          expanded: expandedIds.has(d.id),
+          children: buildTree(docs, sortOpt, d.id)
+        }));
+    };
+
+    const newGroups: DocumentGroup[] = [];
+    const PRIVATE_GROUP_UI_ID = 'private_group';
+
+    // 1. Private Group
+    const privateDocs = documents.filter(
+      d => d.group_type === GroupType.Private && !d.group_id
+    );
+
+    newGroups.push({
+      id: PRIVATE_GROUP_UI_ID,
+      name: 'Private',
+      type: 'department',
+      expanded: groups.find(g => g.id === PRIVATE_GROUP_UI_ID)?.expanded ?? true,
+      items: buildTree(privateDocs, groupSortOptions[PRIVATE_GROUP_UI_ID])
+    });
+
+    // 2. Department Groups (Type 0)
+    const deptDocs = documents.filter(d => d.group_type === GroupType.Department && d.group_id);
+    const deptGroups: Record<string, typeof documents> = {};
+
+    // Initialize My Department empty group if user has one
+    if (currentUser?.department_id) {
+      deptGroups[currentUser.department_id] = [];
+    }
+
+    deptDocs.forEach(d => {
+      if (!d.group_id) return;
+      if (!deptGroups[d.group_id]) deptGroups[d.group_id] = [];
+      deptGroups[d.group_id].push(d);
+    });
+
+    const myDeptId = currentUser?.department_id;
+    const sortedDeptIds = Object.keys(deptGroups).sort((a, b) => {
+      if (a === myDeptId) return -1;
+      if (b === myDeptId) return 1;
+      return a.localeCompare(b);
+    });
+
+    sortedDeptIds.forEach((groupId) => {
+      const items = deptGroups[groupId];
+      const itemsTree = buildTree(items, groupSortOptions[groupId]);
+
+      // Determine Department Name
+      let groupName = `Department ${groupId.substring(0, 8)}...`;
+      if (groupId === myDeptId) {
+        groupName = currentUser?.department_name?.trim() || 'My Department';
       }
-    ];
+
+      newGroups.push({
+        id: groupId,
+        name: groupName,
+        type: 'department',
+        expanded: groups.find(g => g.id === groupId)?.expanded ?? true,
+        items: itemsTree
+      });
+    });
+
+    // 3. Project Groups (Type 1)
+    const projDocs = documents.filter(d => d.group_type === GroupType.Project && d.group_id);
+    const projGroups: Record<string, typeof documents> = {};
+    projDocs.forEach(d => {
+      if (!d.group_id) return;
+      if (!projGroups[d.group_id]) projGroups[d.group_id] = [];
+      projGroups[d.group_id].push(d);
+    });
+
+    Object.entries(projGroups).forEach(([groupId, items]) => {
+      newGroups.push({
+        id: groupId,
+        name: `Project ${groupId.substring(0, 8)}...`,
+        type: 'project',
+        expanded: groups.find(g => g.id === groupId)?.expanded ?? true,
+        items: buildTree(items, groupSortOptions[groupId])
+      });
+    });
+
     setGroups(newGroups);
-  }, [documents]);
+  }, [documents, currentUser, groupSortOptions]);
 
-  // 그룹별 정렬 상태
-  const [groupSortOptions, setGroupSortOptions] = useState<Record<string, SortOption>>({});
-
-  const handleSortChange = (groupId: string, sort: SortOption) => {
-    setGroupSortOptions(prev => ({ ...prev, [groupId]: sort }));
-  };
-
+  // State defined above usage
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewDocDialog, setShowNewDocDialog] = useState(false);
   const [showGroupLinkDialog, setShowGroupLinkDialog] = useState(false);
@@ -509,15 +700,44 @@ export const DocumentList = ({
     }));
   };
 
-  const handleAddSubPage = (groupId: string, parentId?: string) => {
-    // Determine GroupType based on groupId (simplified for now)
-    // In real app, groupId would map to a type.
-    // For 'private' group, use GroupType.Private
-    const groupType = groupId === 'private' ? GroupType.Private : GroupType.Project; // Default fallback
+  const expandItem = (groupId: string, itemId: string) => {
+    setGroups(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      const expand = (items: DocumentItem[]): DocumentItem[] => {
+        return items.map(i => {
+          if (i.id === itemId) return { ...i, expanded: true };
+          if (i.children) return { ...i, children: expand(i.children) };
+          return i;
+        });
+      }
+      return { ...g, items: expand(g.items) };
+    }));
+  };
 
-    // We don't need to manually update local state 'groups' here because
-    // createDocument will update the store, and the useEffect[documents] will update 'groups'
-    createDocument('Untitled', parentId || undefined, groupType);
+  const handleAddSubPage = (groupId: string, parentId?: string) => {
+    // Auto-expand parent if creating a sub-page
+    if (parentId) {
+      expandItem(groupId, parentId);
+    }
+
+    // groupId === 'private_group' means the Private group
+    if (groupId === 'private_group') {
+      createDocument('Untitled', undefined, GroupType.Private, parentId);
+      return;
+    }
+
+    // Otherwise, try to infer details. 
+    // In strict mode, we should match groupId against known groups to find type.
+    const group = groups.find(g => g.id === groupId);
+    if (group) {
+      // TODO: We need real group type in DocumentGroup interface to be sure.
+      // For now, mapping based on our construction logic:
+
+      let newGroupType = GroupType.Department;
+      if (group.type === 'project') newGroupType = GroupType.Project;
+
+      createDocument('Untitled', groupId, newGroupType, parentId);
+    }
   };
 
 
@@ -683,6 +903,7 @@ export const DocumentList = ({
                 onSelectDocument={(id) => {
                   const doc = documents.find(d => d.id === id);
                   if (doc) addTab(doc);
+                  onSelectDocument?.(id);
                 }}
                 selectedDocumentId={activeTabId || undefined}
                 onToggleExpandInfo={toggleExpandItem}
@@ -692,6 +913,9 @@ export const DocumentList = ({
                 onItemMouseLeave={() => setDragState(prev => prev.activeId ? prev : { ...prev, overId: null, position: null })}
                 sortBy={groupSortOptions[group.id] || 'date'}
                 onSortChange={handleSortChange}
+                onMenuClick={handleMenuClick}
+                renamingId={renamingId}
+                onRenameSubmit={handleRenameSubmit}
               />
             ))}
           </SortableContext>
@@ -725,6 +949,27 @@ export const DocumentList = ({
         groupName={activeGroupForInfo?.name}
         groupType={activeGroupForInfo?.type}
       />
+      {contextMenu && createPortal(
+        <div
+          className="fixed z-9999 bg-zinc-900 border border-zinc-800 rounded shadow-xl py-1 w-32 flex flex-col"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="px-3 py-1.5 text-xs text-left text-zinc-400 hover:text-white hover:bg-zinc-800 flex items-center gap-2"
+            onClick={(e) => { e.stopPropagation(); handleRename(contextMenu.id); }}
+          >
+            <Edit2 size={12} /> Rename
+          </button>
+          <button
+            className="px-3 py-1.5 text-xs text-left text-red-500 hover:bg-zinc-800 flex items-center gap-2"
+            onClick={() => handleDelete(contextMenu.id)}
+          >
+            <Trash2 size={12} /> Delete
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

@@ -37,7 +37,7 @@ pub fn get_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
   std::fs::create_dir_all(&client_dir)
     .map_err(|e| format!("Failed to create client dir: {}", e))?;
 
-  Ok(client_dir.join("fiery_horizon_v2.db"))
+  Ok(client_dir.join("fiery_horizon.db"))
 }
 
 /// Initialize the SQLite database and create tables
@@ -77,6 +77,7 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     .execute(
       "CREATE TABLE IF NOT EXISTS documents (
             id TEXT PRIMARY KEY,
+            parent_id TEXT,
             user_id TEXT NOT NULL,
             document_state INTEGER DEFAULT 1,
             visibility_level INTEGER DEFAULT 1,
@@ -90,23 +91,13 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
             is_favorite INTEGER DEFAULT 0,
             created_at BLOB,
             updated_at BLOB,
+            last_synced_at INTEGER DEFAULT 0,
             accessed_at BLOB,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )",
       [],
     )
     .map_err(|e| format!("Failed to create documents table: {}", e))?;
-
-  // MANUAL MIGRATION: Attempt to add columns for existing databases.
-  // We ignore errors (e.g., "duplicate column name") by using .ok()
-  let _ = conn.execute(
-    "ALTER TABLE documents ADD COLUMN current_version INTEGER DEFAULT 0",
-    [],
-  );
-  let _ = conn.execute(
-    "ALTER TABLE documents ADD COLUMN is_favorite INTEGER DEFAULT 0",
-    [],
-  );
 
   // Create document_deltas table (Versioning)
   conn

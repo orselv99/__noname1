@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Tag, Calendar, User, FileText, Plus, ChevronUp } from 'lucide-react';
+import { Tag, Calendar, User, FileText, Plus, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { DocumentState } from '../../types';
 
@@ -69,6 +70,67 @@ const AddTagForm = ({ docId }: { docId: string }) => {
       </button>
     </div>
   );
+};
+
+const LinkList = ({ content }: { content: string }) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  const links = useMemo(() => {
+    if (!content) return [];
+    try {
+      const doc = new DOMParser().parseFromString(content, 'text/html');
+      const anchors = Array.from(doc.getElementsByTagName('a'));
+      return anchors.map(a => ({
+        text: a.textContent || a.href,
+        href: a.getAttribute('href') || ''
+      })).filter(l => l.href);
+    } catch (e) {
+      return [];
+    }
+  }, [content]);
+
+  if (links.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <div
+        className="flex items-center gap-2 mb-2 text-zinc-500 cursor-pointer hover:text-zinc-300 select-none"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <LinkIcon size={12} />
+        <h3 className="text-xs font-medium flex-1">Included Links ({links.length})</h3>
+        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </div>
+
+      {isExpanded && (
+        <div className="space-y-1 pl-1">
+          {links.map((link, i) => (
+            <a
+              key={i}
+              href={link.href}
+              target="_blank"
+              rel="noreferrer"
+              className="flex flex-col gap-0.5 text-xs bg-zinc-900/50 p-2 rounded border border-zinc-800 text-blue-400 hover:bg-zinc-900 transition-colors group"
+            >
+              <span className="font-medium truncate flex items-center gap-1">
+                {link.text}
+                <ExternalLink size={10} className="opacity-50" />
+              </span>
+              <span className="text-[10px] text-zinc-600 truncate">{link.href}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '-';
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
 
 export const MetadataPanel = () => {
@@ -158,36 +220,41 @@ export const MetadataPanel = () => {
           </div>
         </div>
 
+        {/* Included Links */}
+        <LinkList content={activeDoc.content} />
+
         {/* Links / Backlinks (Mock) */}
         <div className="space-y-2">
           <h3 className="text-xs text-zinc-500 font-medium">Linked Mentions</h3>
           <div className="space-y-1">
-            <div className="text-xs bg-zinc-900 p-2 rounded border border-zinc-800 text-zinc-400">
-              <p className="line-clamp-2">...reference to [[Project Alpha]] in the meeting notes...</p>
+            {/* Stub for backlinks, ideally handled similarly but needs global search */}
+            <div className="text-xs bg-zinc-900/50 p-2 rounded border border-zinc-800 text-zinc-500 italic text-center">
+              No linked mentions
             </div>
           </div>
         </div>
 
         {/* Info */}
-        <div className="pt-4 border-t border-zinc-800 space-y-2 text-xs text-zinc-500">
-          <div className="flex justify-between">
-            <span className="flex items-center gap-1"><User size={12} /> Creator</span>
-            <span>{activeDoc.user_id === 'user1' ? 'User' : 'Unknown'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="flex items-center gap-1"><Calendar size={12} /> Created</span>
-            <span>{activeDoc.created_at ? new Date(activeDoc.created_at).toLocaleDateString() : '-'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="flex items-center gap-1"><Calendar size={12} /> Updated</span>
-            <span>{activeDoc.updated_at ? new Date(activeDoc.updated_at).toLocaleDateString() : '-'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="flex items-center gap-1"><FileText size={12} /> Size</span>
-            <span>{activeDoc.size || '0'} bytes</span>
-          </div>
-        </div>
+      </div>
 
+      {/* Info - Pinned to Bottom */}
+      <div className="p-4 border-t border-zinc-800 space-y-2 text-xs text-zinc-500 shrink-0 bg-zinc-950">
+        <div className="flex justify-between">
+          <span className="flex items-center gap-1"><User size={12} /> Creator</span>
+          <span>{activeDoc.creator_name || (activeDoc.user_id === 'user1' ? 'User' : 'Unknown')}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="flex items-center gap-1"><Calendar size={12} /> Created</span>
+          <span>{formatDate(activeDoc.created_at)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="flex items-center gap-1"><Calendar size={12} /> Updated</span>
+          <span>{formatDate(activeDoc.updated_at)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="flex items-center gap-1"><FileText size={12} /> Size</span>
+          <span>{activeDoc.size || '0'} bytes</span>
+        </div>
       </div>
     </div>
   );

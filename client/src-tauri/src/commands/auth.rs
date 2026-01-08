@@ -40,6 +40,8 @@ pub struct LoginResponse {
     #[serde(default)]
     pub department_id: Option<String>,
     #[serde(default)]
+    pub department_name: Option<String>,
+    #[serde(default)]
     pub phone_numbers: Vec<String>,
     #[serde(default)]
     pub contact: Option<String>,
@@ -208,6 +210,7 @@ fn try_offline_login(
                     username: user.username,
                     position_id: user.position_id,
                     department_id: user.department_id,
+                    department_name: None,
                     phone_numbers,
                     contact: user.contact,
                     birthday: user.birthday,

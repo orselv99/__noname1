@@ -31,7 +31,8 @@ pub fn run() {
       commands::auth::logout,
       commands::documents::save_document,
       commands::documents::list_documents,
-      commands::documents::get_document
+      commands::documents::get_document,
+      commands::documents::delete_document
     ])
     .setup(|app| {
       // Kill any existing sidecar processes to prevent orphans on startup
