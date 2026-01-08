@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
-import { Document, GroupType } from '../../types';
+import { GroupType, FIXED_GROUP_IDS, SortOption } from '../../types';
 import {
   ChevronDown,
   ChevronRight,
@@ -11,7 +11,7 @@ import {
   ChevronsUpDown,
   Search,
   Share2,
-  Info,
+  ArrowUpDown,
 } from 'lucide-react';
 import { GroupLinkDialog } from '../dialogs/GroupLinkDialog';
 import { GroupInfoDialog } from '../dialogs/GroupInfoDialog';
@@ -53,6 +53,8 @@ interface DocumentGroup {
 }
 
 interface DocumentListProps {
+  onSelectDocument?: (id: string) => void;
+  mode?: SidebarMode;
 }
 
 type DropPosition = 'top' | 'bottom' | 'inside';
@@ -155,7 +157,7 @@ function ItemContent({
         {/* Icon & Title */}
         <div
           className={`flex-1 flex items-center gap-2 py-1 pr-8 cursor-pointer overflow-hidden select-none ${selectedDocumentId === item.id ? 'text-blue-400' : 'text-zinc-400'}`}
-          onClick={(e) => {
+          onClick={() => {
             onSelectDocument?.(item.id);
           }}
         >
@@ -285,10 +287,11 @@ function SortableGroup({
   selectedDocumentId,
   onToggleExpandInfo,
   onAddSubPage,
-  onOpenGroupSettings,
   dragState,
   onItemMouseMove,
-  onItemMouseLeave
+  onItemMouseLeave,
+  sortBy,
+  onSortChange
 }: {
   group: DocumentGroup;
   onToggle: (id: string) => void;
@@ -296,11 +299,14 @@ function SortableGroup({
   selectedDocumentId?: string;
   onToggleExpandInfo: (groupId: string, itemId: string) => void;
   onAddSubPage: (groupId: string, parentId?: string) => void;
-  onOpenGroupSettings: (groupId: string) => void;
   dragState: { activeId: string | null, overId: string | null, position: DropPosition | null };
   onItemMouseMove: (e: React.MouseEvent, item: DocumentItem) => void;
   onItemMouseLeave: () => void;
+  sortBy: SortOption;
+  onSortChange: (groupId: string, sort: SortOption) => void;
 }) {
+  const [showSortMenu, setShowSortMenu] = useState(false);
+
   const {
     attributes,
     listeners,
@@ -340,12 +346,49 @@ function SortableGroup({
         </div>
 
         <div className="hidden group-hover:flex items-center gap-0.5 absolute right-2">
+          {/* Sort Menu Button */}
+          <div className="relative">
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); setShowSortMenu(!showSortMenu); }}
+              className="p-0.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
+              title="정렬"
+            >
+              <ArrowUpDown size={14} />
+            </button>
+            {/* Sort Dropdown */}
+            {showSortMenu && (
+              <div
+                className="absolute top-full right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-md shadow-lg z-50 py-1 min-w-[120px]"
+                onMouseLeave={() => setShowSortMenu(false)}
+              >
+                <button
+                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, 'date'); setShowSortMenu(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === 'date' ? 'text-blue-400' : 'text-zinc-300'}`}
+                >
+                  날짜순
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, 'name'); setShowSortMenu(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === 'name' ? 'text-blue-400' : 'text-zinc-300'}`}
+                >
+                  이름순
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onSortChange(group.id, 'state'); setShowSortMenu(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-700 ${sortBy === 'state' ? 'text-blue-400' : 'text-zinc-300'}`}
+                >
+                  상태순
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onOpenGroupSettings(group.id); }}
+            onClick={(e) => { e.stopPropagation(); /* More options */ }}
             className="p-0.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
           >
-            <Info size={16} />
+            <MoreHorizontal size={16} />
           </button>
           <button
             onPointerDown={(e) => e.stopPropagation()}
@@ -402,7 +445,7 @@ export const DocumentList = ({
 
     const newGroups: DocumentGroup[] = [
       {
-        id: 'private',
+        id: FIXED_GROUP_IDS.PRIVATE,
         name: 'Private Documents',
         type: 'department', // Reusing type for icon
         expanded: true,
@@ -417,11 +460,18 @@ export const DocumentList = ({
     setGroups(newGroups);
   }, [documents]);
 
+  // 그룹별 정렬 상태
+  const [groupSortOptions, setGroupSortOptions] = useState<Record<string, SortOption>>({});
+
+  const handleSortChange = (groupId: string, sort: SortOption) => {
+    setGroupSortOptions(prev => ({ ...prev, [groupId]: sort }));
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewDocDialog, setShowNewDocDialog] = useState(false);
   const [showGroupLinkDialog, setShowGroupLinkDialog] = useState(false);
   const [showGroupInfoDialog, setShowGroupInfoDialog] = useState(false);
-  const [activeGroupForInfo, setActiveGroupForInfo] = useState<DocumentGroup | null>(null);
+  const [activeGroupForInfo, _setActiveGroupForInfo] = useState<DocumentGroup | null>(null);
   const [dragState, setDragState] = useState<{ activeId: string | null, overId: string | null, position: DropPosition | null }>({ activeId: null, overId: null, position: null });
 
   // DnD Sensors
@@ -470,13 +520,6 @@ export const DocumentList = ({
     createDocument('Untitled', parentId || undefined, groupType);
   };
 
-  const handleOpenGroupSettings = (groupId: string) => {
-    const group = groups.find(g => g.id === groupId);
-    if (group) {
-      setActiveGroupForInfo(group);
-      setShowGroupInfoDialog(true);
-    }
-  };
 
   // --- Drag & Drop Logic ---
 
@@ -644,10 +687,11 @@ export const DocumentList = ({
                 selectedDocumentId={activeTabId || undefined}
                 onToggleExpandInfo={toggleExpandItem}
                 onAddSubPage={handleAddSubPage}
-                onOpenGroupSettings={handleOpenGroupSettings}
                 dragState={dragState}
                 onItemMouseMove={onItemMouseMove}
                 onItemMouseLeave={() => setDragState(prev => prev.activeId ? prev : { ...prev, overId: null, position: null })}
+                sortBy={groupSortOptions[group.id] || 'date'}
+                onSortChange={handleSortChange}
               />
             ))}
           </SortableContext>

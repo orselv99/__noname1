@@ -17,6 +17,21 @@ export enum GroupType {
   Private = 2,
 }
 
+// 고정 그룹 ID (서버 UUID와 충돌 방지를 위해 접두사 사용)
+export const FIXED_GROUP_IDS = {
+  PRIVATE: '__fixed_private__',
+  RECYCLE_BIN: '__fixed_recycle_bin__',
+} as const;
+
+// 정렬 옵션
+export type SortOption = 'date' | 'name' | 'state';
+
+
+export interface DocumentTag {
+  tag: string;
+  evidence?: string;
+}
+
 export interface Document {
   id: string;
   user_id: string;
@@ -32,6 +47,7 @@ export interface Document {
   accessed_at?: string;
   size?: string;
   is_favorite?: boolean;
+  tags?: DocumentTag[];
 }
 
 export interface SaveDocumentRequest {
@@ -44,4 +60,5 @@ export interface SaveDocumentRequest {
   document_state: number;
   visibility_level: number;
   is_favorite?: boolean;
+  tags?: DocumentTag[];
 }

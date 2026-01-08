@@ -59,11 +59,6 @@ function AppContent() {
   // Auth state
   const [currentPassword, setCurrentPassword] = useState('');
 
-  // Tabs state
-  const [tabs] = useState([
-    { id: '1', title: 'Untitled-1.md', isActive: true },
-    { id: '2', title: 'Notes.md', isActive: false },
-  ]);
 
   // Drag to move window
   const handleDragStart = (e: React.MouseEvent) => {
@@ -239,11 +234,7 @@ function AppContent() {
                 className="h-10 bg-zinc-950 border-b border-zinc-800 flex items-center select-none"
                 onMouseDown={handleDragStart}
               >
-                <EditorTabs
-                  tabs={tabs}
-                  onSelectTab={(id) => console.log('Select tab:', id)}
-                  onCloseTab={(id) => console.log('Close tab:', id)}
-                />
+                <EditorTabs />
               </div>
               <div className="flex-1 bg-zinc-900 overflow-hidden">
                 <CollaborativeEditor />

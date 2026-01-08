@@ -1,6 +1,9 @@
-import { Wifi, AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { useDocumentStore } from '../stores/documentStore';
 
 export const StatusBar = () => {
+  const { aiAnalysisStatus } = useDocumentStore();
+
   return (
     <div className="h-6 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between px-3 text-[10px] text-zinc-500 select-none">
       <div className="flex items-center gap-4">
@@ -10,6 +13,13 @@ export const StatusBar = () => {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* AI 분석 상태 */}
+        {aiAnalysisStatus && (
+          <div className="flex items-center gap-1.5 text-blue-400">
+            <Loader2 size={10} className="animate-spin" />
+            <span>{aiAnalysisStatus}</span>
+          </div>
+        )}
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-green-500/20 border border-green-500/50"></span>
           <span>Online</span>

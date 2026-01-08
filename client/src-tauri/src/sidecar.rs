@@ -4,6 +4,7 @@ use std::process::Command;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandChild;
+use sysinfo::System;
 
 /// State to hold sidecar child handles for cleanup on exit
 pub struct SidecarState {
@@ -53,6 +54,27 @@ pub fn kill_orphans() {
     }
 }
 
+/// Calculate conservative thread count
+fn get_conservative_thread_count() -> String {
+    let mut sys = System::new_all();
+    sys.refresh_cpu();
+    
+    // Getting physical core count is safer for "efficiency" logic implicitly.
+    // Llama.cpp works best with physical cores.
+    // Ideally, we want to start small.
+    // If we have 16 logical, 8 physical -> 8 threads is max performance usually.
+    // Conservative: Use half of physical cores.
+    
+    let physical_cores = sys.physical_core_count().unwrap_or(4);
+    
+    // Conservative = physical / 2. Min 1.
+    // let threads = std::cmp::max(1, physical_cores / 2);
+    let threads = std::cmp::max(1, physical_cores / 4);
+    
+    println!("Debug: Detected {} physical cores. Using {} threads for AI.", physical_cores, threads);
+    threads.to_string()
+}
+
 /// Spawn the llama-server sidecars (called after successful login)
 pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
     // Check if already running
@@ -75,6 +97,9 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
 
     println!("Debug: Resource path: {:?}", resource_path);
 
+    let threads = get_conservative_thread_count();
+    let threads_str = threads.as_str();
+
     // Spawn Embedding Server (Port 8081)
     let embedding_model = resource_path
         .join("model")
@@ -93,7 +118,7 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
             "-b", "2048",
             "-ub", "2048",
             "-np", "1",
-            "-t", "20"
+            "-t", threads_str
         ]);
 
     let (mut rx_emb, child_emb) = embedding_sidecar
@@ -126,7 +151,8 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
     // Spawn Generation Server (Port 8082)
     let gen_model = resource_path
         .join("model")
-        .join("qwen2.5-1.5b-instruct-q4_k_m.gguf");
+        //.join("qwen2.5-1.5b-instruct-q4_k_m.gguf");
+        .join("gemma-2-2b-it-Q4_K_M.gguf");
 
     println!("Debug: Spawning Generation Server (Sidecar)...");
     let gen_sidecar = app.shell().sidecar("llama-server")
@@ -138,7 +164,7 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
             "-b", "8192",
             "-ub", "8192",
             "-np", "1",
-            "-t", "20"
+            "-t", threads_str
         ]);
 
     let (mut rx_gen, child_gen) = gen_sidecar

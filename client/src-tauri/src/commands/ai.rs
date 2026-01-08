@@ -321,8 +321,10 @@ fn chrono_now() -> String {
 pub async fn extract_info(
     auth_state: State<'_, Mutex<AuthState>>,
     db_state: State<'_, Mutex<DatabaseState>>,
-    text: String,
+    text: String, // Plain text used for AI analysis
+    content: Option<String>, // HTML content used for saving (to preserve formatting)
     title: Option<String>,
+    id: Option<String>,
 ) -> Result<ExtractInfoResult, String> {
     // Get user_id from auth state
     let user_id = {
@@ -334,7 +336,8 @@ pub async fn extract_info(
     let content_hash = calculate_content_hash(&text);
     
     // Check for existing AI data (Optimization)
-    let doc_id = Uuid::new_v4().to_string(); // In real app, we might want to pass ID or reuse it
+    // Use provided ID or generate a new one
+    let doc_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
     
     // NOTE: In a 'save' flow, we usually know the ID. 
     // If this is just 'extract_info', we are generating a draft.
@@ -406,7 +409,7 @@ pub async fn extract_info(
 
     // 2. Generate summary and tags
     let prompt = format!(
-        "<|im_start|>system\nYou are a helpful assistant. Extract a brief summary and exactly 3 keywords from the user's text.\nOutput format:\nSummary: [One sentence summary]\nTags: [keyword1, keyword2, keyword3]\n<|im_end|>\n<|im_start|>user\n{}\n<|im_end|>\n<|im_start|>assistant\n",
+        "<|im_start|>system\nYou are a helpful assistant. Extract a brief summary and exactly 3 keywords in Korean from the user's text.\nOutput format:\nSummary: [One sentence summary]\nTags: [keyword1, keyword2, keyword3]\n<|im_end|>\n<|im_start|>user\n{}\n<|im_end|>\n<|im_start|>assistant\n",
         text.chars().take(4000).collect::<String>() // Limit context
     );
 
@@ -428,7 +431,7 @@ pub async fn extract_info(
     let (summary, tags) = parse_ai_response(&ai_content, &text);
 
     // 3. Encrypt content, title, summary, size, and created_at
-    let content_enc = encrypt_content(&user_id, &text)?;
+    let content_enc = encrypt_content(&user_id, content.as_deref().unwrap_or(&text))?;
     let title_enc = title.as_ref()
         .map(|t| encrypt_content(&user_id, t))
         .transpose()?;
@@ -452,10 +455,8 @@ pub async fn extract_info(
         if let Some(ref conn) = db.conn {
             // Check optimization again inside lock or just proceed (locking scope is small)
             
-            // A. Save Draft/AI Data
-            save_ai_data(conn, &doc_id, &content_hash, &user_id, &embedding_bytes, Some(&summary), &tags)?;
-
-            // B. Save Active Document (User Visible)
+            // A. Save Active Document (User Visible / Parent)
+            // MUST be saved first to satisfy Foreign Key in document_ai_data
             save_document(
                 conn,
                 &user_id,
@@ -470,6 +471,9 @@ pub async fn extract_info(
                 DocumentState::Draft,
                 VisibilityLevel::Hidden,
             )?;
+
+            // B. Save Draft/AI Data (Child)
+            save_ai_data(conn, &doc_id, &content_hash, &user_id, &embedding_bytes, Some(&summary), &tags)?;
             
             // C. Save Active Tags (User Visible)
             save_document_tags(conn, &doc_id, &user_id, &tags)?;

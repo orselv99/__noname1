@@ -35,6 +35,12 @@ pub enum GroupType {
     Private = 2,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DocumentTag {
+    pub tag: String,
+    pub evidence: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Document {
     pub id: String,
@@ -51,6 +57,7 @@ pub struct Document {
     pub accessed_at: Option<String>,
     pub size: Option<String>,
     pub is_favorite: bool,
+    pub tags: Option<Vec<DocumentTag>>,
 }
 
 #[derive(Deserialize)]
@@ -151,6 +158,7 @@ pub async fn save_document(
         accessed_at: None,
         size: Some(size_str),
         is_favorite: req.is_favorite.unwrap_or(false),
+        tags: None,
     })
 }
 
@@ -183,6 +191,7 @@ pub async fn list_documents(
 
         let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
         
+        // 1. Fetch basic document info
         let rows = stmt.query_map([&user_id], |row| {
              let id: String = row.get(0)?;
              let uid: String = row.get(1)?;
@@ -204,10 +213,38 @@ pub async fn list_documents(
         }).map_err(|e| e.to_string())?;
 
         let mut docs = Vec::new();
-        for row_res in rows {
-            let (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav) = row_res.map_err(|e| e.to_string())?;
+        // pre-collect to avoid borrow issues when fetching tags
+        let mut temp_docs = Vec::new();
 
-            // Decrypt
+        for row_res in rows {
+            temp_docs.push(row_res.map_err(|e| e.to_string())?);
+        }
+
+        // 2. Process and fetch tags
+        for (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav) in temp_docs {
+
+            // Fetch tags for this doc
+            let mut tags = Vec::new();
+            {
+                // Inner scope for tag query
+                let mut tag_stmt = conn.prepare("SELECT tag, evidence FROM document_tags WHERE document_id = ?1").map_err(|e| e.to_string())?;
+                let tag_rows = tag_stmt.query_map([&id], |row| {
+                    let tag_blob: Vec<u8> = row.get(0)?;
+                    let evidence_blob: Option<Vec<u8>> = row.get(1).ok();
+                    Ok((tag_blob, evidence_blob))
+                }).map_err(|e| e.to_string())?;
+
+                for r in tag_rows {
+                    if let Ok((t_blob, e_blob)) = r {
+                         if let Ok(tag) = decrypt_content(&uid, &t_blob) {
+                              let evidence = e_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+                              tags.push(DocumentTag { tag, evidence });
+                         }
+                    }
+                }
+            }
+
+            // Decrypt doc fields
             let title = decrypt_content(&uid, &t_blob).unwrap_or_default();
             let content = decrypt_content(&uid, &c_blob).unwrap_or_default();
             let summary = s_blob.and_then(|b| decrypt_content(&uid, &b).ok());
@@ -231,6 +268,7 @@ pub async fn list_documents(
                 accessed_at,
                 size,
                 is_favorite: is_fav,
+                tags: Some(tags),
             });
         }
         Ok(docs)
@@ -278,7 +316,26 @@ pub async fn get_document(
         }).map_err(|e| e.to_string())?;
 
         let (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav) = row;
+        let mut tags = Vec::new();
+        {
+            let mut tag_stmt = conn.prepare("SELECT tag, evidence FROM document_tags WHERE document_id = ?1").map_err(|e| e.to_string())?;
+            let tag_rows = tag_stmt.query_map([&id], |row| {
+                let tag_blob: Vec<u8> = row.get(0)?;
+                let evidence_blob: Option<Vec<u8>> = row.get(1).ok();
+                Ok((tag_blob, evidence_blob))
+            }).map_err(|e| e.to_string())?;
 
+            for r in tag_rows {
+                if let Ok((t_blob, e_blob)) = r {
+                        if let Ok(tag) = decrypt_content(&uid, &t_blob) {
+                            let evidence = e_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+                            tags.push(DocumentTag { tag, evidence });
+                        }
+                }
+            }
+        }
+
+        // Decrypt
         let title = decrypt_content(&uid, &t_blob).unwrap_or_default();
         let content = decrypt_content(&uid, &c_blob).unwrap_or_default();
         let summary = s_blob.and_then(|b| decrypt_content(&uid, &b).ok());
@@ -302,6 +359,7 @@ pub async fn get_document(
             accessed_at,
             size,
             is_favorite: is_fav,
+            tags: Some(tags),
         })
     } else {
         Err("Database not initialized".to_string())

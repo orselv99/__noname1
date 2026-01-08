@@ -19,6 +19,12 @@ interface DocumentStore {
   tabs: Tab[];
   activeTabId: string | null;
 
+  // UI State
+  highlightedEvidence: string | null;
+
+  // AI 분석 상태
+  aiAnalysisStatus: string | null;
+
   // Actions
   fetchDocuments: () => Promise<void>;
   addDocument: (doc: Document) => void;
@@ -31,6 +37,10 @@ interface DocumentStore {
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   reorderTabs: (newTabs: Tab[]) => void;
+  setHighlightedEvidence: (text: string | null) => void;
+  addTagToDocument: (docId: string, tag: string, evidence?: string) => Promise<void>;
+  removeTagFromDocument: (docId: string, tagIndex: number) => Promise<void>;
+  setAiAnalysisStatus: (status: string | null) => void;
   // markTabDirty: (tabId: string, isDirty: boolean) => void; // Future use
 }
 
@@ -43,6 +53,8 @@ export const useDocumentStore = create<DocumentStore>()(
 
       tabs: [],
       activeTabId: null,
+      highlightedEvidence: null,
+      aiAnalysisStatus: null,
 
       fetchDocuments: async () => {
         set({ isLoading: true, error: null });
@@ -157,6 +169,77 @@ export const useDocumentStore = create<DocumentStore>()(
 
       reorderTabs: (newTabs) => {
         set({ tabs: newTabs });
+      },
+
+      setHighlightedEvidence: (text) => {
+        set({ highlightedEvidence: text });
+      },
+
+      setAiAnalysisStatus: (status) => {
+        set({ aiAnalysisStatus: status });
+      },
+
+      addTagToDocument: async (docId, tag, evidence) => {
+        const doc = get().documents.find(d => d.id === docId);
+        if (!doc) return;
+
+        const newTag = { tag, evidence: evidence || undefined };
+        const updatedTags = [...(doc.tags || []), newTag];
+        const updatedDoc = { ...doc, tags: updatedTags };
+
+        // Optimistic update
+        get().updateDocument(updatedDoc);
+
+        // Persist to backend
+        try {
+          const req: SaveDocumentRequest = {
+            id: updatedDoc.id,
+            title: updatedDoc.title,
+            content: updatedDoc.content,
+            summary: updatedDoc.summary,
+            group_type: updatedDoc.group_type,
+            group_id: updatedDoc.group_id,
+            document_state: updatedDoc.document_state,
+            visibility_level: updatedDoc.visibility_level,
+            is_favorite: updatedDoc.is_favorite,
+            tags: updatedTags,
+          };
+          await invoke('save_document', { req });
+        } catch (error) {
+          console.error('Failed to add tag:', error);
+          get().updateDocument(doc);
+        }
+      },
+
+      removeTagFromDocument: async (docId, tagIndex) => {
+        const doc = get().documents.find(d => d.id === docId);
+        if (!doc || !doc.tags) return;
+
+        const updatedTags = doc.tags.filter((_, i) => i !== tagIndex);
+        const updatedDoc = { ...doc, tags: updatedTags };
+
+        // Optimistic update
+        get().updateDocument(updatedDoc);
+
+        // Persist to backend
+        try {
+          const req: SaveDocumentRequest = {
+            id: updatedDoc.id,
+            title: updatedDoc.title,
+            content: updatedDoc.content,
+            summary: updatedDoc.summary,
+            group_type: updatedDoc.group_type,
+            group_id: updatedDoc.group_id,
+            document_state: updatedDoc.document_state,
+            visibility_level: updatedDoc.visibility_level,
+            is_favorite: updatedDoc.is_favorite,
+            tags: updatedTags,
+          };
+          await invoke('save_document', { req });
+        } catch (error) {
+          console.error('Failed to remove tag:', error);
+          get().updateDocument(doc);
+        }
       },
 
       createDocument: async (title = 'Untitled', groupId, groupType = GroupType.Private) => {
