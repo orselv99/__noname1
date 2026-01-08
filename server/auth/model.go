@@ -29,7 +29,8 @@ type User struct {
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 	LastLoginAt         *time.Time
-	ForceChangePassword bool `gorm:"default:true"`
+	ForceChangePassword bool      `gorm:"default:true"`
+	JoinedProjects      []Project `gorm:"-"` // Join: projects where user is member/owner
 }
 
 // Subscription 모델 정의

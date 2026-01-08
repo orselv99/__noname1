@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { TenantSelector } from './TenantSelector';
+import { useAuthStore } from '../../stores/authStore';
 
 interface TenantInfo {
   tenant_id: string;
@@ -44,6 +45,13 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
 
       // Step 2: Lookup tenants for this email
       const foundTenants = await invoke<TenantInfo[]>('lookup_tenants', { email });
+
+      // Update authStore with tenant names
+      const tenantMap = foundTenants.reduce((acc, t) => {
+        acc[t.tenant_id] = t.name;
+        return acc;
+      }, {} as Record<string, string>);
+      useAuthStore.getState().setTenantNames(tenantMap);
 
       if (foundTenants.length === 0) {
         // No tenant found - show error

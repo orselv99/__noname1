@@ -38,6 +38,8 @@ pub struct LoginResponse {
     #[serde(default)]
     pub position_id: Option<String>,
     #[serde(default)]
+    pub position_name: Option<String>,
+    #[serde(default)]
     pub department_id: Option<String>,
     #[serde(default)]
     pub department_name: Option<String>,
@@ -51,6 +53,8 @@ pub struct LoginResponse {
     pub created_at: Option<String>,
     #[serde(default)]
     pub updated_at: Option<String>,
+    #[serde(default)]
+    pub joined_projects: Vec<ProjectInfo>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -63,6 +67,12 @@ struct ChangePasswordRequest {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TenantInfo {
     pub tenant_id: String,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ProjectInfo {
+    pub id: String,
     pub name: String,
 }
 
@@ -209,6 +219,7 @@ fn try_offline_login(
                     user_id: user.id,
                     username: user.username,
                     position_id: user.position_id,
+                    position_name: None,
                     department_id: user.department_id,
                     department_name: None,
                     phone_numbers,
@@ -216,6 +227,7 @@ fn try_offline_login(
                     birthday: user.birthday,
                     created_at: user.created_at,
                     updated_at: user.updated_at,
+                    joined_projects: Vec::new(), // Offline: empty for now
                 })
             }
             Err(offline_err) => {

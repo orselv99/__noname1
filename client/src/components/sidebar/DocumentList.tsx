@@ -15,7 +15,12 @@ import {
   Search,
   Share2,
   ArrowUpDown,
+  Folder,
+  Building2,
+  Briefcase,
+  Lock,
 } from 'lucide-react';
+import { useAuthStore } from '../../stores/authStore';
 import { GroupLinkDialog } from '../dialogs/GroupLinkDialog';
 import { GroupInfoDialog } from '../dialogs/GroupInfoDialog';
 import {
@@ -146,28 +151,40 @@ function ItemContent({
         className="flex items-center min-h-[28px] relative"
         style={{ paddingLeft: `${depth * 14 + 4}px` }}
       >
-        {/* Toggle Expand */}
+        {/* Icon / Chevron Toggle */}
         <div
-          className={`w-5 h-5 flex items-center justify-center shrink-0 cursor-pointer text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-800 transition-colors mr-0.5 ${hasChildren ? 'opacity-0 group-hover:opacity-100 transition-opacity' : 'invisible'}`}
+          className={`w-5 h-5 flex items-center justify-center shrink-0 cursor-pointer mr-1 relative`}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
-            e.stopPropagation();
-            if (hasChildren || !item.expanded) {
+            if (hasChildren) {
+              e.stopPropagation();
               onToggleExpand(groupId, item.id);
+            } else {
+              onSelectDocument?.(item.id); // Clicking icon on leaf selects it
             }
           }}
         >
-          {hasChildren && (item.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />)}
+          {/* Normal Icon */}
+          <FileText
+            size={14}
+            className={`${selectedDocumentId === item.id ? 'text-blue-400' : 'text-zinc-500'} ${hasChildren ? 'group-hover:hidden' : ''}`}
+          />
+
+          {/* Chevron on Hover (if children exist) */}
+          {hasChildren && (
+            <div className="hidden group-hover:flex items-center justify-center text-zinc-400 hover:text-zinc-200">
+              {item.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
+          )}
         </div>
 
-        {/* Icon & Title */}
+        {/* Title */}
         <div
-          className={`flex-1 flex items-center gap-2 py-1 pr-8 cursor-pointer overflow-hidden select-none ${selectedDocumentId === item.id ? 'text-blue-400' : 'text-zinc-400'}`}
+          className={`flex-1 flex items-center py-1 pr-8 cursor-pointer overflow-hidden select-none ${selectedDocumentId === item.id ? 'text-blue-400' : 'text-zinc-400'}`}
           onClick={() => {
             onSelectDocument?.(item.id);
           }}
         >
-          <FileText size={14} className={`shrink-0 ${selectedDocumentId === item.id ? 'text-blue-400' : 'text-zinc-500'}`} />
           {isRenaming ? (
             <input
               autoFocus
@@ -179,10 +196,7 @@ function ItemContent({
                 if (e.key === 'Enter') {
                   e.currentTarget.blur();
                 } else if (e.key === 'Escape') {
-                  onRenameSubmit?.(item.id, item.title); // Cancel/Reset (though renamingSubmit overwrites, maybe just cancel logic needed?)
-                  // For simplicity, submitting original title is neutral.
-                  // But to really cancel we need a separate onCancel. 
-                  // Let's rely on blur handling it or submitting same title.
+                  onRenameSubmit?.(item.id, item.title);
                   e.currentTarget.value = item.title;
                   e.currentTarget.blur();
                 }
@@ -374,6 +388,13 @@ function SortableGroup({
     opacity: isGroupDragging ? 0.5 : 1
   };
 
+  let GroupIcon = Folder;
+  if (group.type === 'project') GroupIcon = Briefcase;
+  else if (group.type === 'department') {
+    if (group.id === 'private_group') GroupIcon = Lock;
+    else GroupIcon = Building2;
+  }
+
   return (
     <div ref={setNodeRef} style={style} className="mb-1">
       {/* Group Header */}
@@ -383,11 +404,17 @@ function SortableGroup({
         {...listeners}
       >
         <div
-          className={`mr-1 cursor-pointer text-zinc-500 hover:text-zinc-300 w-5 flex justify-center`}
+          className={`mr-1 cursor-pointer w-5 h-5 flex items-center justify-center shrink-0 relative`}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onToggle(group.id); }}
         >
-          {group.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {/* Group Icon (Hidden on Hover) */}
+          <GroupIcon size={14} className={`text-zinc-500 group-hover:hidden`} />
+
+          {/* Chevron (Visible on Hover) */}
+          <div className="hidden group-hover:flex items-center justify-center text-zinc-400">
+            {group.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </div>
         </div>
 
         <div className="flex-1 flex items-center gap-2 overflow-hidden cursor-pointer select-none" onClick={() => onToggle(group.id)}>
@@ -485,7 +512,8 @@ function SortableGroup({
 
 export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
   // --- State ---
-  const { documents, createDocument, renameDocument, deleteDocument, fetchDocuments, addTab, activeTabId, currentUser } = useDocumentStore();
+  const { documents, createDocument, renameDocument, deleteDocument, fetchDocuments, addTab, activeTabId, currentUser, newDocTrigger } = useDocumentStore();
+  const { departments, projects } = useAuthStore();
 
   // State Hoisting
   const [groupSortOptions, setGroupSortOptions] = useState<Record<string, SortOption>>({});
@@ -502,6 +530,13 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
   }, []);
+
+  // Listen for global Create Document trigger
+  useEffect(() => {
+    if (newDocTrigger > 0) {
+      setShowNewDocDialog(true);
+    }
+  }, [newDocTrigger]);
 
   const handleMenuClick = (e: React.MouseEvent, id: string) => {
     const button = e.currentTarget as HTMLElement;
@@ -624,6 +659,8 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       let groupName = `Department ${groupId.substring(0, 8)}...`;
       if (groupId === myDeptId) {
         groupName = currentUser?.department_name?.trim() || 'My Department';
+      } else if (departments[groupId]) {
+        groupName = departments[groupId];
       }
 
       newGroups.push({
@@ -636,18 +673,33 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     });
 
     // 3. Project Groups (Type 1)
-    const projDocs = documents.filter(d => d.group_type === GroupType.Project && d.group_id);
     const projGroups: Record<string, typeof documents> = {};
+
+    // Initialize with joined projects from AuthStore so they appear even if empty
+    Object.keys(projects).forEach(pid => {
+      projGroups[pid] = [];
+    });
+
+    // Populate with documents
+    const projDocs = documents.filter(d => d.group_type === GroupType.Project && d.group_id);
     projDocs.forEach(d => {
       if (!d.group_id) return;
       if (!projGroups[d.group_id]) projGroups[d.group_id] = [];
       projGroups[d.group_id].push(d);
     });
 
-    Object.entries(projGroups).forEach(([groupId, items]) => {
+    // Sort Projects by Name
+    const sortedProjIds = Object.keys(projGroups).sort((a, b) => {
+      const nameA = projects[a] || a;
+      const nameB = projects[b] || b;
+      return nameA.localeCompare(nameB);
+    });
+
+    sortedProjIds.forEach(groupId => {
+      const items = projGroups[groupId];
       newGroups.push({
         id: groupId,
-        name: `Project ${groupId.substring(0, 8)}...`,
+        name: projects[groupId] || `Project ${groupId.substring(0, 8)}...`,
         type: 'project',
         expanded: groups.find(g => g.id === groupId)?.expanded ?? true,
         items: buildTree(items, groupSortOptions[groupId])

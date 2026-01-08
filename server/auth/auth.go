@@ -23,7 +23,7 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 
 	var user User
 	// Add tenant_id filter for tenant isolation
-	query := s.db.Where("email = ?", req.Email)
+	query := s.db.Where("email = ?", req.Email).Preload("DepartmentRel").Preload("PositionRel")
 	if req.TenantId != "" {
 		query = query.Where("tenant_id = ?", req.TenantId)
 	}
@@ -72,6 +72,28 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 	// Convert phone numbers to string slice
 	phoneNumbers := []string(user.PhoneNumbers)
 
+	if user.DepartmentRel != nil {
+		user.DepartmentName = user.DepartmentRel.Name
+	}
+	if user.PositionRel != nil {
+		user.PositionName = user.PositionRel.Name
+	}
+
+	// Fetch Joined Projects
+	// Find projects where user is owner OR member
+	if err := s.db.Where("tenant_id = ? AND (owner_id = ? OR ? = ANY(member_ids))", user.TenantID, user.ID, user.ID).Find(&user.JoinedProjects).Error; err != nil {
+		log.Printf("[WARN] Failed to fetch joined projects for user %s: %v", user.ID, err)
+	}
+
+	var pbJoinedProjects []*pb.Project
+	for _, p := range user.JoinedProjects {
+		// Only send minimal info (ID, Name) for the sidebar to keep login response optimization
+		pbJoinedProjects = append(pbJoinedProjects, &pb.Project{
+			Id:   p.ID,
+			Name: p.Name,
+		})
+	}
+
 	return &pb.LoginResponse{
 		AccessToken:         token,
 		RefreshToken:        refreshToken,
@@ -80,14 +102,17 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		ForceChangePassword: user.ForceChangePassword,
 		TenantId:            user.TenantID,
 		// User info for offline caching
-		UserId:       user.ID,
-		Username:     user.Username,
-		PositionId:   positionId,
-		DepartmentId: departmentId,
-		PhoneNumbers: phoneNumbers,
-		Contact:      user.Contact,
-		CreatedAt:    user.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:    user.UpdatedAt.Format(time.RFC3339),
+		UserId:         user.ID,
+		Username:       user.Username,
+		PositionId:     positionId,
+		DepartmentId:   departmentId,
+		PhoneNumbers:   phoneNumbers,
+		Contact:        user.Contact,
+		CreatedAt:      user.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:      user.UpdatedAt.Format(time.RFC3339),
+		DepartmentName: user.DepartmentName,
+		PositionName:   user.PositionName,
+		JoinedProjects: pbJoinedProjects,
 	}, nil
 }
 

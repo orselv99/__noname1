@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { PanelLeftClose, PanelLeft, FolderOpen, Star } from 'lucide-react';
+import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown } from 'lucide-react';
 
 // Layout Components
 import { WindowControls } from './components/layout/WindowControls';
@@ -12,6 +12,7 @@ import { IconBar } from './components/sidebar/IconBar';
 import { DocumentList, SidebarMode } from './components/sidebar/DocumentList';
 import { MetadataPanel } from './components/sidebar/MetadataPanel';
 import { useDocumentStore } from './stores/documentStore';
+import { useAuthStore } from './stores/authStore';
 import { LoginResponse } from './types';
 
 // Dialog Components
@@ -38,6 +39,7 @@ function AppContent() {
   const { showToast } = useToast();
   const [view, setView] = useState<'login' | 'change_password' | 'main'>('login');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('folder');
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(250);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(280);
@@ -55,6 +57,10 @@ function AppContent() {
 
   // Auth state
   const [currentPassword, setCurrentPassword] = useState('');
+
+  // Tab Menu State
+  const { tabs, setActiveTab } = useDocumentStore();
+  const [showTabMenu, setShowTabMenu] = useState(false);
 
 
   // Drag to move window
@@ -130,7 +136,9 @@ function AppContent() {
     if (data.force_change_password) {
       setView('change_password');
     } else {
+      console.log(data);
       useDocumentStore.getState().setCurrentUser(data);
+      useAuthStore.getState().setUser(data);
       showToast('Login successful', 'success');
       setView('main');
     }
@@ -232,7 +240,56 @@ function AppContent() {
                 className="h-10 bg-zinc-950 border-b border-zinc-800 flex items-center select-none"
                 onMouseDown={handleDragStart}
               >
-                <EditorTabs />
+                <div className="flex-1 overflow-hidden h-full">
+                  <EditorTabs />
+                </div>
+
+                {/* Right Panel Toggle and Controls */}
+                <div className="flex items-center justify-center shrink-0 h-full relative">
+                  {/* Tab Overflow Trigger */}
+                  <button
+                    className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:bg-zinc-800 hover:text-white rounded-md transition-colors"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => setShowTabMenu(!showTabMenu)}
+                    title="Open Tabs"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+
+                  {/* Tab Overflow Menu */}
+                  {showTabMenu && (
+                    <div className="absolute top-full right-0 mt-1 w-64 bg-zinc-800 border border-zinc-700 rounded-md shadow-lg z-50 max-h-96 overflow-y-auto flex flex-col py-1">
+                      {tabs.length === 0 && (
+                        <div className="px-4 py-2 text-sm text-zinc-500">No open tabs</div>
+                      )}
+                      {tabs.map(tab => (
+                        <button
+                          key={tab.id}
+                          className="w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white truncate"
+                          onClick={() => { setActiveTab(tab.id); setShowTabMenu(false); }}
+                        >
+                          {tab.title || 'Untitled'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    className="w-8 h-8 mr-2 flex items-center justify-center text-zinc-400 hover:bg-zinc-800 hover:text-white rounded-md transition-colors"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+                    title={isRightSidebarOpen ? "Collapse Metadata" : "Expand Metadata"}
+                  >
+                    {isRightSidebarOpen ? <PanelRightClose size={18} /> : <PanelRight size={18} />}
+                  </button>
+
+                  {/* Window Controls (When Right Panel is Hidden) */}
+                  {!isRightSidebarOpen && (
+                    <div className="h-full flex items-center">
+                      <WindowControls onClose={handleClose} />
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex-1 bg-zinc-900 overflow-hidden">
                 <CollaborativeEditor />
@@ -240,22 +297,26 @@ function AppContent() {
             </div>
 
             {/* Right Resize Handle */}
-            <ResizeHandle onResizeStart={startResizingRight} />
+            {isRightSidebarOpen && <ResizeHandle onResizeStart={startResizingRight} />}
 
             {/* RIGHT SECTION */}
-            <div className="flex flex-col bg-zinc-950" style={{ width: `${rightSidebarWidth}px` }}>
-              <div
-                className="h-10 border-b border-zinc-800 flex items-center justify-end select-none"
-                onMouseDown={handleDragStart}
-              >
-                <WindowControls
-                  onClose={handleClose}
-                />
+            {isRightSidebarOpen && (
+              <div className="flex flex-col bg-zinc-950" style={{ width: `${rightSidebarWidth}px` }}>
+                <div
+                  className="h-10 border-b border-zinc-800 flex items-center justify-end select-none"
+                  onMouseDown={handleDragStart}
+                >
+                  <WindowControls
+                    onClose={handleClose}
+                  />
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <MetadataPanel />
+                </div>
               </div>
-              <div className="flex-1 overflow-hidden">
-                <MetadataPanel />
-              </div>
-            </div>
+            )}
+
+            {/* Comments removed */}
           </div>
         );
 

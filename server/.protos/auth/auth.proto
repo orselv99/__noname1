@@ -131,6 +131,9 @@ message LoginResponse {
   string contact = 12;
   string created_at = 13;
   string updated_at = 14;
+  string department_name = 15;
+  string position_name = 16;
+  repeated Project joined_projects = 17;
 }
 
 message ResetAndSendPasswordRequest {

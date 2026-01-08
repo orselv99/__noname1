@@ -24,6 +24,8 @@ interface DocumentStore {
 
   // AI 분석 상태
   aiAnalysisStatus: string | null;
+  newDocTrigger: number;
+  triggerNewDocument: () => void;
 
   // Actions
   lastSyncedAt: number | null; // Added for incremental sync
@@ -65,6 +67,8 @@ export const useDocumentStore = create<DocumentStore>()(
       activeTabId: null,
       highlightedEvidence: null,
       aiAnalysisStatus: null,
+      newDocTrigger: 0,
+      triggerNewDocument: () => set((state) => ({ newDocTrigger: state.newDocTrigger + 1 })),
 
       fetchDocuments: async () => {
         set({ isLoading: true, error: null });

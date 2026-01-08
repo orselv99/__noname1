@@ -80,6 +80,7 @@ export interface UserInfo {
   department_id?: string;
   department_name?: string;
   position_id?: string;
+  position_name?: string;
   role: string;
   tenant_id: string;
 }
@@ -93,4 +94,11 @@ export interface LoginResponse extends UserInfo {
   birthday?: string;
   created_at?: string;
   updated_at?: string;
+  joined_projects?: ProjectInfo[];
+}
+
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  description?: string;
 }
