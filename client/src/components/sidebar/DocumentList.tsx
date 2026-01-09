@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, Edit2 } from 'lucide-react';
 
@@ -524,6 +524,10 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
 
   const [isFavoriteFilter, setIsFavoriteFilter] = useState(false);
 
+  // Persistent expansion state
+  const expandedIdsRef = useRef<Set<string>>(new Set());
+  const expandedGroupsRef = useRef<Set<string>>(new Set(['private_group'])); // Default expanded groups
+
   const [contextMenu, setContextMenu] = useState<{ id: string, x: number, y: number } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
@@ -572,7 +576,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
 
   // State for real groups
   const [groups, setGroups] = useState<DocumentGroup[]>([]);
-  console.log(documents);
+
   useEffect(() => {
     fetchDocuments();
   }, []);
@@ -602,18 +606,16 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       return;
     }
 
+
     // 2. Standard Tree View
     const effectiveDocuments = documents;
 
-    // Preserve expansion state
-    const expandedIds = new Set<string>();
-    const collectExpanded = (items: DocumentItem[]) => {
-      items.forEach(i => {
-        if (i.expanded) expandedIds.add(i.id);
-        if (i.children) collectExpanded(i.children);
-      });
-    };
-    groups.forEach(g => collectExpanded(g.items));
+    // Use persisted expansion state
+    const expandedIds = expandedIdsRef.current;
+
+    // Also update groups expansion from persisted state
+    // We handle this inside groups construction below by checking expandedGroupsRef
+
 
     // Recursive tree builder with Sort
     const buildTree = (docs: typeof documents, sortOpt: SortOption = SortOption.NameAsc, parentId?: string): DocumentItem[] => {
@@ -636,6 +638,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
         .map(d => ({
           id: d.id,
           title: d.title,
+          width: '', // Assuming standard width handling
           path: '',
           expanded: expandedIds.has(d.id),
           children: buildTree(docs, sortOpt, d.id)
@@ -654,7 +657,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       id: PRIVATE_GROUP_UI_ID,
       name: 'Private',
       type: 'department',
-      expanded: groups.find(g => g.id === PRIVATE_GROUP_UI_ID)?.expanded ?? true,
+      expanded: expandedGroupsRef.current.has(PRIVATE_GROUP_UI_ID),
       items: buildTree(privateDocs, groupSortOptions[PRIVATE_GROUP_UI_ID])
     });
 
@@ -696,7 +699,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
         id: groupId,
         name: groupName,
         type: 'department',
-        expanded: groups.find(g => g.id === groupId)?.expanded ?? true,
+        expanded: expandedGroupsRef.current.has(groupId),
         items: itemsTree
       });
     });
@@ -730,7 +733,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
         id: groupId,
         name: projects[groupId] || `Project ${groupId.substring(0, 8)}...`,
         type: 'project',
-        expanded: groups.find(g => g.id === groupId)?.expanded ?? true,
+        expanded: expandedGroupsRef.current.has(groupId),
         items: buildTree(items, groupSortOptions[groupId])
       });
     });
@@ -749,10 +752,13 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     // 부모 ID 수집 (문서 계층)
     const parentIds: string[] = [];
     let currentParentId = selectedDoc.parent_id;
-    while (currentParentId) {
+    let safety = 0;
+    const MAX_DEPTH = 100;
+    while (currentParentId && safety < MAX_DEPTH) {
       parentIds.push(currentParentId);
       const parentDoc = documents.find(d => d.id === currentParentId);
       currentParentId = parentDoc?.parent_id;
+      safety++;
     }
 
     // 해당 문서가 속한 그룹 찾기 및 펼치기
@@ -809,7 +815,15 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
 
   // --- Handlers ---
   const toggleGroup = (groupId: string) => {
-    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, expanded: !g.expanded } : g));
+    setGroups(prev => prev.map(g => {
+      if (g.id === groupId) {
+        const newExpanded = !g.expanded;
+        if (newExpanded) expandedGroupsRef.current.add(groupId);
+        else expandedGroupsRef.current.delete(groupId);
+        return { ...g, expanded: newExpanded };
+      }
+      return g;
+    }));
   };
 
   const toggleAllGroups = () => {
@@ -818,18 +832,29 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
 
     // Recursive function to set expanded state for all items
     const setAllExpanded = (items: DocumentItem[], expanded: boolean): DocumentItem[] => {
-      return items.map(item => ({
-        ...item,
-        expanded: expanded,
-        children: item.children ? setAllExpanded(item.children, expanded) : undefined
-      }));
+      return items.map(item => {
+        if (expanded) expandedIdsRef.current.add(item.id);
+        else expandedIdsRef.current.delete(item.id);
+
+        return {
+          ...item,
+          expanded: expanded,
+          children: item.children ? setAllExpanded(item.children, expanded) : undefined
+        };
+      });
     };
 
-    setGroups(prev => prev.map(g => ({
-      ...g,
-      expanded: anyCollapsed,
-      items: setAllExpanded(g.items, anyCollapsed)
-    })));
+    setGroups(prev => prev.map(g => {
+      const newExpanded = !anyCollapsed;
+      if (newExpanded) expandedGroupsRef.current.add(g.id);
+      else expandedGroupsRef.current.delete(g.id);
+
+      return {
+        ...g,
+        expanded: newExpanded,
+        items: setAllExpanded(g.items, newExpanded)
+      }
+    }));
   };
 
   const toggleExpandItem = (groupId: string, itemId: string) => {
@@ -838,7 +863,12 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       // Recursive toggle
       const toggle = (items: DocumentItem[]): DocumentItem[] => {
         return items.map(i => {
-          if (i.id === itemId) return { ...i, expanded: !i.expanded };
+          if (i.id === itemId) {
+            const newExpanded = !i.expanded;
+            if (newExpanded) expandedIdsRef.current.add(itemId);
+            else expandedIdsRef.current.delete(itemId);
+            return { ...i, expanded: newExpanded };
+          }
           if (i.children) return { ...i, children: toggle(i.children) };
           return i;
         });
@@ -852,12 +882,17 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       if (g.id !== groupId) return g;
       const expand = (items: DocumentItem[]): DocumentItem[] => {
         return items.map(i => {
-          if (i.id === itemId) return { ...i, expanded: true };
+          if (i.id === itemId) {
+            expandedIdsRef.current.add(itemId);
+            return { ...i, expanded: true };
+          }
           if (i.children) return { ...i, children: expand(i.children) };
           return i;
         });
       }
-      return { ...g, items: expand(g.items) };
+      // Also expand group
+      if (!g.expanded) expandedGroupsRef.current.add(groupId);
+      return { ...g, expanded: true, items: expand(g.items) };
     }));
   };
 

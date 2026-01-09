@@ -98,7 +98,7 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
     println!("Debug: Resource path: {:?}", resource_path);
 
     let threads = get_conservative_thread_count();
-    let threads_str = threads.as_str();
+    let threads_str = 2; //threads.as_str();
 
     // Spawn Embedding Server (Port 8081)
     let embedding_model = resource_path
@@ -118,7 +118,7 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
             "-b", "2048",
             "-ub", "2048",
             "-np", "1",
-            "-t", threads_str
+            "-t", "2"//threads_str
         ]);
 
     let (mut rx_emb, child_emb) = embedding_sidecar
@@ -151,8 +151,8 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
     // Spawn Generation Server (Port 8082)
     let gen_model = resource_path
         .join("model")
-        //.join("qwen2.5-1.5b-instruct-q4_k_m.gguf");
-        .join("gemma-2-2b-it-Q4_K_M.gguf");
+        .join("qwen2.5-1.5b-instruct-q4_k_m.gguf");
+        //.join("gemma-2-2b-it-Q4_K_M.gguf");
 
     println!("Debug: Spawning Generation Server (Sidecar)...");
     let gen_sidecar = app.shell().sidecar("llama-server")
@@ -164,7 +164,7 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
             "-b", "8192",
             "-ub", "8192",
             "-np", "1",
-            "-t", threads_str
+            "-t", "2"//threads_str
         ]);
 
     let (mut rx_gen, child_gen) = gen_sidecar

@@ -362,8 +362,12 @@ export const useDocumentStore = create<DocumentStore>()(
 
           let newActiveId = state.activeTabId;
           if (newActiveId && toDeleteIds.has(newActiveId)) {
-            newActiveId = null;
-            // Ideally switch to neighbor? For now null is fine.
+            // Select the rightmost tab if available
+            if (newTabs.length > 0) {
+              newActiveId = newTabs[newTabs.length - 1].id;
+            } else {
+              newActiveId = null;
+            }
           }
 
           return {

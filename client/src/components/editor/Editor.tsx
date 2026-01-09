@@ -490,9 +490,12 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
                   const isLast = idx === displayPath.length - 1;
                   return (
                     <div key={item.id} className="flex items-center gap-1">
-                      <span className={isLast ? "text-zinc-300 font-medium" : "shrink-0"}>
+                      <button
+                        onClick={() => useDocumentStore.getState().addTab(item)}
+                        className={`hover:text-zinc-300 transition-colors ${isLast ? "text-zinc-300 font-medium cursor-default pointer-events-none" : "shrink-0 hover:underline cursor-pointer"}`}
+                      >
                         {item.id === activeDoc.id ? title : item.title}
-                      </span>
+                      </button>
                       {!isLast && <span className="select-none">/</span>}
                     </div>
                   );

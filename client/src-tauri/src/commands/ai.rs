@@ -75,14 +75,31 @@ pub fn bytes_to_embedding(bytes: &[u8]) -> Vec<f32> {
 
 /// Parse AI response to extract summary and tags with evidence
 fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<DocumentTag>) {
-    // Attempt to find JSON object bounds to handle potential markdown code blocks or extra text
-    let json_str = if let (Some(start), Some(end)) = (content.find('{'), content.rfind('}')) {
+    // 1. Try to find markdown code block first
+    let json_str = if let Some(start_marker) = content.find("```json") {
+        if let Some(end_marker) = content[start_marker..].find("```") {
+             // Find the *next* ``` after json marker
+             // Actually find("```") finds the start marker itself.
+             // We need to jump past "```json"
+             let code_start = start_marker + 7; 
+             if let Some(end_req) = content[code_start..].find("```") {
+                 &content[code_start..code_start + end_req]
+             } else {
+                 &content[code_start..]
+             }
+        } else {
+            content
+        }
+    } else if let (Some(start), Some(end)) = (content.find('{'), content.rfind('}')) {
+        // Fallback: outermost braces
         &content[start..=end]
     } else {
         content
     };
 
-    match serde_json::from_str::<AiJsonResult>(json_str) {
+    let cleaned_json = json_str.trim();
+
+    match serde_json::from_str::<AiJsonResult>(cleaned_json) {
         Ok(res) => {
             let tags = res.analysis.into_iter().map(|item| DocumentTag {
                 tag: item.tag,
@@ -92,8 +109,9 @@ fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<Docume
         },
         Err(e) => {
             println!("Failed to parse AI JSON: {}", e);
-            println!("Raw content: {}", content);
-            // Fallback to empty if parsing fails
+            println!("Raw AI content: {}", content);
+            println!("Attempted JSON: {}", cleaned_json);
+            // Fallback to empty
             (String::new(), Vec::new())
         }
     }
@@ -189,19 +207,22 @@ fn save_document(
     summary: Option<&[u8]>, // User active summary
     size: &[u8],
     created_at: &[u8],
+    updated_at: &[u8],
     document_state: DocumentState,
     visibility_level: VisibilityLevel,
 ) -> Result<(), String> {
+    let ts = chrono::Utc::now().timestamp();
     conn.execute(
         "INSERT INTO documents (
             id, user_id, document_state, visibility_level, group_type, group_id,
-            title, content, summary, size, created_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            title, content, summary, size, created_at, updated_at, last_synced_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
         ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             content = excluded.content,
             summary = excluded.summary, 
-            updated_at = CURRENT_TIMESTAMP", // Simple update for AI flow
+            updated_at = excluded.updated_at,
+            last_synced_at = excluded.last_synced_at",
         rusqlite::params![
             doc_id,
             user_id,
@@ -213,7 +234,9 @@ fn save_document(
             content,
             summary,
             size,
-            created_at
+            created_at,
+            updated_at,
+            ts
         ],
     )
     .map_err(|e| format!("Failed to save document: {}", e))?;
@@ -228,6 +251,7 @@ fn save_ai_data(
     embedding: &[u8],
     summary: Option<&str>,
     tags: &[DocumentTag],
+    updated_at: &[u8],
 ) -> Result<(), String> {
     let summary_enc = summary.map(|s| encrypt_content(user_id, s)).transpose()?;
     
@@ -236,20 +260,21 @@ fn save_ai_data(
 
     conn.execute(
         "INSERT INTO document_ai_data (
-            document_id, content_hash, embedding, ai_summary, ai_tags
-        ) VALUES (?1, ?2, ?3, ?4, ?5)
+            document_id, content_hash, embedding, ai_summary, ai_tags, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
         ON CONFLICT(document_id) DO UPDATE SET
             content_hash = excluded.content_hash,
             embedding = excluded.embedding,
             ai_summary = excluded.ai_summary,
             ai_tags = excluded.ai_tags,
-            updated_at = CURRENT_TIMESTAMP",
+            updated_at = excluded.updated_at",
         rusqlite::params![
             document_id,
             content_hash,
             embedding,
             summary_enc,
-            tags_enc
+            tags_enc,
+            updated_at
         ],
     ).map_err(|e| format!("Failed to save AI data: {}", e))?;
 
@@ -392,7 +417,7 @@ pub async fn extract_info(
 
     // 2. Generate summary and tags
     let prompt = format!(
-        "<|im_start|>system\nYou are a professional document analyzer. Your task is to extract key information from the user's text and provide the results in Korean.\nFollow these instructions strictly:\n1. Summary: Write a concise one-sentence summary of the text.\n2. Tags: Identify exactly 3 essential keywords.\n3. Evidence: For each keyword, extract the exact sentence from the source text that serves as the basis for that keyword.\nOutput the results strictly in the following JSON format:\n{{\n\"summary\":\"one-sentence summary in Korean\",\n\"analysis\": [\n{{\"tag\":\"keyword1\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"keyword2\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"keyword3\",\"evidence\":\"verbatim sentence from the text\"}}\n]}}<|im_end|><|im_start|>user\n{}\n<|im_end|><|im_start|>assistant\n",
+        "<|im_start|>system\nYou are a professional document analyzer. Your task is to extract key information from the user's text and provide the results in Korean.\nFollow these instructions strictly:\n1. Summary: Write a concise one-sentence summary of the text.\n2. Tags: Identify exactly 3 essential keywords.\n3. Evidence: For each keyword, extract the exact sentence from the source text that serves as the basis for that keyword.\nOutput the results strictly in the following JSON format:\n{{\n\"summary\":\"one-sentence summary in Korean\",\n\"analysis\": [\n{{\"tag\":\"Actual Keyword 1\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"Actual Keyword 2\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"Actual Keyword 3\",\"evidence\":\"verbatim sentence from the text\"}}\n]}}<|im_end|><|im_start|>user\n{}\n<|im_end|><|im_start|>assistant\n",
         text.chars().take(4000).collect::<String>() // Limit context
     );
 
@@ -451,12 +476,13 @@ pub async fn extract_info(
                 summary_enc.as_deref(), // Copy AI summary to Active User Summary
                 &size_enc,
                 &created_at_enc,
+                &created_at_enc, // updated_at (same as created/now for this action)
                 DocumentState::Draft,
                 VisibilityLevel::Hidden,
             )?;
 
             // B. Save Draft/AI Data (Child)
-            save_ai_data(conn, &doc_id, &content_hash, &user_id, &embedding_bytes, Some(&summary), &tags)?;
+            save_ai_data(conn, &doc_id, &content_hash, &user_id, &embedding_bytes, Some(&summary), &tags, &created_at_enc)?;
             
             // C. Save Active Tags (User Visible)
             save_document_tags(conn, &doc_id, &user_id, &tags)?;

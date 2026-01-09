@@ -628,14 +628,17 @@ export const MetadataPanel = () => {
           </div>
           {isTagsExpanded && (
             <>
-              <div className="flex flex-col gap-2 overflow-visible mb-3">
+              <div className="relative flex flex-wrap gap-2 mb-3">
                 {(!activeDoc.tags || activeDoc.tags.length === 0) && (
                   <span className="text-xs text-zinc-600 italic block">No tags</span>
                 )}
                 {activeDoc.tags && activeDoc.tags.map((t, i) => (
-                  <div key={i} className="group relative">
+                  <div key={i} className="group">
+
                     <span
-                      className="cursor-help px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-blue-400 hover:border-blue-500 hover:bg-zinc-800 transition-colors inline-flex items-center gap-1 max-w-full"
+                      onMouseEnter={() => useDocumentStore.getState().setHighlightedEvidence(t.evidence || null)}
+                      onMouseLeave={() => useDocumentStore.getState().setHighlightedEvidence(null)}
+                      className="peer cursor-help px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-blue-400 hover:border-blue-500 hover:bg-zinc-800 transition-colors inline-flex items-center gap-1 max-w-full"
                     >
                       <span className="truncate">#{t.tag}</span>
                       <button
@@ -652,7 +655,7 @@ export const MetadataPanel = () => {
 
                     {/* Tooltip positioned below the tag */}
                     {t.evidence && (
-                      <div className="hidden group-hover:block absolute top-full left-0 mt-2 z-[9999] w-64 bg-zinc-950/95 backdrop-blur border border-zinc-700 rounded-lg shadow-xl p-3 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="hidden peer-hover:block absolute top-full left-0 mt-2 z-[9999] w-64 bg-zinc-950/95 backdrop-blur border border-zinc-700 rounded-lg shadow-xl p-3 animate-in fade-in zoom-in-95 duration-200 pointer-events-none">
                         <div className="font-bold mb-1 text-zinc-400 text-[10px] uppercase tracking-wider">Evidence</div>
                         <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">
                           {t.evidence}
@@ -663,8 +666,8 @@ export const MetadataPanel = () => {
                 ))}
               </div>
 
-              {/* Add Tag Form */}
-              <AddTagForm docId={activeDoc.id} />
+              {/* Add Tag Form (일단 사용자 추가는 받지 않음) */}
+              {/* <AddTagForm docId={activeDoc.id} /> */}
             </>
           )}
         </div>
@@ -687,10 +690,10 @@ export const MetadataPanel = () => {
           {isRevisionExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         </div>
         <div
-          className={`transition-all duration-300 ease-in-out overflow-hidden ${isRevisionExpanded ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
+          className={`transition-all duration-300 ease-in-out overflow-hidden ${isRevisionExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
             }`}
         >
-          <div className="px-4 pb-3 overflow-y-auto custom-scrollbar h-full">
+          <div className="px-4 pb-3 overflow-y-auto custom-scrollbar max-h-48">
             {/* Git Graph Style Revisions */}
             <div className="relative pl-5">
               {/* Vertical Line */}
