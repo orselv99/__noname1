@@ -361,7 +361,28 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
   const scrollToHeading = (pos: number) => {
     if (!editor) return;
     editor.commands.setTextSelection(pos);
-    editor.commands.scrollIntoView();
+
+    // 1. Try nodeDOM first
+    let element = editor.view.nodeDOM(pos) as HTMLElement;
+
+    // 2. If not found or not an element, try domAtPos and traverse up
+    if (!element || !(element instanceof HTMLElement)) {
+      const { node } = editor.view.domAtPos(pos);
+      let target = node instanceof HTMLElement ? node : node.parentElement;
+
+      // Traverse up to find Heading element
+      while (target && target !== editor.view.dom) {
+        if (/^H[1-6]$/.test(target.tagName)) {
+          element = target;
+          break;
+        }
+        target = target.parentElement;
+      }
+    }
+
+    if (element && element.scrollIntoView) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
 
@@ -499,55 +520,69 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
       </div>
 
       {/* Main Editor Area */}
-      <div className="flex-1 flex relative min-h-0">
-        {/* Editor Content Container */}
-        <div className="flex-1 flex flex-col items-center min-h-0">
-          <div className="w-full h-full max-w-4xl flex flex-col overflow-y-auto custom-scrollbar" id="editor-scroll-container">
-            {/* Title */}
-            <div className="px-12 pt-10 pb-4 shrink-0">
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => {
-                  const newTitle = e.target.value;
-                  setTitle(newTitle);
-                  setIsDirty(true); // 제목 변경 시 isDirty 활성화
-                  // 탭 제목도 실시간 업데이트
-                  if (activeTabId) {
-                    updateTabTitle(activeTabId, newTitle);
-                  }
-                }}
-                placeholder="Untitled"
-                className="w-full bg-transparent text-4xl font-bold text-white placeholder-zinc-700 focus:outline-none"
-              />
-            </div>
+      <div className="flex-1 flex relative min-h-0 overflow-hidden">
+        {/* Scroll Container */}
+        <div
+          className="flex-1 flex overflow-y-auto custom-scrollbar w-full relative"
+          id="editor-scroll-container"
+          style={{ scrollbarGutter: 'stable' }}
+        >
 
-            {/* Floating Toolbar */}
-            <div className="px-4 pb-4 sticky top-4 z-50 shrink-0">
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 backdrop-blur shadow-2xl mx-auto max-w-fit transition-all duration-300">
-                <EditorToolbar editor={editor} />
+          {/* Editor Content Container */}
+          <div className="flex-1 flex flex-col items-center min-h-full">
+            <div className="w-full max-w-4xl flex flex-col relative">
+              {/* Title */}
+              <div className="px-12 pt-10 pb-4 shrink-0">
+                <input
+                  type="text"
+                  value={title}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      editor?.commands.focus('start');
+                    }
+                  }}
+                  onChange={(e) => {
+                    const newTitle = e.target.value;
+                    setTitle(newTitle);
+                    setIsDirty(true); // 제목 변경 시 isDirty 활성화
+                    // 탭 제목도 실시간 업데이트
+                    if (activeTabId) {
+                      updateTabTitle(activeTabId, newTitle);
+                    }
+                  }}
+                  placeholder="Untitled"
+                  className="w-full bg-transparent text-4xl font-bold text-white placeholder-zinc-700 focus:outline-none"
+                />
               </div>
-            </div>
 
-            {/* Editor Content Page */}
-            <div className="flex-1 px-12 pb-20 w-full">
-              <EditorContent
-                editor={editor}
-                className="prose prose-invert prose-lg max-w-none w-full outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[500px] text-zinc-300"
-              />
+              {/* Floating Toolbar - Sticky within content */}
+              <div className="px-4 pb-4 sticky top-4 z-50 shrink-0">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 backdrop-blur shadow-2xl mx-auto max-w-fit transition-all duration-300">
+                  <EditorToolbar editor={editor} />
+                </div>
+              </div>
+
+              {/* Editor Content Page */}
+              <div className="flex-1 px-12 pb-20 w-full">
+                <EditorContent
+                  editor={editor}
+                  className="prose prose-invert prose-lg max-w-none w-full outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[500px] text-zinc-300"
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* TOC Panel (Right Edge) - 이미지처럼 스타일 */}
+        {/* TOC Panel (Floating) */}
         {headings.length > 0 && (
-          <div className="w-40 shrink-0 bg-zinc-950 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
+          <div className="absolute top-40 right-6 w-40 shrink-0 flex flex-col max-h-[calc(100%-13rem)] z-40 pointer-events-none">
+            <div className="flex-1 overflow-y-auto py-4 custom-scrollbar pointer-events-auto">
               {headings.map((heading, idx) => (
                 <button
                   key={idx}
                   onClick={() => scrollToHeading(heading.pos)}
-                  className={`w-full text-right pr-3 py-1.5 text-[11px] hover:text-white cursor-pointer transition-colors border-r-2 ${heading.level === 1
+                  className={`block w-full text-right pr-3 py-1.5 text-[11px] truncate hover:text-white cursor-pointer transition-colors border-r-2 ${heading.level === 1
                     ? 'text-zinc-200 font-medium border-red-500'
                     : heading.level === 2
                       ? 'text-zinc-400 border-transparent hover:border-zinc-600'
@@ -561,30 +596,30 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
             </div>
           </div>
         )}
-      </div>
 
-      {/* Floating AI Action Button */}
-      <div className="absolute bottom-8 right-8 z-50">
-        <button
-          className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium shadow-xl transition-all ${isExtracting
-            ? 'bg-zinc-800 text-zinc-400 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-500 text-white hover:scale-105 active:scale-95'
-            }`}
-          onClick={handleAiExtraction}
-          disabled={isExtracting}
-        >
-          {isExtracting ? (
-            <>
-              <span className="animate-spin">⟳</span>
-              <span className="text-sm">분석중...</span>
-            </>
-          ) : (
-            <>
-              <Star size={18} className="fill-current" />
-              <span className="text-sm">AI 분석</span>
-            </>
-          )}
-        </button>
+        {/* Floating AI Action Button - Absolute relative to Outer Wrapper */}
+        <div className="absolute bottom-8 right-8 z-50">
+          <button
+            className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium shadow-xl transition-all ${isExtracting
+              ? 'bg-zinc-800 text-zinc-400 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-500 text-white hover:scale-105 active:scale-95'
+              }`}
+            onClick={handleAiExtraction}
+            disabled={isExtracting}
+          >
+            {isExtracting ? (
+              <>
+                <span className="animate-spin">⟳</span>
+                <span className="text-sm">분석중...</span>
+              </>
+            ) : (
+              <>
+                <Star size={18} className="fill-current" />
+                <span className="text-sm">AI 분석</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

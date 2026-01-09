@@ -117,6 +117,13 @@ img {
   margin-top: 1rem;
 }
 
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3 {
+  scroll-margin-top: 120px;
+  /* Toolbar 높이 + 여유분 */
+}
+
 .ProseMirror p {
   margin-bottom: 0.75rem;
 }
