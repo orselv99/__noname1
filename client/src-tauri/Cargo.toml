@@ -33,4 +33,6 @@ base64 = "0.22"
 sha2 = "0.10"
 urlencoding = "2"
 sysinfo = "0.30"
+sqlite-vec = "0.1"
+zerocopy = "0.7"
 

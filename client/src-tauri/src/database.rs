@@ -45,6 +45,13 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
   let db_path = get_db_path(app)?;
   println!("Debug: Database path: {:?}", db_path);
 
+  // Register sqlite-vec extension
+  unsafe {
+    let _ = rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+      sqlite_vec::sqlite3_vec_init as *const (),
+    )));
+  }
+
   let conn = Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))?;
 
   // Create users table matching server schema (server/auth/model.go User)

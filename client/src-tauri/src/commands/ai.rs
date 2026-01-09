@@ -117,6 +117,58 @@ fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<Docume
     }
 }
 
+/// Naive clean up of HTML and Markdown syntax for better AI prompt context
+fn clean_input_text(input: &str) -> String {
+    // 1. Basic HTML Tag Removal
+    let mut no_html = String::with_capacity(input.len());
+    let mut inside_tag = false;
+    for c in input.chars() {
+        if c == '<' {
+            inside_tag = true;
+            continue;
+        }
+        if c == '>' && inside_tag {
+            inside_tag = false;
+            continue;
+        }
+        if !inside_tag {
+            no_html.push(c);
+        }
+    }
+
+    // 2. Reduce Markdown Noise
+    // Replace multi-char markers
+    let s = no_html
+        .replace("```", " ")
+        .replace("**", " ")
+        .replace("__", " ")
+        .replace("==", " ")
+        .replace("~~", " ");
+
+    // Filter specific markdown chars
+    // Keep [] and () as they often contain useful text/links, but maybe strip * # ` ~
+    let s: String = s.chars()
+        .filter(|&c| c != '*' && c != '#' && c != '`' && c != '~')
+        .collect();
+
+    // 3. Collapse whitespace
+    let mut final_res = String::with_capacity(s.len());
+    let mut last_ws = false;
+    for c in s.chars() {
+        if c.is_whitespace() {
+            if !last_ws {
+                final_res.push(' ');
+                last_ws = true;
+            }
+        } else {
+            final_res.push(c);
+            last_ws = false;
+        }
+    }
+
+    final_res.trim().to_string()
+}
+
 // ============================================================================
 // Database Operations
 // ============================================================================
@@ -415,10 +467,13 @@ pub async fn extract_info(
     let norm = mean_vector.iter().map(|x| x * x).sum::<f32>().sqrt();
     let normalized_vector: Vec<f32> = mean_vector.iter().map(|&x| x / norm).collect();
 
+
+
     // 2. Generate summary and tags
+    let cleaned_text = clean_input_text(&text);
     let prompt = format!(
         "<|im_start|>system\nYou are a professional document analyzer. Your task is to extract key information from the user's text and provide the results in Korean.\nFollow these instructions strictly:\n1. Summary: Write a concise one-sentence summary of the text.\n2. Tags: Identify exactly 3 essential keywords.\n3. Evidence: For each keyword, extract the exact sentence from the source text that serves as the basis for that keyword.\nOutput the results strictly in the following JSON format:\n{{\n\"summary\":\"one-sentence summary in Korean\",\n\"analysis\": [\n{{\"tag\":\"Actual Keyword 1\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"Actual Keyword 2\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"Actual Keyword 3\",\"evidence\":\"verbatim sentence from the text\"}}\n]}}<|im_end|><|im_start|>user\n{}\n<|im_end|><|im_start|>assistant\n",
-        text.chars().take(4000).collect::<String>() // Limit context
+        cleaned_text.chars().take(4000).collect::<String>() // Limit context
     );
 
     let gen_res = client

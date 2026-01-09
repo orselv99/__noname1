@@ -32,7 +32,8 @@ pub fn run() {
       commands::documents::save_document,
       commands::documents::list_documents,
       commands::documents::get_document,
-      commands::documents::delete_document
+      commands::documents::delete_document,
+      commands::rag::ask_ai
     ])
     .setup(|app| {
       // Kill any existing sidecar processes to prevent orphans on startup

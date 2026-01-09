@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown } from 'lucide-react';
+import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown, Search, List } from 'lucide-react';
 
 // Layout Components
 import { WindowControls } from './components/layout/WindowControls';
@@ -32,6 +32,7 @@ import { EditorTabs } from './components/editor/EditorTabs';
 // Other
 import { ToastProvider, useToast } from './components/Toast';
 import { StatusBar } from './components/StatusBar';
+import { RagPanel } from './components/sidebar/RagPanel';
 
 // LoginResponse imported from types
 
@@ -59,8 +60,12 @@ function AppContent() {
   const [currentPassword, setCurrentPassword] = useState('');
 
   // Tab Menu State
+  // Tab Menu State
   const { tabs, setActiveTab } = useDocumentStore();
   const [showTabMenu, setShowTabMenu] = useState(false);
+
+  // Right Panel State
+  const [activeRightTab, setActiveRightTab] = useState<'metadata' | 'rag'>('metadata');
 
 
   // Drag to move window
@@ -285,7 +290,22 @@ function AppContent() {
 
                   {/* Window Controls (When Right Panel is Hidden) */}
                   {!isRightSidebarOpen && (
-                    <div className="h-full flex items-center">
+                    <div className="h-full flex items-center gap-1">
+                      <button
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors text-zinc-400 hover:bg-zinc-800 hover:text-white`}
+                        onClick={() => { setActiveRightTab('metadata'); setIsRightSidebarOpen(true); }}
+                        title="Metadata"
+                      >
+                        <List size={16} />
+                      </button>
+                      <button
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors text-zinc-400 hover:bg-zinc-800 hover:text-white`}
+                        onClick={() => { setActiveRightTab('rag'); setIsRightSidebarOpen(true); }}
+                        title="Search"
+                      >
+                        <Search size={16} />
+                      </button>
+                      <div className="w-px h-4 bg-zinc-800 mx-1" />
                       <WindowControls onClose={handleClose} />
                     </div>
                   )}
@@ -303,15 +323,34 @@ function AppContent() {
             {isRightSidebarOpen && (
               <div className="flex flex-col bg-zinc-950" style={{ width: `${rightSidebarWidth}px` }}>
                 <div
-                  className="h-10 border-b border-zinc-800 flex items-center justify-end select-none"
+                  className="h-10 border-b border-zinc-800 flex items-center justify-between select-none pr-2"
                   onMouseDown={handleDragStart}
                 >
+                  <div className="flex items-center gap-1 ml-2">
+                    <div className="h-full flex items-center gap-1">
+                      <button
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'metadata' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+                        onClick={() => setActiveRightTab('metadata')}
+                        title="Metadata"
+                      >
+                        <List size={16} />
+                      </button>
+                      <button
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'rag' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+                        onClick={() => setActiveRightTab('rag')}
+                        title="Search"
+                      >
+                        <Search size={16} />
+                      </button>
+                    </div>
+                  </div>
+
                   <WindowControls
                     onClose={handleClose}
                   />
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <MetadataPanel />
+                  {activeRightTab === 'metadata' ? <MetadataPanel /> : <RagPanel />}
                 </div>
               </div>
             )}
