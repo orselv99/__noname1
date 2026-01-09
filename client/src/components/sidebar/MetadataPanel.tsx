@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Calendar, User, FileText, Plus, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History } from 'lucide-react';
+import { Tag, Calendar, User, FileText, Plus, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity } from 'lucide-react';
 import { useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { DocumentState, VisibilityLevel } from '../../types';
@@ -154,7 +154,7 @@ const ResourcePreviewDialog = ({
 }) => {
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/80 flex items-center justify-center z-[99999]"
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
       onClick={onClose}
     >
       <div
@@ -551,7 +551,7 @@ export const MetadataPanel = () => {
   console.log(documents);
 
   return (
-    <div className="w-full h-full bg-zinc-950 flex flex-col text-white">
+    <div className="w-full h-full bg-zinc-950 flex flex-col text-white relative">
       {/* Header */}
       <div className="p-3 border-b border-zinc-800 font-medium text-xs text-zinc-400 uppercase tracking-wider flex items-center gap-2">
         <FileText size={14} />
@@ -567,14 +567,17 @@ export const MetadataPanel = () => {
 
       {/* Content - 평소에는 스크롤바 숨김, hover 시 표시 */}
       <div
-        className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar hover:overflow-y-scroll"
+        className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 custom-scrollbar hover:overflow-y-scroll"
         style={{ scrollbarGutter: 'stable' }}
       >
 
         {/* Status & Visibility Section - TOP (한 줄) */}
         <div className="flex gap-2">
           <div className="flex-1">
-            <h3 className="text-xs text-zinc-500 font-medium mb-1">Status</h3>
+            <h3 className="text-xs text-zinc-500 font-medium mb-1 flex items-center gap-1">
+              <Activity size={12} />
+              Status
+            </h3>
             <DocumentStateDropdown
               currentState={activeDoc.document_state}
               onStateChange={(state) => {
@@ -583,7 +586,10 @@ export const MetadataPanel = () => {
             />
           </div>
           <div className="flex-1">
-            <h3 className="text-xs text-zinc-500 font-medium mb-1">Visibility</h3>
+            <h3 className="text-xs text-zinc-500 font-medium mb-1 flex items-center gap-1">
+              <Eye size={12} />
+              Visibility
+            </h3>
             <VisibilityDropdown
               currentLevel={activeDoc.visibility_level}
               onLevelChange={(level) => {
@@ -604,7 +610,7 @@ export const MetadataPanel = () => {
             {isSummaryExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </div>
           {isSummaryExpanded && (
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <p className="text-xs text-zinc-400 leading-relaxed wrap-break-word">
               {activeDoc.summary || <span className="text-zinc-600 italic">No summary available</span>}
             </p>
           )}
@@ -617,41 +623,40 @@ export const MetadataPanel = () => {
             onClick={() => setIsTagsExpanded(!isTagsExpanded)}
           >
             <Tag size={12} />
-            <h3 className="text-xs font-medium flex-1">Tags</h3>
+            <h3 className="text-xs font-medium flex-1">Tags ({activeDoc.tags?.length || 0})</h3>
             {isTagsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </div>
           {isTagsExpanded && (
             <>
-              <div className="flex flex-wrap gap-2 overflow-visible mb-3">
+              <div className="flex flex-col gap-2 overflow-visible mb-3">
                 {(!activeDoc.tags || activeDoc.tags.length === 0) && (
                   <span className="text-xs text-zinc-600 italic block">No tags</span>
                 )}
                 {activeDoc.tags && activeDoc.tags.map((t, i) => (
                   <div key={i} className="group relative">
                     <span
-                      onMouseEnter={() => {
-                        if (t.evidence) {
-                          useDocumentStore.getState().setHighlightedEvidence(t.evidence);
-                        }
-                      }}
-                      onMouseLeave={() => {
-                        useDocumentStore.getState().setHighlightedEvidence(null);
-                      }}
-                      className="cursor-help px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-blue-400 hover:border-blue-500 hover:bg-zinc-800 transition-colors inline-flex items-center gap-1">
-                      #{t.tag}
+                      className="cursor-help px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-blue-400 hover:border-blue-500 hover:bg-zinc-800 transition-colors inline-flex items-center gap-1 max-w-full"
+                    >
+                      <span className="truncate">#{t.tag}</span>
                       <button
-                        onClick={() => useDocumentStore.getState().removeTagFromDocument(activeDoc.id, i)}
-                        className="ml-1 text-zinc-500 hover:text-red-400 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          useDocumentStore.getState().removeTagFromDocument(activeDoc.id, i);
+                        }}
+                        className="ml-1 text-zinc-500 hover:text-red-400 transition-colors shrink-0"
                         title="Remove tag"
                       >
                         ×
                       </button>
                     </span>
-                    {/* Evidence Tooltip - Shows above the tag */}
+
+                    {/* Tooltip positioned below the tag */}
                     {t.evidence && (
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-60 p-2 bg-zinc-800 border border-zinc-700 rounded shadow-xl z-9999 text-[10px] text-zinc-300 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-normal wrap-break-word">
-                        <div className="font-bold mb-1 text-zinc-400">Evidence:</div>
-                        {t.evidence}
+                      <div className="hidden group-hover:block absolute top-full left-0 mt-2 z-[9999] w-64 bg-zinc-950/95 backdrop-blur border border-zinc-700 rounded-lg shadow-xl p-3 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="font-bold mb-1 text-zinc-400 text-[10px] uppercase tracking-wider">Evidence</div>
+                        <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto custom-scrollbar">
+                          {t.evidence}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -762,6 +767,7 @@ export const MetadataPanel = () => {
           <span>{activeDoc.size || '0'} bytes</span>
         </div>
       </div>
-    </div>
+
+    </div >
   );
 };

@@ -19,6 +19,7 @@ import {
   Building2,
   Briefcase,
   Lock,
+  Star,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { GroupLinkDialog } from '../dialogs/GroupLinkDialog';
@@ -521,6 +522,8 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     setGroupSortOptions(prev => ({ ...prev, [groupId]: sort }));
   };
 
+  const [isFavoriteFilter, setIsFavoriteFilter] = useState(false);
+
   const [contextMenu, setContextMenu] = useState<{ id: string, x: number, y: number } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
@@ -576,6 +579,32 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
 
   // Sync store documents to groups
   useEffect(() => {
+    // 1. Favorites View (Flat)
+    if (isFavoriteFilter) {
+      const favs = documents.filter(d => d.is_favorite);
+      // Sort favorites by updated_at desc default
+      favs.sort((a, b) => (b.updated_at || b.created_at || '').localeCompare(a.updated_at || a.created_at || ''));
+
+      const flatItems: DocumentItem[] = favs.map(d => ({
+        id: d.id,
+        title: d.title,
+        path: '',
+        expanded: false,
+      }));
+
+      setGroups([{
+        id: 'favorites',
+        name: 'Favorites',
+        type: 'project',
+        expanded: true,
+        items: flatItems
+      }]);
+      return;
+    }
+
+    // 2. Standard Tree View
+    const effectiveDocuments = documents;
+
     // Preserve expansion state
     const expandedIds = new Set<string>();
     const collectExpanded = (items: DocumentItem[]) => {
@@ -617,7 +646,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     const PRIVATE_GROUP_UI_ID = 'private_group';
 
     // 1. Private Group
-    const privateDocs = documents.filter(
+    const privateDocs = effectiveDocuments.filter(
       d => d.group_type === GroupType.Private && !d.group_id
     );
 
@@ -630,7 +659,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     });
 
     // 2. Department Groups (Type 0)
-    const deptDocs = documents.filter(d => d.group_type === GroupType.Department && d.group_id);
+    const deptDocs = effectiveDocuments.filter(d => d.group_type === GroupType.Department && d.group_id);
     const deptGroups: Record<string, typeof documents> = {};
 
     // Initialize My Department empty group if user has one
@@ -681,7 +710,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     });
 
     // Populate with documents
-    const projDocs = documents.filter(d => d.group_type === GroupType.Project && d.group_id);
+    const projDocs = effectiveDocuments.filter(d => d.group_type === GroupType.Project && d.group_id);
     projDocs.forEach(d => {
       if (!d.group_id) return;
       if (!projGroups[d.group_id]) projGroups[d.group_id] = [];
@@ -707,7 +736,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     });
 
     setGroups(newGroups);
-  }, [documents, currentUser, groupSortOptions]);
+  }, [documents, currentUser, groupSortOptions, isFavoriteFilter]);
 
   // activeTabId 변경 시 해당 문서의 부모들을 자동으로 펼치기
   useEffect(() => {
@@ -974,6 +1003,17 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
           </button>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${isFavoriteFilter ? 'text-zinc-500 hover:text-white hover:bg-zinc-800' : 'text-zinc-500 hover:text-yellow-400 hover:bg-zinc-800'}`}
+            onClick={() => setIsFavoriteFilter(!isFavoriteFilter)}
+            title={isFavoriteFilter ? "Show All Documents" : "Show Favorites Only"}
+          >
+            {isFavoriteFilter ? (
+              <FileText size={18} />
+            ) : (
+              <Star size={18} />
+            )}
+          </button>
           <button
             className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-800 rounded"
             onClick={toggleAllGroups}

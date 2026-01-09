@@ -20,7 +20,7 @@ import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import { useEffect, useState } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
-import { FileText, Star, Save, MoreVertical } from 'lucide-react';
+import { FileText, Star, Save, MoreVertical, Lock, Unlock } from 'lucide-react';
 import { EditorToolbar } from './EditorToolbar';
 import { Document } from '../../types';
 import { useToast } from '../Toast';
@@ -112,9 +112,17 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
   const [isExtracting, setIsExtracting] = useState(false);
   const [title, setTitle] = useState('');
   const [isDirty, setIsDirty] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   // LocalStorage Draft 키 생성 헬퍼
   const getDraftKey = (docId: string) => `draft-${docId}`;
+
+  // Read-only toggle effect
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(!isReadOnly);
+    }
+  }, [editor, isReadOnly]);
 
   // Load content when active tab changes (with localStorage draft recovery)
   useEffect(() => {
@@ -495,12 +503,11 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
         </div>
         <div>
           <button
-            onClick={handleSave}
-            disabled={!isDirty} // Disable if not dirty
-            className={`p-2 rounded-lg transition-colors ${!isDirty ? 'text-zinc-700 cursor-not-allowed' : 'hover:bg-zinc-800 text-zinc-400 hover:text-white'}`}
-            title="저장 (Ctrl+S)"
+            onClick={() => setIsReadOnly(!isReadOnly)}
+            className={`p-2 rounded-lg transition-colors ${isReadOnly ? 'text-red-400 bg-red-900/20 hover:bg-red-900/30' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+            title={isReadOnly ? "Read-only Mode (Unlock)" : "Lock Document"}
           >
-            <Save size={18} />
+            {isReadOnly ? <Lock size={18} /> : <Unlock size={18} />}
           </button>
           <button
             onClick={() => activeTabId && toggleFavorite(activeTabId)}
@@ -508,6 +515,14 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
             title="즐겨찾기"
           >
             <Star size={18} className={activeDoc?.is_favorite ? 'fill-current' : ''} />
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!isDirty} // Disable if not dirty
+            className={`p-2 rounded-lg transition-colors ${!isDirty ? 'text-zinc-700 cursor-not-allowed' : 'hover:bg-zinc-800 text-zinc-400 hover:text-white'}`}
+            title="저장 (Ctrl+S)"
+          >
+            <Save size={18} />
           </button>
           <button
             onClick={() => console.log('More menu clicked')}
@@ -557,7 +572,7 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
               </div>
 
               {/* Floating Toolbar - Sticky within content */}
-              <div className="px-4 pb-4 sticky top-4 z-50 shrink-0">
+              <div className="px-4 py-4 sticky top-4 z-50 shrink-0">
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 backdrop-blur shadow-2xl mx-auto max-w-fit transition-all duration-300">
                   <EditorToolbar editor={editor} />
                 </div>

@@ -36,6 +36,18 @@ pub struct ExtractInfoResult {
     pub tags: Vec<DocumentTag>,
 }
 
+#[derive(serde::Deserialize)]
+struct AiJsonItem {
+    tag: String,
+    evidence: String,
+}
+
+#[derive(serde::Deserialize)]
+struct AiJsonResult {
+    summary: String,
+    analysis: Vec<AiJsonItem>,
+}
+
 // Encryption logic moved to crypto.rs
 // ============================================================================
 // Embedding Helpers
@@ -62,58 +74,29 @@ pub fn bytes_to_embedding(bytes: &[u8]) -> Vec<f32> {
 // ============================================================================
 
 /// Parse AI response to extract summary and tags with evidence
-fn parse_ai_response(content: &str, original_text: &str) -> (String, Vec<DocumentTag>) {
-    let mut summary = String::new();
-    let mut tags = Vec::new();
+fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<DocumentTag>) {
+    // Attempt to find JSON object bounds to handle potential markdown code blocks or extra text
+    let json_str = if let (Some(start), Some(end)) = (content.find('{'), content.rfind('}')) {
+        &content[start..=end]
+    } else {
+        content
+    };
 
-    // Parse Summary: line
-    for line in content.lines() {
-        let line = line.trim();
-        if line.starts_with("Summary:") {
-            summary = line.trim_start_matches("Summary:").trim().to_string();
-        } else if line.starts_with("Tags:") {
-            let tags_str = line.trim_start_matches("Tags:").trim();
-            // Parse tags from format: [keyword1, keyword2, keyword3] or keyword1, keyword2, keyword3
-            let tags_str = tags_str.trim_start_matches('[').trim_end_matches(']');
-            for tag in tags_str.split(',') {
-                let tag = tag.trim().to_string();
-                if !tag.is_empty() {
-                    // Find evidence paragraph containing this tag
-                    let evidence = find_evidence_for_tag(&tag, original_text);
-                    tags.push(DocumentTag { tag, evidence });
-                }
-            }
+    match serde_json::from_str::<AiJsonResult>(json_str) {
+        Ok(res) => {
+            let tags = res.analysis.into_iter().map(|item| DocumentTag {
+                tag: item.tag,
+                evidence: Some(item.evidence),
+            }).collect();
+            (res.summary, tags)
+        },
+        Err(e) => {
+            println!("Failed to parse AI JSON: {}", e);
+            println!("Raw content: {}", content);
+            // Fallback to empty if parsing fails
+            (String::new(), Vec::new())
         }
     }
-
-    // Limit to 3 tags as per requirement
-    tags.truncate(3);
-    
-    (summary, tags)
-}
-
-/// Find a paragraph containing the tag as evidence
-fn find_evidence_for_tag(tag: &str, text: &str) -> Option<String> {
-    let tag_lower = tag.to_lowercase();
-    
-    // Split by double newlines (paragraphs) or single newlines
-    let paragraphs: Vec<&str> = text.split("\n\n").collect();
-    
-    for paragraph in paragraphs {
-        if paragraph.to_lowercase().contains(&tag_lower) && paragraph.len() > 20 {
-            // Return first 500 chars of matching paragraph
-            return Some(paragraph.chars().take(500).collect());
-        }
-    }
-    
-    // If no paragraph found, try sentences
-    for sentence in text.split('.') {
-        if sentence.to_lowercase().contains(&tag_lower) && sentence.len() > 20 {
-            return Some(sentence.trim().to_string() + ".");
-        }
-    }
-    
-    None
 }
 
 // ============================================================================
@@ -409,7 +392,7 @@ pub async fn extract_info(
 
     // 2. Generate summary and tags
     let prompt = format!(
-        "<|im_start|>system\nYou are a helpful assistant. Extract a brief summary and exactly 3 keywords in Korean from the user's text.\nOutput format:\nSummary: [One sentence summary]\nTags: [keyword1, keyword2, keyword3]\n<|im_end|>\n<|im_start|>user\n{}\n<|im_end|>\n<|im_start|>assistant\n",
+        "<|im_start|>system\nYou are a professional document analyzer. Your task is to extract key information from the user's text and provide the results in Korean.\nFollow these instructions strictly:\n1. Summary: Write a concise one-sentence summary of the text.\n2. Tags: Identify exactly 3 essential keywords.\n3. Evidence: For each keyword, extract the exact sentence from the source text that serves as the basis for that keyword.\nOutput the results strictly in the following JSON format:\n{{\n\"summary\":\"one-sentence summary in Korean\",\n\"analysis\": [\n{{\"tag\":\"keyword1\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"keyword2\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"keyword3\",\"evidence\":\"verbatim sentence from the text\"}}\n]}}<|im_end|><|im_start|>user\n{}\n<|im_end|><|im_start|>assistant\n",
         text.chars().take(4000).collect::<String>() // Limit context
     );
 
