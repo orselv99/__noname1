@@ -141,6 +141,8 @@ function AppContent() {
     useDocumentStore.getState().setCurrentUser(data);
     useAuthStore.getState().setUser(data);
 
+    console.log(data);
+
     if (data.force_change_password) {
       setView('change_password');
     } else {

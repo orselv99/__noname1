@@ -739,7 +739,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     });
 
     setGroups(newGroups);
-  }, [documents, currentUser, groupSortOptions, isFavoriteFilter]);
+  }, [documents, currentUser, groupSortOptions, isFavoriteFilter, departments, projects]);
 
   // activeTabId 변경 시 해당 문서의 부모들을 자동으로 펼치기
   useEffect(() => {

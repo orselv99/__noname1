@@ -63,7 +63,14 @@ export const useAuthStore = create<AuthState>()(
         };
       }),
 
-      logout: () => set({ user: null, isAuthenticated: false }),
+      logout: () => set({
+        user: null,
+        isAuthenticated: false,
+        tenants: {},
+        departments: {},
+        positions: {},
+        projects: {}
+      }),
 
       updateTenantName: (id, name) => set((state) => ({ tenants: { ...state.tenants, [id]: name } })),
       updateDepartmentName: (id, name) => set((state) => ({ departments: { ...state.departments, [id]: name } })),

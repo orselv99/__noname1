@@ -151,8 +151,8 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
     // Spawn Generation Server (Port 8082)
     let gen_model = resource_path
         .join("model")
-        .join("qwen2.5-1.5b-instruct-q4_k_m.gguf");
-        //.join("gemma-2-2b-it-Q4_K_M.gguf");
+        //.join("qwen2.5-1.5b-instruct-q4_k_m.gguf");
+        .join("gemma-2-2b-it-Q4_K_M.gguf");
 
     println!("Debug: Spawning Generation Server (Sidecar)...");
     let gen_sidecar = app.shell().sidecar("llama-server")
