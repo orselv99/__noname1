@@ -548,7 +548,6 @@ export const MetadataPanel = () => {
       </div>
     );
   }
-  console.log(documents);
 
   return (
     <div className="w-full h-full bg-zinc-950 flex flex-col text-white relative">

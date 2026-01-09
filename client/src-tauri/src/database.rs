@@ -189,6 +189,47 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Failed to create document_tags table: {}", e))?;
 
+  // Cleanup old table if exists
+  conn.execute("DROP TABLE IF EXISTS chat_messages", []).ok();
+
+  // Create rag_chats table (Sessions)
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS rag_chats (
+            id TEXT PRIMARY KEY,
+            title BLOB,
+            created_at BLOB,
+            updated_at BLOB,
+            updated_at_ts INTEGER DEFAULT 0
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create rag_chats table: {}", e))?;
+
+  // Create rag_messages table (Encrypted Content)
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS rag_messages (
+            id TEXT PRIMARY KEY,
+            chat_id TEXT NOT NULL,
+            role BLOB NOT NULL,
+            content BLOB NOT NULL,
+            created_at BLOB,
+            timestamp INTEGER NOT NULL,
+            FOREIGN KEY (chat_id) REFERENCES rag_chats(id) ON DELETE CASCADE
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create rag_messages table: {}", e))?;
+
+  // Create index for fast pagination
+  conn
+    .execute(
+      "CREATE INDEX IF NOT EXISTS idx_rag_messages_chat_ts ON rag_messages(chat_id, timestamp)",
+      [],
+    )
+    .map_err(|e| format!("Failed to create rag_messages index: {}", e))?;
+
   // Create index for faster document queries
   conn
     .execute(

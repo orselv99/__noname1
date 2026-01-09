@@ -1,119 +1,230 @@
-import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { Search, Loader2, FileText, Send, Sparkles } from 'lucide-react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { Loader2, Sparkles, Send, User, Bot, Plus, History, MessageSquare } from 'lucide-react';
+import { useChatStore, ChatSession } from '../../stores/chatStore';
 
 export function RagPanel() {
-  const [query, setQuery] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [input, setInput] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  const {
+    chats, currentChatId, messages,
+    isLoading, isLoadingMore, hasMore,
+    loadChats, selectChat, createNewChat, sendMessage, loadMoreMessages
+  } = useChatStore();
 
-    setIsLoading(true);
-    setError(null);
-    setAnswer('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isFirstRender = useRef(true);
+  const [prevScrollHeight, setPrevScrollHeight] = useState(0);
 
-    try {
-      const result = await invoke<string>('ask_ai', { question: query });
-      setAnswer(result);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setIsLoading(false);
+  // Load chats on mount
+  useEffect(() => {
+    loadChats();
+  }, [loadChats]);
+
+  // Auto-select latest chat if none selected and chats exist
+  useEffect(() => {
+    if (!currentChatId && chats.length > 0 && !showHistory) {
+      // Optional: Select the first one? Or start fresh?
+      // Start fresh usually better for "Ask AI". 
+      // User can go to history if needed.
+      // Let's keep it reset (New Chat) state by default.
     }
+  }, [chats, currentChatId, showHistory]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight } = e.currentTarget;
+    if (scrollTop === 0 && hasMore && !isLoadingMore && currentChatId) {
+      setPrevScrollHeight(scrollHeight);
+      loadMoreMessages();
+    }
+  };
+
+  useLayoutEffect(() => {
+    if (containerRef.current && prevScrollHeight > 0) {
+      const newScrollHeight = containerRef.current.scrollHeight;
+      containerRef.current.scrollTop = newScrollHeight - prevScrollHeight;
+      setPrevScrollHeight(0);
+    }
+  }, [messages, prevScrollHeight]);
+
+  useEffect(() => {
+    if (prevScrollHeight === 0 && !isLoadingMore) {
+      if (isFirstRender.current) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        isFirstRender.current = false;
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  }, [messages, isLoadingMore, prevScrollHeight]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+    const userQuery = input.trim();
+    setInput('');
+    await sendMessage(userQuery);
+  };
+
+  const handleSelectChat = (id: string) => {
+    selectChat(id);
+    setShowHistory(false);
+    isFirstRender.current = true;
+  };
+
+  const handleNewChat = () => {
+    createNewChat();
+    setShowHistory(false);
+    isFirstRender.current = true;
   };
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-white overflow-hidden">
-      {/* Header - Matching MetadataPanel header style */}
-      <div className="h-12 p-3 border-b border-zinc-800 text-zinc-400 font-medium text-xs uppercase tracking-wider flex items-center gap-2">
-        <Sparkles size={14} className="text-blue-400" />
-        <span className="flex-1">AI Search</span>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-        <div className="flex flex-col gap-6">
-
-          {/* Search Section */}
-          <div>
-            <div className="flex items-center gap-2 mb-2 text-zinc-500 select-none">
-              <Search size={12} />
-              <h3 className="text-xs font-medium flex-1 uppercase tracking-wider">Query</h3>
-            </div>
-
-            <form onSubmit={handleSearch} className="relative">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Ask a question..."
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 pr-9 text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-zinc-200 placeholder-zinc-600"
-                />
-                <button
-                  type="submit"
-                  disabled={isLoading || !query.trim()}
-                  className="absolute right-1 top-1 bottom-1 aspect-square flex items-center justify-center text-zinc-400 hover:text-blue-400 disabled:opacity-50 disabled:hover:text-zinc-400 transition-colors"
-                >
-                  {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-3 bg-red-900/20 border border-red-900/50 rounded text-red-400 text-xs">
-              {error}
-            </div>
-          )}
-
-          {/* Answer Section */}
-          {answer && (
-            <div>
-              <div className="flex items-center gap-2 mb-2 text-zinc-500 select-none">
-                <FileText size={12} />
-                <h3 className="text-xs font-medium flex-1 uppercase tracking-wider">Answer</h3>
-              </div>
-              <div className="bg-zinc-900/50 border border-zinc-800 rounded p-3 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="prose prose-invert prose-xs max-w-none leading-relaxed whitespace-pre-wrap text-zinc-300">
-                  {answer}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Suggestions - Only show when no answer/loading */}
-          {!answer && !isLoading && !error && (
-            <div>
-              <div className="flex items-center gap-2 mb-2 text-zinc-500 select-none">
-                <Sparkles size={12} />
-                <h3 className="text-xs font-medium flex-1 uppercase tracking-wider">Suggestions</h3>
-              </div>
-              <div className="grid grid-cols-1 gap-2">
-                <div
-                  className="p-2.5 bg-zinc-900/30 border border-zinc-800 rounded hover:bg-zinc-900 hover:border-zinc-700 transition-colors cursor-pointer group"
-                  onClick={() => setQuery("이 문서를 요약해줘")}
-                >
-                  <h4 className="font-medium text-zinc-400 text-xs mb-0.5 group-hover:text-blue-400 transition-colors">Summarize</h4>
-                  <p className="text-[10px] text-zinc-600">Summarize the current context</p>
-                </div>
-                <div
-                  className="p-2.5 bg-zinc-900/30 border border-zinc-800 rounded hover:bg-zinc-900 hover:border-zinc-700 transition-colors cursor-pointer group"
-                  onClick={() => setQuery("주요 키워드 5개만 뽑아줘")}
-                >
-                  <h4 className="font-medium text-zinc-400 text-xs mb-0.5 group-hover:text-blue-400 transition-colors">Keywords</h4>
-                  <p className="text-[10px] text-zinc-600">Extract main keywords</p>
-                </div>
-              </div>
-            </div>
-          )}
-
+      {/* Header */}
+      <div className="h-12 p-3 border-b border-zinc-800 text-zinc-400 font-medium text-xs uppercase tracking-wider flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <Sparkles size={14} className="text-blue-400" />
+          <span className="flex-1 truncate">
+            {showHistory ? "History" : (currentChatId ? chats.find(c => c.id === currentChatId)?.title || "AI SEARCH" : "AI SEARCH")}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className={`p-1.5 rounded transition-colors ${showHistory ? 'text-blue-400 bg-zinc-800' : 'text-zinc-500 hover:text-zinc-300'}`}
+            title="History"
+          >
+            <History size={14} />
+          </button>
+          <button
+            onClick={handleNewChat}
+            className="text-zinc-500 hover:text-blue-400 p-1.5 rounded transition-colors"
+            title="New Chat"
+          >
+            <Plus size={14} />
+          </button>
         </div>
       </div>
+
+      {/* Main Content: History or Chat */}
+      <div className="flex-1 overflow-hidden relative">
+
+        {/* History List Overlay/View */}
+        {showHistory ? (
+          <div className="absolute inset-0 overflow-y-auto p-2 bg-zinc-950 z-10 custom-scrollbar">
+            {chats.length === 0 ? (
+              <div className="text-center text-zinc-600 mt-10 text-xs">No history</div>
+            ) : (
+              <div className="space-y-1">
+                {chats.map(chat => (
+                  <button
+                    key={chat.id}
+                    onClick={() => handleSelectChat(chat.id)}
+                    className={`w-full text-left p-3 rounded border transition-all flex items-start gap-3 group
+                                    ${currentChatId === chat.id
+                        ? 'bg-zinc-900 border-blue-900/50 text-blue-100'
+                        : 'bg-zinc-950 border-zinc-900 hover:bg-zinc-900 hover:border-zinc-800 text-zinc-400'}
+                                `}
+                  >
+                    <MessageSquare size={14} className={`mt-0.5 shrink-0 ${currentChatId === chat.id ? 'text-blue-500' : 'text-zinc-600 group-hover:text-zinc-500'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{chat.title}</div>
+                      <div className="text-[10px] text-zinc-600 mt-1">
+                        {new Date(chat.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Chat Messages Area */
+          <div
+            ref={containerRef}
+            className="h-full overflow-y-auto p-4 custom-scrollbar"
+            onScroll={handleScroll}
+          >
+            {isLoadingMore && (
+              <div className="flex justify-center py-2">
+                <Loader2 size={16} className="animate-spin text-zinc-500" />
+              </div>
+            )}
+
+            {messages.length === 0 && !isLoading ? (
+              <div className="h-full flex flex-col items-center justify-center text-center p-4 text-zinc-500">
+                <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center mb-4">
+                  <Sparkles size={24} className="text-blue-400/50" />
+                </div>
+                <p className="text-sm font-medium text-zinc-300 mb-1">AI Knowledge Base</p>
+                <p className="text-xs max-w-[200px] leading-relaxed">
+                  Ask questions about your entire document collection.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {messages.map((msg) => (
+                  <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+
+                    <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${msg.role === 'user' ? 'bg-blue-600' : 'bg-zinc-800'
+                      }`}>
+                      {msg.role === 'user' ? <User size={12} /> : <Bot size={12} className="text-blue-400" />}
+                    </div>
+
+                    <div className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                      <div className={`px-3 py-2 rounded-lg text-xs leading-relaxed whitespace-pre-wrap ${msg.role === 'user'
+                        ? 'bg-blue-600/90 text-white rounded-tr-none'
+                        : 'bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-tl-none'
+                        }`}>
+                        {msg.content}
+                      </div>
+                      <span className="text-[10px] text-zinc-600 mt-1 px-1">
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {isLoading && (
+                  <div className="flex gap-3">
+                    <div className="shrink-0 w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
+                      <Bot size={12} className="text-blue-400" />
+                    </div>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg rounded-tl-none px-4 py-3 flex items-center gap-2">
+                      <Loader2 size={12} className="animate-spin text-zinc-500" />
+                      <span className="text-xs text-zinc-500">Thinking...</span>
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Input Area (Disabled when validation history list is open? No, why not allow starting new chat from there?) */}
+      {!showHistory && (
+        <div className="p-3 border-t border-zinc-800 bg-zinc-950 shrink-0">
+          <form onSubmit={handleSubmit} className="relative">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={isLoading}
+              placeholder="Ask about your documents..."
+              className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 pr-9 text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-zinc-200 placeholder-zinc-600 disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              className="absolute right-1 top-1 bottom-1 aspect-square flex items-center justify-center text-zinc-400 hover:text-blue-500 disabled:opacity-50 disabled:hover:text-zinc-400 transition-colors"
+            >
+              {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

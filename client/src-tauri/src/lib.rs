@@ -33,7 +33,10 @@ pub fn run() {
       commands::documents::list_documents,
       commands::documents::get_document,
       commands::documents::delete_document,
-      commands::rag::ask_ai
+      commands::rag::ask_ai,
+      commands::rag::create_new_chat,
+      commands::rag::get_rag_chats,
+      commands::rag::get_rag_messages
     ])
     .setup(|app| {
       // Kill any existing sidecar processes to prevent orphans on startup
