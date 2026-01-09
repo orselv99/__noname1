@@ -2,7 +2,7 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import { useDocumentStore } from '../stores/documentStore';
 
 export const StatusBar = () => {
-  const { aiAnalysisStatus } = useDocumentStore();
+  const { aiAnalysisStatus, autoSaveStatus } = useDocumentStore();
 
   return (
     <div className="h-6 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between px-3 text-[10px] text-zinc-500 select-none">
@@ -13,8 +13,14 @@ export const StatusBar = () => {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* 자동저장 상태 */}
+        {autoSaveStatus && (
+          <div className="flex items-center gap-1.5 text-emerald-400">
+            <span>{autoSaveStatus}</span>
+          </div>
+        )}
         {/* AI 분석 상태 */}
-        {aiAnalysisStatus && (
+        {aiAnalysisStatus && !autoSaveStatus && (
           <div className="flex items-center gap-1.5 text-blue-400">
             <Loader2 size={10} className="animate-spin" />
             <span>{aiAnalysisStatus}</span>

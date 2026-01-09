@@ -22,8 +22,13 @@ interface DocumentStore {
   // UI State
   highlightedEvidence: string | null;
 
+  // 실시간 에디터 콘텐츠 (저장되지 않은 상태, 메타데이터 패널용)
+  liveEditorContent: string | null;
+
   // AI 분석 상태
   aiAnalysisStatus: string | null;
+  // 자동저장 상태
+  autoSaveStatus: string | null;
   newDocTrigger: number;
   triggerNewDocument: () => void;
 
@@ -48,10 +53,13 @@ interface DocumentStore {
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   reorderTabs: (newTabs: Tab[]) => void;
+  updateTabTitle: (tabId: string, newTitle: string) => void;
   setHighlightedEvidence: (text: string | null) => void;
   addTagToDocument: (docId: string, tag: string, evidence?: string) => Promise<void>;
   removeTagFromDocument: (docId: string, tagIndex: number) => Promise<void>;
   setAiAnalysisStatus: (status: string | null) => void;
+  setAutoSaveStatus: (status: string | null) => void;
+  setLiveEditorContent: (content: string | null) => void;
   // markTabDirty: (tabId: string, isDirty: boolean) => void; // Future use
 }
 
@@ -66,7 +74,9 @@ export const useDocumentStore = create<DocumentStore>()(
       tabs: [],
       activeTabId: null,
       highlightedEvidence: null,
+      liveEditorContent: null,
       aiAnalysisStatus: null,
+      autoSaveStatus: null,
       newDocTrigger: 0,
       triggerNewDocument: () => set((state) => ({ newDocTrigger: state.newDocTrigger + 1 })),
 
@@ -120,6 +130,12 @@ export const useDocumentStore = create<DocumentStore>()(
               lastSyncedAt: serverTime
             };
           });
+
+          // 탭이 없으면 첫 번째 문서를 자동으로 열기
+          const state = get();
+          if (state.tabs.length === 0 && state.documents.length > 0) {
+            get().addTab(state.documents[0]);
+          }
         } catch (error) {
           console.error('Failed to fetch documents:', error);
           set({ error: String(error), isLoading: false });
@@ -221,12 +237,26 @@ export const useDocumentStore = create<DocumentStore>()(
         set({ tabs: newTabs });
       },
 
+      updateTabTitle: (tabId, newTitle) => {
+        set((state) => ({
+          tabs: state.tabs.map(t => t.id === tabId ? { ...t, title: newTitle } : t)
+        }));
+      },
+
       setHighlightedEvidence: (text) => {
         set({ highlightedEvidence: text });
       },
 
       setAiAnalysisStatus: (status) => {
         set({ aiAnalysisStatus: status });
+      },
+
+      setAutoSaveStatus: (status) => {
+        set({ autoSaveStatus: status });
+      },
+
+      setLiveEditorContent: (content) => {
+        set({ liveEditorContent: content });
       },
 
       addTagToDocument: async (docId, tag, evidence) => {
@@ -341,6 +371,11 @@ export const useDocumentStore = create<DocumentStore>()(
             tabs: newTabs,
             activeTabId: newActiveId
           };
+        });
+
+        // 삭제된 문서들의 localStorage draft도 함께 삭제
+        toDeleteIds.forEach(id => {
+          localStorage.removeItem(`draft-${id}`);
         });
 
         try {

@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Tag, Calendar, User, FileText, Plus, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Tag, Calendar, User, FileText, Plus, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History } from 'lucide-react';
 import { useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
-import { DocumentState } from '../../types';
+import { DocumentState, VisibilityLevel } from '../../types';
 
 // Add Tag Form Component
 const AddTagForm = ({ docId }: { docId: string }) => {
@@ -72,13 +73,23 @@ const AddTagForm = ({ docId }: { docId: string }) => {
   );
 };
 
-const LinkList = ({ content }: { content: string }) => {
+const LinkList = ({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true);
 
+  // 외부에서 강제로 펼침 상태를 변경할 때 동기화
+  useEffect(() => {
+    if (forceExpanded !== undefined) {
+      setIsExpanded(forceExpanded);
+    }
+  }, [forceExpanded]);
+
+  // liveContent가 있으면 그것을 사용, 없으면 저장된 content 사용
+  const effectiveContent = liveContent ?? content;
+
   const links = useMemo(() => {
-    if (!content) return [];
+    if (!effectiveContent) return [];
     try {
-      const doc = new DOMParser().parseFromString(content, 'text/html');
+      const doc = new DOMParser().parseFromString(effectiveContent, 'text/html');
       const anchors = Array.from(doc.getElementsByTagName('a'));
       return anchors.map(a => ({
         text: a.textContent || a.href,
@@ -87,7 +98,7 @@ const LinkList = ({ content }: { content: string }) => {
     } catch (e) {
       return [];
     }
-  }, [content]);
+  }, [effectiveContent]);
 
   if (links.length === 0) return null;
 
@@ -98,12 +109,13 @@ const LinkList = ({ content }: { content: string }) => {
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <LinkIcon size={12} />
-        <h3 className="text-xs font-medium flex-1">Included Links ({links.length})</h3>
+        <h3 className="text-xs font-medium flex-1">Linked Mentions ({links.length})</h3>
         {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </div>
 
       {isExpanded && (
         <div className="space-y-1 pl-1">
+          {/* TODO: 현재는 content 의 href 만 보여주는데, 여기를 grouping (RAG, href) 하던지 새 컴포넌트로 만들던지 하자 */}
           {links.map((link, i) => (
             <a
               key={i}
@@ -125,6 +137,213 @@ const LinkList = ({ content }: { content: string }) => {
   );
 };
 
+// Resource List Component (이미지, 영상, 음성)
+interface ResourceItem {
+  type: 'image' | 'video' | 'audio';
+  src: string;
+  alt?: string;
+}
+
+// 리소스 미리보기 다이얼로그
+const ResourcePreviewDialog = ({
+  resource,
+  onClose
+}: {
+  resource: ResourceItem;
+  onClose: () => void;
+}) => {
+  return createPortal(
+    <div
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-[99999]"
+      onClick={onClose}
+    >
+      <div
+        className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl max-w-[600px] max-h-[500px] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b border-zinc-700">
+          <div className="flex items-center gap-2 text-sm text-zinc-300">
+            {resource.type === 'image' && <Image size={16} className="text-emerald-400" />}
+            {resource.type === 'video' && <Video size={16} className="text-purple-400" />}
+            {resource.type === 'audio' && <Music size={16} className="text-amber-400" />}
+            <span className="truncate max-w-[400px]">{resource.alt || resource.src.split('/').pop()}</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-zinc-500 hover:text-white transition-colors text-xl"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4 flex items-center justify-center min-h-[200px]">
+          {resource.type === 'image' && (
+            <img
+              src={resource.src}
+              alt={resource.alt || ''}
+              className="max-w-full max-h-[400px] object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" fill="%23333"><rect width="200" height="150"/><text x="50%" y="50%" fill="%23666" text-anchor="middle" dy=".3em">Image not found</text></svg>';
+              }}
+            />
+          )}
+          {resource.type === 'video' && (
+            <div className="text-center text-zinc-500">
+              <Video size={48} className="mx-auto mb-3 text-purple-400" />
+              <p className="text-sm">Video Preview</p>
+              <p className="text-xs text-zinc-600 mt-1 break-all max-w-md">{resource.src}</p>
+              <p className="text-xs text-zinc-700 mt-2 italic">(Video player coming soon)</p>
+            </div>
+          )}
+          {resource.type === 'audio' && (
+            <div className="text-center text-zinc-500">
+              <Music size={48} className="mx-auto mb-3 text-amber-400" />
+              <p className="text-sm">Audio Preview</p>
+              <p className="text-xs text-zinc-600 mt-1 break-all max-w-md">{resource.src}</p>
+              <p className="text-xs text-zinc-700 mt-2 italic">(Audio player coming soon)</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// Mock 데이터 (테스트용)
+const MOCK_RESOURCES: ResourceItem[] = [
+  { type: 'image', src: 'https://picsum.photos/400/300', alt: 'Sample Image 1' },
+  { type: 'image', src: 'https://picsum.photos/300/400', alt: 'Sample Image 2' },
+  { type: 'video', src: 'https://example.com/sample-video.mp4', alt: 'Sample Video' },
+  { type: 'audio', src: 'https://example.com/sample-audio.mp3', alt: 'Sample Audio' },
+];
+
+const ResourceList = ({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [selectedResource, setSelectedResource] = useState<ResourceItem | null>(null);
+
+  // 외부에서 강제로 펼침 상태를 변경할 때 동기화
+  useEffect(() => {
+    if (forceExpanded !== undefined) {
+      setIsExpanded(forceExpanded);
+    }
+  }, [forceExpanded]);
+
+  const effectiveContent = liveContent ?? content;
+
+  const resources = useMemo(() => {
+    const items: ResourceItem[] = [];
+
+    if (effectiveContent) {
+      try {
+        const doc = new DOMParser().parseFromString(effectiveContent, 'text/html');
+
+        // 이미지 추출
+        const images = Array.from(doc.getElementsByTagName('img'));
+        images.forEach(img => {
+          const src = img.getAttribute('src');
+          if (src) {
+            items.push({ type: 'image', src, alt: img.getAttribute('alt') || undefined });
+          }
+        });
+
+        // 비디오 추출
+        const videos = Array.from(doc.getElementsByTagName('video'));
+        videos.forEach(video => {
+          const src = video.getAttribute('src') || video.querySelector('source')?.getAttribute('src');
+          if (src) {
+            items.push({ type: 'video', src });
+          }
+        });
+
+        // 오디오 추출
+        const audios = Array.from(doc.getElementsByTagName('audio'));
+        audios.forEach(audio => {
+          const src = audio.getAttribute('src') || audio.querySelector('source')?.getAttribute('src');
+          if (src) {
+            items.push({ type: 'audio', src });
+          }
+        });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // Mock 데이터 추가 (테스트용 - 나중에 제거)
+    return [...items, ...MOCK_RESOURCES];
+  }, [effectiveContent]);
+
+  if (resources.length === 0) return null;
+
+  const getIcon = (type: ResourceItem['type']) => {
+    switch (type) {
+      case 'image': return <Image size={12} />;
+      case 'video': return <Video size={12} />;
+      case 'audio': return <Music size={12} />;
+    }
+  };
+
+  const getTypeLabel = (type: ResourceItem['type']) => {
+    switch (type) {
+      case 'image': return 'Image';
+      case 'video': return 'Video';
+      case 'audio': return 'Audio';
+    }
+  };
+
+  const getFileName = (src: string) => {
+    try {
+      const url = new URL(src, 'http://dummy.com');
+      return url.pathname.split('/').pop() || src;
+    } catch {
+      return src.split('/').pop() || src;
+    }
+  };
+
+  return (
+    <div className="mb-6">
+      <div
+        className="flex items-center gap-2 mb-2 text-zinc-500 cursor-pointer hover:text-zinc-300 select-none"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <Paperclip size={12} />
+        <h3 className="text-xs font-medium flex-1">Attached Resources ({resources.length})</h3>
+        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </div>
+
+      {isExpanded && (
+        <div className="space-y-1 pl-1">
+          {resources.map((resource, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-2 text-xs bg-zinc-900/50 p-2 rounded border border-zinc-800 text-zinc-400 hover:bg-zinc-900 transition-colors cursor-pointer"
+              onClick={() => setSelectedResource(resource)}
+            >
+              <span className={`shrink-0 ${resource.type === 'image' ? 'text-emerald-400' : resource.type === 'video' ? 'text-purple-400' : 'text-amber-400'}`}>
+                {getIcon(resource.type)}
+              </span>
+              <div className="flex-1 min-w-0">
+                <span className="font-medium truncate block">{resource.alt || getFileName(resource.src)}</span>
+                <span className="text-[10px] text-zinc-600">{getTypeLabel(resource.type)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Preview Dialog */}
+      {selectedResource && (
+        <ResourcePreviewDialog
+          resource={selectedResource}
+          onClose={() => setSelectedResource(null)}
+        />
+      )}
+    </div>
+  );
+};
+
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-';
   const d = new Date(dateStr);
@@ -133,9 +352,194 @@ const formatDate = (dateStr?: string) => {
   return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
 
+// Document State Dropdown
+const DOCUMENT_STATES = [
+  { value: DocumentState.Draft, label: 'Draft', icon: Edit3, color: 'bg-gray-700 text-gray-300', hoverColor: 'hover:bg-gray-600' },
+  { value: DocumentState.Feedback, label: 'Feedback', icon: Send, color: 'bg-amber-900/50 text-amber-300', hoverColor: 'hover:bg-amber-800/50' },
+  { value: DocumentState.Published, label: 'Published', icon: Globe, color: 'bg-green-900/50 text-green-300', hoverColor: 'hover:bg-green-800/50' },
+];
+
+const DocumentStateDropdown = ({ currentState, onStateChange }: { currentState: DocumentState; onStateChange: (state: DocumentState) => void }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const toggleDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!showDropdown && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+      });
+    }
+    setShowDropdown(!showDropdown);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        triggerRef.current && !triggerRef.current.contains(target) &&
+        contentRef.current && !contentRef.current.contains(target)
+      ) {
+        setShowDropdown(false);
+      }
+    };
+    if (showDropdown) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDropdown]);
+
+  const currentConfig = DOCUMENT_STATES.find(s => s.value === currentState) || DOCUMENT_STATES[0];
+  const Icon = currentConfig.icon;
+
+  return (
+    <div className="relative flex-1">
+      <button
+        ref={triggerRef}
+        onClick={toggleDropdown}
+        className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full transition-all ${currentConfig.color} ${currentConfig.hoverColor} cursor-pointer`}
+      >
+        <span className="flex items-center gap-1.5">
+          <Icon size={12} />
+          {currentConfig.label}
+        </span>
+        <ChevronDownIcon size={12} className="opacity-50" />
+      </button>
+      {showDropdown && createPortal(
+        <div
+          ref={contentRef}
+          style={{ position: 'fixed', top: dropdownPosition.top, left: dropdownPosition.left, width: '120px', zIndex: 99999 }}
+          className="bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
+        >
+          {DOCUMENT_STATES.map((state) => {
+            const StateIcon = state.icon;
+            const isSelected = currentState === state.value;
+            return (
+              <button
+                key={state.value}
+                onClick={(e) => { e.stopPropagation(); onStateChange(state.value); setShowDropdown(false); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${isSelected ? state.color : 'text-gray-300 hover:bg-zinc-700'}`}
+              >
+                <StateIcon size={14} />
+                {state.label}
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
+// Visibility Level Dropdown
+const VISIBILITY_LEVELS = [
+  { value: VisibilityLevel.Hidden, label: 'Hidden', icon: EyeOff, color: 'bg-gray-700 text-gray-300', hoverColor: 'hover:bg-gray-600' },
+  { value: VisibilityLevel.Metadata, label: 'Metadata', icon: FileText, color: 'bg-blue-900/50 text-blue-300', hoverColor: 'hover:bg-blue-800/50' },
+  { value: VisibilityLevel.Snippet, label: 'Snippet', icon: Eye, color: 'bg-amber-900/50 text-amber-300', hoverColor: 'hover:bg-amber-800/50' },
+  { value: VisibilityLevel.Public, label: 'Public', icon: Globe, color: 'bg-green-900/50 text-green-300', hoverColor: 'hover:bg-green-800/50' },
+];
+
+const VisibilityDropdown = ({ currentLevel, onLevelChange }: { currentLevel: VisibilityLevel; onLevelChange: (level: VisibilityLevel) => void }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const toggleDropdown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!showDropdown && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+      });
+    }
+    setShowDropdown(!showDropdown);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        triggerRef.current && !triggerRef.current.contains(target) &&
+        contentRef.current && !contentRef.current.contains(target)
+      ) {
+        setShowDropdown(false);
+      }
+    };
+    if (showDropdown) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDropdown]);
+
+  const currentConfig = VISIBILITY_LEVELS.find(v => v.value === currentLevel) || VISIBILITY_LEVELS[0];
+  const Icon = currentConfig.icon;
+
+  return (
+    <div className="relative flex-1">
+      <button
+        ref={triggerRef}
+        onClick={toggleDropdown}
+        className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full transition-all ${currentConfig.color} ${currentConfig.hoverColor} cursor-pointer`}
+      >
+        <span className="flex items-center gap-1.5">
+          <Icon size={12} />
+          {currentConfig.label}
+        </span>
+        <ChevronDownIcon size={12} className="opacity-50" />
+      </button>
+      {showDropdown && createPortal(
+        <div
+          ref={contentRef}
+          style={{ position: 'fixed', top: dropdownPosition.top, left: dropdownPosition.left, width: '120px', zIndex: 99999 }}
+          className="bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
+        >
+          {VISIBILITY_LEVELS.map((level) => {
+            const LevelIcon = level.icon;
+            const isSelected = currentLevel === level.value;
+            return (
+              <button
+                key={level.value}
+                onClick={(e) => { e.stopPropagation(); onLevelChange(level.value); setShowDropdown(false); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${isSelected ? level.color : 'text-gray-300 hover:bg-zinc-700'}`}
+              >
+                <LevelIcon size={14} />
+                {level.label}
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
 export const MetadataPanel = () => {
-  const { documents, activeTabId } = useDocumentStore();
+  const { documents, activeTabId, liveEditorContent, updateDocument } = useDocumentStore();
   const activeDoc = documents.find(d => d.id === activeTabId);
+
+  // 섹션 펼침 상태 (Hooks는 조건부 return 전에 호출해야 함)
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
+  const [isTagsExpanded, setIsTagsExpanded] = useState(true);
+  const [isLinksExpanded, setIsLinksExpanded] = useState(true);
+  const [isResourcesExpanded, setIsResourcesExpanded] = useState(true);
+  const [isMentionsExpanded, setIsMentionsExpanded] = useState(true);
+
+  // Revision 펼침 상태 (상단 모두펼치기에 영향 안받음)
+  const [isRevisionExpanded, setIsRevisionExpanded] = useState(false);
+
+  // 모두 펼치기/접기
+  const toggleAllSections = () => {
+    const anyCollapsed = !isSummaryExpanded || !isTagsExpanded || !isLinksExpanded || !isResourcesExpanded || !isMentionsExpanded;
+    setIsSummaryExpanded(anyCollapsed);
+    setIsTagsExpanded(anyCollapsed);
+    setIsLinksExpanded(anyCollapsed);
+    setIsResourcesExpanded(anyCollapsed);
+    setIsMentionsExpanded(anyCollapsed);
+  };
 
   if (!activeDoc) {
     return (
@@ -145,96 +549,198 @@ export const MetadataPanel = () => {
     );
   }
   console.log(documents);
+
   return (
     <div className="w-full h-full bg-zinc-950 flex flex-col text-white">
       {/* Header */}
       <div className="p-3 border-b border-zinc-800 font-medium text-xs text-zinc-400 uppercase tracking-wider flex items-center gap-2">
         <FileText size={14} />
-        Metadata
+        <span className="flex-1">Metadata</span>
+        <button
+          className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white transition-colors"
+          onClick={toggleAllSections}
+          title="Expand/Collapse All"
+        >
+          <ChevronsUpDown size={14} />
+        </button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+      {/* Content - 평소에는 스크롤바 숨김, hover 시 표시 */}
+      <div
+        className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar hover:overflow-y-scroll"
+        style={{ scrollbarGutter: 'stable' }}
+      >
+
+        {/* Status & Visibility Section - TOP (한 줄) */}
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <h3 className="text-xs text-zinc-500 font-medium mb-1">Status</h3>
+            <DocumentStateDropdown
+              currentState={activeDoc.document_state}
+              onStateChange={(state) => {
+                updateDocument({ ...activeDoc, document_state: state });
+              }}
+            />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-xs text-zinc-500 font-medium mb-1">Visibility</h3>
+            <VisibilityDropdown
+              currentLevel={activeDoc.visibility_level}
+              onLevelChange={(level) => {
+                updateDocument({ ...activeDoc, visibility_level: level });
+              }}
+            />
+          </div>
+        </div>
 
         {/* Summary Section */}
         <div className="mb-6">
-          <h3 className="text-xs text-zinc-500 font-medium mb-2">Summary</h3>
-          <p className="text-xs text-zinc-400 leading-relaxed">
-            {activeDoc.summary || <span className="text-zinc-600 italic">No summary available</span>}
-          </p>
+          <div
+            className="flex items-center gap-2 mb-2 text-zinc-500 cursor-pointer hover:text-zinc-300 select-none"
+            onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
+          >
+            <AlignLeft size={12} />
+            <h3 className="text-xs font-medium flex-1">Summary</h3>
+            {isSummaryExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </div>
+          {isSummaryExpanded && (
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              {activeDoc.summary || <span className="text-zinc-600 italic">No summary available</span>}
+            </p>
+          )}
         </div>
 
         {/* Tags Section */}
         <div className="mb-6">
-          <div className="flex items-center gap-2 mb-2 text-zinc-500">
+          <div
+            className="flex items-center gap-2 mb-2 text-zinc-500 cursor-pointer hover:text-zinc-300 select-none"
+            onClick={() => setIsTagsExpanded(!isTagsExpanded)}
+          >
             <Tag size={12} />
-            <h3 className="text-xs font-medium">Tags</h3>
+            <h3 className="text-xs font-medium flex-1">Tags</h3>
+            {isTagsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </div>
-          <div className="flex flex-wrap gap-2 overflow-visible mb-3">
-            {(!activeDoc.tags || activeDoc.tags.length === 0) && (
-              <span className="text-xs text-zinc-600 italic block">No tags</span>
-            )}
-            {activeDoc.tags && activeDoc.tags.map((t, i) => (
-              <div key={i} className="group relative">
-                <span
-                  onMouseEnter={() => {
-                    if (t.evidence) {
-                      useDocumentStore.getState().setHighlightedEvidence(t.evidence);
-                    }
-                  }}
-                  onMouseLeave={() => {
-                    useDocumentStore.getState().setHighlightedEvidence(null);
-                  }}
-                  className="cursor-help px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-blue-400 hover:border-blue-500 hover:bg-zinc-800 transition-colors inline-flex items-center gap-1">
-                  #{t.tag}
-                  <button
-                    onClick={() => useDocumentStore.getState().removeTagFromDocument(activeDoc.id, i)}
-                    className="ml-1 text-zinc-500 hover:text-red-400 transition-colors"
-                    title="Remove tag"
-                  >
-                    ×
-                  </button>
-                </span>
-                {/* Evidence Tooltip - Shows above the tag */}
-                {t.evidence && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-60 p-2 bg-zinc-800 border border-zinc-700 rounded shadow-xl z-9999 text-[10px] text-zinc-300 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-normal wrap-break-word">
-                    <div className="font-bold mb-1 text-zinc-400">Evidence:</div>
-                    {t.evidence}
-                  </div>
+          {isTagsExpanded && (
+            <>
+              <div className="flex flex-wrap gap-2 overflow-visible mb-3">
+                {(!activeDoc.tags || activeDoc.tags.length === 0) && (
+                  <span className="text-xs text-zinc-600 italic block">No tags</span>
                 )}
+                {activeDoc.tags && activeDoc.tags.map((t, i) => (
+                  <div key={i} className="group relative">
+                    <span
+                      onMouseEnter={() => {
+                        if (t.evidence) {
+                          useDocumentStore.getState().setHighlightedEvidence(t.evidence);
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        useDocumentStore.getState().setHighlightedEvidence(null);
+                      }}
+                      className="cursor-help px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-blue-400 hover:border-blue-500 hover:bg-zinc-800 transition-colors inline-flex items-center gap-1">
+                      #{t.tag}
+                      <button
+                        onClick={() => useDocumentStore.getState().removeTagFromDocument(activeDoc.id, i)}
+                        className="ml-1 text-zinc-500 hover:text-red-400 transition-colors"
+                        title="Remove tag"
+                      >
+                        ×
+                      </button>
+                    </span>
+                    {/* Evidence Tooltip - Shows above the tag */}
+                    {t.evidence && (
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-60 p-2 bg-zinc-800 border border-zinc-700 rounded shadow-xl z-9999 text-[10px] text-zinc-300 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-normal wrap-break-word">
+                        <div className="font-bold mb-1 text-zinc-400">Evidence:</div>
+                        {t.evidence}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {/* Add Tag Form */}
-          <AddTagForm docId={activeDoc.id} />
+              {/* Add Tag Form */}
+              <AddTagForm docId={activeDoc.id} />
+            </>
+          )}
         </div>
 
-        {/* Status Section */}
-        <div className="space-y-2">
-          <h3 className="text-xs text-zinc-500 font-medium">Status</h3>
-          <div className="w-full h-8 bg-zinc-900 border border-zinc-700 rounded flex items-center px-3 text-xs text-zinc-400">
-            {activeDoc.document_state === DocumentState.Draft ? 'Draft' :
-              activeDoc.document_state === DocumentState.Feedback ? 'Feedback' :
-                activeDoc.document_state === DocumentState.Published ? 'Published' : 'Unknown'}
-          </div>
+        {/* Linked Mentions */}
+        <LinkList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} />
+
+        {/* Attached Resources */}
+        <ResourceList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isResourcesExpanded} />
+      </div>
+
+      {/* Revision Section - 독립적인 접기/펼치기 */}
+      <div className="border-t border-zinc-800 shrink-0 bg-zinc-950">
+        <div
+          className="flex items-center gap-2 px-4 py-3 text-zinc-500 cursor-pointer hover:text-zinc-300 select-none"
+          onClick={() => setIsRevisionExpanded(!isRevisionExpanded)}
+        >
+          <History size={12} />
+          <h3 className="text-xs font-medium flex-1">Revisions</h3>
+          {isRevisionExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         </div>
+        <div
+          className={`transition-all duration-300 ease-in-out overflow-hidden ${isRevisionExpanded ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
+            }`}
+        >
+          <div className="px-4 pb-3 overflow-y-auto custom-scrollbar h-full">
+            {/* Git Graph Style Revisions */}
+            <div className="relative pl-5">
+              {/* Vertical Line */}
+              <div className="absolute left-[7px] top-3 bottom-3 w-px bg-zinc-700" />
 
-        {/* Included Links */}
-        <LinkList content={activeDoc.content} />
+              {/* Revision Items */}
+              <div className="space-y-2">
+                {/* Current - 파란색 큰 점 */}
+                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1.5 rounded">
+                  <div className="absolute left-[3px] top-2.5 w-2.5 h-2.5 rounded-full bg-blue-500 ring-2 ring-zinc-950" />
+                  <div className="flex-1 min-w-0 ml-1">
+                    <div className="text-xs text-zinc-200 truncate">v5. <span className="text-zinc-400">Real Real Final review</span> <span className="text-zinc-500">· orseL</span></div>
+                    <div className="text-[10px] text-zinc-600">2025-01-11 15:17</div>
+                  </div>
+                </div>
 
-        {/* Links / Backlinks (Mock) */}
-        <div className="space-y-2">
-          <h3 className="text-xs text-zinc-500 font-medium">Linked Mentions</h3>
-          <div className="space-y-1">
-            {/* Stub for backlinks, ideally handled similarly but needs global search */}
-            <div className="text-xs bg-zinc-900/50 p-2 rounded border border-zinc-800 text-zinc-500 italic text-center">
-              No linked mentions
+                {/* v4 - 회색 작은 점 */}
+                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
+                  <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                  <div className="flex-1 min-w-0 ml-1">
+                    <div className="text-xs text-zinc-500 truncate">v4. <span className="text-zinc-600">Real Final review</span> <span className="text-zinc-600">· Someone</span></div>
+                    <div className="text-[10px] text-zinc-700">2025-01-10 12:45</div>
+                  </div>
+                </div>
+
+                {/* v3 - 회색 작은 점 */}
+                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
+                  <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                  <div className="flex-1 min-w-0 ml-1">
+                    <div className="text-xs text-zinc-500 truncate">v3. <span className="text-zinc-600">Final review</span> <span className="text-zinc-600">· IDK</span></div>
+                    <div className="text-[10px] text-zinc-700">2025-01-09 10:30</div>
+                  </div>
+                </div>
+
+                {/* v2 - 회색 작은 점 */}
+                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
+                  <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                  <div className="flex-1 min-w-0 ml-1">
+                    <div className="text-xs text-zinc-500 truncate">v2. <span className="text-zinc-600">Added summary section</span> <span className="text-zinc-600">· Jane</span></div>
+                    <div className="text-[10px] text-zinc-700">2025-01-08 15:22</div>
+                  </div>
+                </div>
+
+                {/* v1 - 회색 작은 점 */}
+                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
+                  <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                  <div className="flex-1 min-w-0 ml-1">
+                    <div className="text-xs text-zinc-500 truncate">v1. <span className="text-zinc-600">Initial draft</span> <span className="text-zinc-600">· John</span></div>
+                    <div className="text-[10px] text-zinc-700">2025-01-07 09:15</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Info */}
       </div>
 
       {/* Info - Pinned to Bottom */}

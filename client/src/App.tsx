@@ -42,7 +42,7 @@ function AppContent() {
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('folder');
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(250);
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(280);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(320);
 
   // Dialog states
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
@@ -117,7 +117,7 @@ function AppContent() {
   const handleMouseMoveRight = useCallback((e: MouseEvent) => {
     if (!isResizingRight.current) return;
     const newWidth = window.innerWidth - e.clientX;
-    if (newWidth >= 200 && newWidth <= 500) {
+    if (newWidth >= 280 && newWidth <= 500) {
       setRightSidebarWidth(newWidth);
     }
   }, []);
@@ -133,12 +133,12 @@ function AppContent() {
     const data = await invoke<LoginResponse>('login', { email, password, tenantId });
     setCurrentPassword(password);
 
+    useDocumentStore.getState().setCurrentUser(data);
+    useAuthStore.getState().setUser(data);
+
     if (data.force_change_password) {
       setView('change_password');
     } else {
-      console.log(data);
-      useDocumentStore.getState().setCurrentUser(data);
-      useAuthStore.getState().setUser(data);
       showToast('Login successful', 'success');
       setView('main');
     }

@@ -709,6 +709,58 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     setGroups(newGroups);
   }, [documents, currentUser, groupSortOptions]);
 
+  // activeTabId 변경 시 해당 문서의 부모들을 자동으로 펼치기
+  useEffect(() => {
+    if (!activeTabId) return;
+
+    // 선택된 문서 찾기
+    const selectedDoc = documents.find(d => d.id === activeTabId);
+    if (!selectedDoc) return;
+
+    // 부모 ID 수집 (문서 계층)
+    const parentIds: string[] = [];
+    let currentParentId = selectedDoc.parent_id;
+    while (currentParentId) {
+      parentIds.push(currentParentId);
+      const parentDoc = documents.find(d => d.id === currentParentId);
+      currentParentId = parentDoc?.parent_id;
+    }
+
+    // 해당 문서가 속한 그룹 찾기 및 펼치기
+    setGroups(prev => prev.map(g => {
+      // 그룹 펼치기 (해당 문서가 이 그룹에 속하는지 확인)
+      const containsDoc = (items: DocumentItem[]): boolean => {
+        for (const item of items) {
+          if (item.id === activeTabId) return true;
+          if (item.children && containsDoc(item.children)) return true;
+        }
+        return false;
+      };
+
+      if (!containsDoc(g.items)) return g;
+
+      // 그룹 펼치기
+      const expandParents = (items: DocumentItem[]): DocumentItem[] => {
+        return items.map(item => {
+          // 부모인 경우 펼치기
+          if (parentIds.includes(item.id)) {
+            return {
+              ...item,
+              expanded: true,
+              children: item.children ? expandParents(item.children) : undefined
+            };
+          }
+          if (item.children) {
+            return { ...item, children: expandParents(item.children) };
+          }
+          return item;
+        });
+      };
+
+      return { ...g, expanded: true, items: expandParents(g.items) };
+    }));
+  }, [activeTabId, documents]);
+
   // State defined above usage
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewDocDialog, setShowNewDocDialog] = useState(false);
@@ -732,9 +784,23 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
   };
 
   const toggleAllGroups = () => {
-    // Check if any is collapsed, if so expand all. If all expanded, collapse all.
+    // Check if any group or item is collapsed, if so expand all. If all expanded, collapse all.
     const anyCollapsed = groups.some(g => !g.expanded);
-    setGroups(prev => prev.map(g => ({ ...g, expanded: anyCollapsed })));
+
+    // Recursive function to set expanded state for all items
+    const setAllExpanded = (items: DocumentItem[], expanded: boolean): DocumentItem[] => {
+      return items.map(item => ({
+        ...item,
+        expanded: expanded,
+        children: item.children ? setAllExpanded(item.children, expanded) : undefined
+      }));
+    };
+
+    setGroups(prev => prev.map(g => ({
+      ...g,
+      expanded: anyCollapsed,
+      items: setAllExpanded(g.items, anyCollapsed)
+    })));
   };
 
   const toggleExpandItem = (groupId: string, itemId: string) => {

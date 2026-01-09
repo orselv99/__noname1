@@ -64,7 +64,7 @@ export const CollaborativeEditor = () => {
 
 const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProvider }) => {
   const { showToast } = useToast();
-  const { fetchDocuments, activeTabId, documents, highlightedEvidence, toggleFavorite, updateDocument, setAiAnalysisStatus } = useDocumentStore();
+  const { fetchDocuments, activeTabId, documents, highlightedEvidence, toggleFavorite, updateDocument, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, updateTabTitle } = useDocumentStore();
   const activeDoc = documents.find(d => d.id === activeTabId);
   const editor = useEditor({
     extensions: [
@@ -113,20 +113,37 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
   const [title, setTitle] = useState('');
   const [isDirty, setIsDirty] = useState(false);
 
-  // Load content when active tab changes
+  // LocalStorage Draft 키 생성 헬퍼
+  const getDraftKey = (docId: string) => `draft-${docId}`;
+
+  // Load content when active tab changes (with localStorage draft recovery)
   useEffect(() => {
     if (!editor) return;
 
     if (activeTabId) {
       const doc = documents.find(d => d.id === activeTabId);
       if (doc) {
-        setTitle(doc.title);
-        if (editor && activeTabId) {
-          // Force set content on tab switch and resetting dirty state
+        // localStorage에서 draft 확인
+        const draftKey = getDraftKey(activeTabId);
+        const savedDraft = localStorage.getItem(draftKey);
+
+        if (savedDraft) {
+          try {
+            const draft = JSON.parse(savedDraft);
+            // Draft가 있으면 복구
+            setTitle(draft.title || doc.title);
+            editor.commands.setContent(draft.content || doc.content, true);
+          } catch (e) {
+            // 파싱 실패 시 서버 데이터 사용
+            setTitle(doc.title);
+            editor.commands.setContent(doc.content, true);
+          }
+        } else {
+          // Draft 없으면 서버 데이터 사용
+          setTitle(doc.title);
           editor.commands.setContent(doc.content, true);
-          // Set dirty to false strictly after content load
-          setIsDirty(false);
         }
+        setIsDirty(false);
       }
     } else {
       setTitle('Untitled');
@@ -137,18 +154,63 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
     }
   }, [activeTabId, documents, editor]);
 
-  // Track changes
+  // Track changes and update metadata in real-time
   useEffect(() => {
     if (!editor) return;
 
-    editor.on('update', () => {
+    const handleUpdate = () => {
       setIsDirty(true);
-    });
+    };
+
+    editor.on('update', handleUpdate);
 
     return () => {
-      editor.off('update');
+      editor.off('update', handleUpdate);
     }
   }, [editor]);
+
+  // 실시간 메타데이터 업데이트 (디바운스 적용)
+  useEffect(() => {
+    if (!editor || !activeTabId) return;
+
+    const updateMetadata = () => {
+      const currentContent = editor.getHTML();
+      // 저장되지 않은 실시간 콘텐츠를 별도 상태로 관리 (메타데이터 패널용)
+      setLiveEditorContent(currentContent);
+    };
+
+    // 디바운스: 300ms 후에 업데이트
+    const timeoutId = setTimeout(updateMetadata, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [editor?.state.doc, activeTabId, setLiveEditorContent]);
+
+  // localStorage 자동저장 (5초 interval)
+  useEffect(() => {
+    if (!editor || !activeTabId || !isDirty) return;
+
+    const autoSaveTimeout = setTimeout(() => {
+      const currentContent = editor.getHTML();
+      const draftKey = getDraftKey(activeTabId);
+
+      try {
+        const draft = {
+          title,
+          content: currentContent,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(draftKey, JSON.stringify(draft));
+
+        // 상태바에 자동저장 표시
+        setAutoSaveStatus('자동저장됨');
+        setTimeout(() => setAutoSaveStatus(null), 2000);
+      } catch (e) {
+        console.error('Draft auto-save failed:', e);
+      }
+    }, 5000); // 5초 후 자동저장
+
+    return () => clearTimeout(autoSaveTimeout);
+  }, [editor?.state.doc, activeTabId, title, isDirty, setAutoSaveStatus]);
 
   // Keyboard Shortcuts (Ctrl+S)
   useEffect(() => {
@@ -330,6 +392,11 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
       // 서버에서 계산된 updated_at, size 등이 포함된 savedDoc으로 업데이트해야 형상이 동기화됨.
       updateDocument(savedDoc);
       setIsDirty(false); // Reset dirty state on save
+
+      // 저장 완료 시 localStorage draft 삭제
+      const draftKey = getDraftKey(activeTabId);
+      localStorage.removeItem(draftKey);
+
       showToast('저장되었습니다.', 'success');
       console.log('Document saved and synced successfully', savedDoc);
     } catch (error) {
@@ -441,7 +508,15 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
               <input
                 type="text"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  const newTitle = e.target.value;
+                  setTitle(newTitle);
+                  setIsDirty(true); // 제목 변경 시 isDirty 활성화
+                  // 탭 제목도 실시간 업데이트
+                  if (activeTabId) {
+                    updateTabTitle(activeTabId, newTitle);
+                  }
+                }}
                 placeholder="Untitled"
                 className="w-full bg-transparent text-4xl font-bold text-white placeholder-zinc-700 focus:outline-none"
               />
