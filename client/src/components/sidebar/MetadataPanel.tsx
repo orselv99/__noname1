@@ -1,15 +1,22 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Tag, Calendar, User, FileText, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity } from 'lucide-react';
 import { useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
-import { DocumentState, VisibilityLevel, GroupType } from '../../types';
+import { DocumentState, VisibilityLevel, GroupType, Document } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
 import { useConfirm } from '../ConfirmProvider';
 
 
+// VISIBILITY_LEVELS constant needs to be available at module level for memo components
+const VISIBILITY_LEVELS = [
+  { value: VisibilityLevel.Hidden, label: 'Hidden', icon: EyeOff, color: 'bg-gray-700 text-gray-300', hoverColor: 'hover:bg-gray-600' },
+  { value: VisibilityLevel.Metadata, label: 'Metadata', icon: FileText, color: 'bg-blue-900/50 text-blue-300', hoverColor: 'hover:bg-blue-800/50' },
+  { value: VisibilityLevel.Snippet, label: 'Snippet', icon: Eye, color: 'bg-amber-900/50 text-amber-300', hoverColor: 'hover:bg-amber-800/50' },
+  { value: VisibilityLevel.Public, label: 'Public', icon: Globe, color: 'bg-green-900/50 text-green-300', hoverColor: 'hover:bg-green-800/50' },
+];
 
-const LinkList = ({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
+const LinkList = memo(({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true);
 
   // 외부에서 강제로 펼침 상태를 변경할 때 동기화
@@ -71,7 +78,7 @@ const LinkList = ({ content, liveContent, forceExpanded }: { content: string; li
       )}
     </div>
   );
-};
+});
 
 // Resource List Component (이미지, 영상, 음성)
 interface ResourceItem {
@@ -156,7 +163,7 @@ const MOCK_RESOURCES: ResourceItem[] = [
   { type: 'audio', src: 'https://example.com/sample-audio.mp3', alt: 'Sample Audio' },
 ];
 
-const ResourceList = ({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
+const ResourceList = memo(({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [selectedResource, setSelectedResource] = useState<ResourceItem | null>(null);
 
@@ -278,7 +285,7 @@ const ResourceList = ({ content, liveContent, forceExpanded }: { content: string
       )}
     </div>
   );
-};
+});
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-';
@@ -295,7 +302,7 @@ const DOCUMENT_STATES = [
   { value: DocumentState.Published, label: 'Published', icon: Globe, color: 'bg-green-900/50 text-green-300', hoverColor: 'hover:bg-green-800/50' },
 ];
 
-const DocumentStateDropdown = ({ currentState, onStateChange }: { currentState: DocumentState; onStateChange: (state: DocumentState) => void }) => {
+const DocumentStateDropdown = memo(({ currentState, onStateChange }: { currentState: DocumentState; onStateChange: (state: DocumentState) => void }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -368,17 +375,11 @@ const DocumentStateDropdown = ({ currentState, onStateChange }: { currentState: 
       )}
     </div>
   );
-};
+});
 
-// Visibility Level Dropdown
-const VISIBILITY_LEVELS = [
-  { value: VisibilityLevel.Hidden, label: 'Hidden', icon: EyeOff, color: 'bg-gray-700 text-gray-300', hoverColor: 'hover:bg-gray-600' },
-  { value: VisibilityLevel.Metadata, label: 'Metadata', icon: FileText, color: 'bg-blue-900/50 text-blue-300', hoverColor: 'hover:bg-blue-800/50' },
-  { value: VisibilityLevel.Snippet, label: 'Snippet', icon: Eye, color: 'bg-amber-900/50 text-amber-300', hoverColor: 'hover:bg-amber-800/50' },
-  { value: VisibilityLevel.Public, label: 'Public', icon: Globe, color: 'bg-green-900/50 text-green-300', hoverColor: 'hover:bg-green-800/50' },
-];
+// Visibility Level Dropdown - using the constant defined at module level
 
-const VisibilityDropdown = ({ currentLevel, onLevelChange }: { currentLevel: VisibilityLevel; onLevelChange: (level: VisibilityLevel) => void }) => {
+const VisibilityDropdown = memo(({ currentLevel, onLevelChange }: { currentLevel: VisibilityLevel; onLevelChange: (level: VisibilityLevel) => void }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -451,11 +452,15 @@ const VisibilityDropdown = ({ currentLevel, onLevelChange }: { currentLevel: Vis
       )}
     </div>
   );
-};
+});
 
 export const MetadataPanel = () => {
-  const { documents, activeTabId, liveEditorContent, saveDocument, highlightedEvidence: _highlightedEvidence } = useDocumentStore();
-  const activeDoc = documents.find(d => d.id === activeTabId);
+  // Optimized selector: only re-render when activeDoc changes, not entire documents array
+  const activeDoc = useDocumentStore(
+    useCallback((state) => state.documents.find((d: Document) => d.id === state.activeTabId), [])
+  );
+  const liveEditorContent = useDocumentStore(state => state.liveEditorContent);
+  const saveDocument = useDocumentStore(state => state.saveDocument);
   const { confirm } = useConfirm();
 
   // 섹션 펼침 상태 (Hooks는 조건부 return 전에 호출해야 함)

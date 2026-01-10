@@ -1,6 +1,6 @@
 import { X, Plus, MoreHorizontal } from 'lucide-react';
 import { useDocumentStore } from '../../stores/documentStore';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo, memo } from 'react';
 
 interface SortableTabProps {
   id: string;
@@ -12,7 +12,7 @@ interface SortableTabProps {
   onClose: (e: React.MouseEvent) => void;
 }
 
-const SortableTab = ({ title, isActive, isDirty, isRecycled, onSelect, onClose }: SortableTabProps) => {
+const SortableTab = memo(({ title, isActive, isDirty, isRecycled, onSelect, onClose }: SortableTabProps) => {
   // Logic for border color
   let borderColor = 'border-t-transparent';
   if (isActive) {
@@ -50,12 +50,25 @@ const SortableTab = ({ title, isActive, isDirty, isRecycled, onSelect, onClose }
       </div>
     </div>
   );
-};
+});
 
 export const EditorTabs = () => {
   const { tabs, activeTabId, setActiveTab, closeTab, triggerNewDocument } = useDocumentStore();
+  // Subscribe to documents once to get deleted status
+  const documents = useDocumentStore(state => state.documents);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
+
+  // Pre-calculate recycled status for all tabs
+  const recycledMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    tabs.forEach(tab => {
+      const doc = documents.find(d => d.id === tab.docId);
+      map.set(tab.id, !!doc?.deleted_at);
+    });
+    return map;
+  }, [tabs, documents]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -78,27 +91,21 @@ export const EditorTabs = () => {
         ref={containerRef}
         className="flex h-full items-center overflow-hidden w-full"
       >
-        {tabs.map((tab) => {
-          // Check if tab is recycled
-          const doc = useDocumentStore.getState().documents.find(d => d.id === tab.docId);
-          const isRecycled = doc?.group_id === 'ffffffff-ffff-ffff-ffff-ffffffffffff';
-
-          return (
-            <SortableTab
-              key={tab.id}
-              id={tab.id}
-              title={tab.title}
-              isActive={activeTabId === tab.id}
-              isDirty={tab.isDirty}
-              isRecycled={isRecycled}
-              onSelect={() => setActiveTab(tab.id)}
-              onClose={(e) => {
-                e.stopPropagation();
-                closeTab(tab.id);
-              }}
-            />
-          )
-        })}
+        {tabs.map((tab) => (
+          <SortableTab
+            key={tab.id}
+            id={tab.id}
+            title={tab.title}
+            isActive={activeTabId === tab.id}
+            isDirty={tab.isDirty}
+            isRecycled={recycledMap.get(tab.id)}
+            onSelect={() => setActiveTab(tab.id)}
+            onClose={(e) => {
+              e.stopPropagation();
+              closeTab(tab.id);
+            }}
+          />
+        ))}
         {/* New Document Button */}
         <button
           onClick={triggerNewDocument}

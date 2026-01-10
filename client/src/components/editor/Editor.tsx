@@ -18,7 +18,111 @@ import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
-import { useEffect, useState, useRef } from 'react';
+import { findParentNode } from '@tiptap/core';
+
+// Custom Table extension to handle arrow key navigation at table boundaries
+const CustomTable = Table.extend({
+  addKeyboardShortcuts() {
+    return {
+      ...this.parent?.(),
+      ArrowDown: ({ editor }) => {
+        const { selection } = editor.state;
+        const table = findParentNode((node) => node.type.name === 'table')(selection);
+
+        if (!table) return false;
+
+        // Check if we're in the last row
+        const tableNode = table.node;
+        const lastRowIndex = tableNode.childCount - 1;
+
+        // Find current row position within the table
+        let currentRowIndex = -1;
+        let offset = table.start;
+
+        for (let i = 0; i < tableNode.childCount; i++) {
+          const row = tableNode.child(i);
+          const rowStart = offset;
+          const rowEnd = offset + row.nodeSize;
+
+          if (selection.from >= rowStart && selection.from < rowEnd) {
+            currentRowIndex = i;
+            break;
+          }
+          offset = rowEnd;
+        }
+
+        // If in the last row, create a paragraph after the table
+        if (currentRowIndex === lastRowIndex) {
+          const tableEnd = table.start + table.node.nodeSize;
+
+          // Check if there's already content after the table
+          const { doc } = editor.state;
+          const nodeAfterTable = doc.nodeAt(tableEnd);
+
+          if (!nodeAfterTable || nodeAfterTable.type.name !== 'paragraph') {
+            // Insert a new paragraph after the table
+            editor.chain()
+              .insertContentAt(tableEnd, { type: 'paragraph' })
+              .setTextSelection(tableEnd + 1)
+              .focus()
+              .run();
+          } else {
+            // Move to existing paragraph after table
+            editor.chain()
+              .setTextSelection(tableEnd + 1)
+              .focus()
+              .run();
+          }
+          return true;
+        }
+
+        return false; // Let default behavior handle other cases
+      },
+      ArrowUp: ({ editor }) => {
+        const { selection } = editor.state;
+        const table = findParentNode((node) => node.type.name === 'table')(selection);
+
+        if (!table) return false;
+
+        // Check if we're in the first row
+        const tableNode = table.node;
+
+        // Find current row position within the table
+        let currentRowIndex = -1;
+        let offset = table.start;
+
+        for (let i = 0; i < tableNode.childCount; i++) {
+          const row = tableNode.child(i);
+          const rowStart = offset;
+          const rowEnd = offset + row.nodeSize;
+
+          if (selection.from >= rowStart && selection.from < rowEnd) {
+            currentRowIndex = i;
+            break;
+          }
+          offset = rowEnd;
+        }
+
+        // If in the first row, move to content before the table
+        if (currentRowIndex === 0) {
+          const tableStart = table.start;
+
+          // Move cursor to position before the table
+          if (tableStart > 1) {
+            editor.chain()
+              .setTextSelection(tableStart - 1)
+              .focus()
+              .run();
+            return true;
+          }
+        }
+
+        return false; // Let default behavior handle other cases
+      },
+    };
+  },
+});
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { FileText, Star, Save, Lock, Unlock } from 'lucide-react';
 import { EditorToolbar } from './EditorToolbar';
@@ -73,8 +177,13 @@ export const Editor = () => {
 
 const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProvider }) => {
   const { showToast } = useToast();
-  const { fetchDocuments, activeTabId, documents, highlightedEvidence, toggleFavorite, updateDocument, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, updateTabTitle, markTabDirty } = useDocumentStore();
-  const activeDoc = documents.find(d => d.id === activeTabId);
+  const { fetchDocuments, activeTabId, highlightedEvidence, toggleFavorite, updateDocument, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, updateTabTitle, markTabDirty } = useDocumentStore();
+
+  // Memoize activeDoc to prevent unnecessary re-renders
+  const activeDoc = useDocumentStore(useCallback(
+    (state) => state.documents.find(d => d.id === activeTabId),
+    [activeTabId]
+  ));
 
   const editor = useEditor({
     extensions: [
@@ -109,7 +218,7 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      Table.configure({
+      CustomTable.configure({
         resizable: true,
       }),
       TableRow,
@@ -143,8 +252,9 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
 
   const lastActiveTabId = useRef<string | null>(null);
   const ignoreUpdate = useRef(false);
+  const lastLoadedContent = useRef<string | null>(null);
 
-  // Load content
+  // Load content - optimized for fast tab switching
   useEffect(() => {
     if (!editor) return;
 
@@ -155,24 +265,40 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
       }
       lastActiveTabId.current = activeTabId;
 
-      const doc = documents.find(d => d.id === activeTabId);
-      if (doc) {
+      if (activeDoc) {
+        const doc = activeDoc;
         ignoreUpdate.current = true; // Block update listener
         const draftKey = getDraftKey(activeTabId);
         const savedDraft = localStorage.getItem(draftKey);
 
+        let contentToLoad: string;
+        let titleToLoad: string;
+
         if (savedDraft) {
           try {
             const draft = JSON.parse(savedDraft);
-            setTitle(draft.title || doc.title);
-            editor.commands.setContent(draft.content || doc.content, false);
+            titleToLoad = draft.title || doc.title;
+            contentToLoad = draft.content || doc.content;
           } catch (e) {
-            setTitle(doc.title);
-            editor.commands.setContent(doc.content, false);
+            titleToLoad = doc.title;
+            contentToLoad = doc.content;
           }
         } else {
-          setTitle(doc.title);
-          editor.commands.setContent(doc.content, false);
+          titleToLoad = doc.title;
+          contentToLoad = doc.content;
+        }
+
+        // Set title synchronously for immediate feedback
+        setTitle(titleToLoad);
+
+        // Check if content actually changed to avoid unnecessary setContent
+        if (lastLoadedContent.current !== contentToLoad) {
+          lastLoadedContent.current = contentToLoad;
+          // Use setTimeout to defer content loading to next event loop
+          // This allows the tab UI to update first, making the switch feel faster
+          setTimeout(() => {
+            editor.commands.setContent(contentToLoad, false);
+          }, 0);
         }
 
         // Short delay to ensure we don't catch the echo update from Yjs if any
@@ -181,8 +307,8 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
           ignoreUpdate.current = false;
         }, 50);
 
-        // Check if recycled
-        const isRecycled = doc.group_id === 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+        // Check if recycled (deleted)
+        const isRecycled = !!doc.deleted_at;
         if (isRecycled) {
           setIsReadOnly(true);
           editor.setEditable(false);
@@ -193,6 +319,7 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
       }
     } else {
       lastActiveTabId.current = null;
+      lastLoadedContent.current = null;
       setTitle('Untitled');
       if (editor) {
         ignoreUpdate.current = true;
@@ -203,18 +330,17 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
         }, 50);
       }
     }
-  }, [activeTabId, documents, editor]);
+  }, [activeTabId, activeDoc, editor]);
 
   // Enforce read-only for recycled docs even if user tries to toggle
   useEffect(() => {
-    if (activeTabId) {
-      const doc = documents.find(d => d.id === activeTabId);
-      if (doc?.group_id === 'ffffffff-ffff-ffff-ffff-ffffffffffff') {
+    if (activeTabId && activeDoc) {
+      if (activeDoc.deleted_at) {
         if (!isReadOnly) setIsReadOnly(true);
         if (editor && editor.isEditable) editor.setEditable(false);
       }
     }
-  }, [isReadOnly, activeTabId, documents, editor]);
+  }, [isReadOnly, activeTabId, activeDoc, editor]);
 
   // Track changes
   useEffect(() => {
