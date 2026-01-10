@@ -40,7 +40,7 @@ interface DocumentStore {
   addDocument: (doc: Document) => void;
   updateDocument: (doc: Document) => void;
   toggleFavorite: (docId: string) => Promise<void>;
-  createDocument: (title?: string, groupId?: string, groupType?: GroupType, parentId?: string) => Promise<void>;
+  createDocument: (title?: string, groupId?: string, groupType?: GroupType, parentId?: string, defaultVisibility?: number) => Promise<void>;
   deleteDocument: (docId: string) => Promise<void>;
   renameDocument: (docId: string, newTitle: string) => Promise<void>;
 
@@ -322,7 +322,7 @@ export const useDocumentStore = create<DocumentStore>()(
         }
       },
 
-      createDocument: async (title = 'Untitled', groupId, groupType = GroupType.Private, parentId) => {
+      createDocument: async (title = 'Untitled', groupId, groupType = GroupType.Private, parentId, defaultVisibility = VisibilityLevel.Hidden) => {
         const req: SaveDocumentRequest = {
           title,
           content: '',
@@ -330,7 +330,7 @@ export const useDocumentStore = create<DocumentStore>()(
           group_id: groupId || undefined, // Ensure explicit undefined for optional
           parent_id: parentId || undefined,
           document_state: DocumentState.Draft,
-          visibility_level: VisibilityLevel.Hidden,
+          visibility_level: defaultVisibility,
         };
 
         try {

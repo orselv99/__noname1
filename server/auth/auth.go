@@ -60,21 +60,15 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		user.ForceChangePassword = false
 	}
 
-	// Get position_id and department_id as strings
-	var positionId, departmentId string
+	// Get position_id
+	var positionId string
 	if user.PositionID != nil {
 		positionId = *user.PositionID
-	}
-	if user.DepartmentID != nil {
-		departmentId = *user.DepartmentID
 	}
 
 	// Convert phone numbers to string slice
 	phoneNumbers := []string(user.PhoneNumbers)
 
-	if user.DepartmentRel != nil {
-		user.DepartmentName = user.DepartmentRel.Name
-	}
 	if user.PositionRel != nil {
 		user.PositionName = user.PositionRel.Name
 	}
@@ -85,13 +79,24 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		log.Printf("[WARN] Failed to fetch joined projects for user %s: %v", user.ID, err)
 	}
 
+	// Joined Projects with Visibility
 	var pbJoinedProjects []*pb.Project
 	for _, p := range user.JoinedProjects {
-		// Only send minimal info (ID, Name) for the sidebar to keep login response optimization
 		pbJoinedProjects = append(pbJoinedProjects, &pb.Project{
-			Id:   p.ID,
-			Name: p.Name,
+			Id:                     p.ID,
+			Name:                   p.Name,
+			DefaultVisibilityLevel: pb.VisibilityLevel(p.DefaultVisibilityLevel),
 		})
+	}
+
+	// Department Object
+	var pbDepartment *pb.Department
+	if user.DepartmentRel != nil {
+		pbDepartment = &pb.Department{
+			Id:                     user.DepartmentRel.ID,
+			Name:                   user.DepartmentRel.Name,
+			DefaultVisibilityLevel: pb.VisibilityLevel(user.DepartmentRel.DefaultVisibilityLevel),
+		}
 	}
 
 	return &pb.LoginResponse{
@@ -105,14 +110,13 @@ func (s *server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		UserId:         user.ID,
 		Username:       user.Username,
 		PositionId:     positionId,
-		DepartmentId:   departmentId,
 		PhoneNumbers:   phoneNumbers,
 		Contact:        user.Contact,
 		CreatedAt:      user.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      user.UpdatedAt.Format(time.RFC3339),
-		DepartmentName: user.DepartmentName,
 		PositionName:   user.PositionName,
 		JoinedProjects: pbJoinedProjects,
+		Department:     pbDepartment,
 	}, nil
 }
 

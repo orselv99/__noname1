@@ -86,7 +86,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   sendMessage: async (content) => {
-    const { currentChatId, messages, chats } = get();
+    const { currentChatId, messages } = get();
 
     // Optimistic User Msg
     const tempId = crypto.randomUUID();

@@ -126,14 +126,15 @@ message LoginResponse {
   string user_id = 7;
   string username = 8;
   string position_id = 9;
-  string department_id = 10;
+  // department_id removed
   repeated string phone_numbers = 11;
   string contact = 12;
   string created_at = 13;
   string updated_at = 14;
-  string department_name = 15;
+  // department_name removed
   string position_name = 16;
   repeated Project joined_projects = 17;
+  Department department = 18;
 }
 
 message ResetAndSendPasswordRequest {

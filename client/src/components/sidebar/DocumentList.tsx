@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Trash2, Edit2 } from 'lucide-react';
 
 import { useDocumentStore } from '../../stores/documentStore';
-import { GroupType, SortOption } from '../../types';
+import { GroupType, SortOption, VisibilityLevel } from '../../types';
 import {
   ChevronDown,
   ChevronRight,
@@ -666,8 +666,8 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     const deptGroups: Record<string, typeof documents> = {};
 
     // Initialize My Department empty group if user has one
-    if (currentUser?.department_id) {
-      deptGroups[currentUser.department_id] = [];
+    if (currentUser?.department) {
+      deptGroups[currentUser.department.id] = [];
     }
 
     deptDocs.forEach(d => {
@@ -676,7 +676,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       deptGroups[d.group_id].push(d);
     });
 
-    const myDeptId = currentUser?.department_id;
+    const myDeptId = currentUser?.department?.id;
     const sortedDeptIds = Object.keys(deptGroups).sort((a, b) => {
       if (a === myDeptId) return -1;
       if (b === myDeptId) return 1;
@@ -690,9 +690,9 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       // Determine Department Name
       let groupName = `Department ${groupId.substring(0, 8)}...`;
       if (groupId === myDeptId) {
-        groupName = currentUser?.department_name?.trim() || 'My Department';
+        groupName = currentUser?.department?.name?.trim() || 'My Department';
       } else if (departments[groupId]) {
-        groupName = departments[groupId];
+        groupName = departments[groupId].name;
       }
 
       newGroups.push({
@@ -722,8 +722,8 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
 
     // Sort Projects by Name
     const sortedProjIds = Object.keys(projGroups).sort((a, b) => {
-      const nameA = projects[a] || a;
-      const nameB = projects[b] || b;
+      const nameA = projects[a]?.name || a;
+      const nameB = projects[b]?.name || b;
       return nameA.localeCompare(nameB);
     });
 
@@ -731,7 +731,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       const items = projGroups[groupId];
       newGroups.push({
         id: groupId,
-        name: projects[groupId] || `Project ${groupId.substring(0, 8)}...`,
+        name: projects[groupId]?.name || `Project ${groupId.substring(0, 8)}...`,
         type: 'project',
         expanded: expandedGroupsRef.current.has(groupId),
         items: buildTree(items, groupSortOptions[groupId])
@@ -896,31 +896,36 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     }));
   };
 
-  const handleAddSubPage = (groupId: string, parentId?: string) => {
+  const handleAddSubPage = async (groupId: string, parentId?: string) => {
     // Auto-expand parent if creating a sub-page
     if (parentId) {
       expandItem(groupId, parentId);
     }
 
-    // groupId === 'private_group' means the Private group
+    // Determine Group Type and Visibility
+    let groupType = GroupType.Private;
+    let defaultVisibility = VisibilityLevel.Hidden;
+
     if (groupId === 'private_group') {
-      createDocument('Untitled', undefined, GroupType.Private, parentId);
-      return;
+      groupType = GroupType.Private;
+      defaultVisibility = VisibilityLevel.Hidden;
+    } else if (departments[groupId] || (currentUser?.department?.id === groupId)) {
+      groupType = GroupType.Department;
+      // Get visibility from dept
+      if (departments[groupId]) {
+        defaultVisibility = departments[groupId].visibility;
+      } else if (currentUser?.department) {
+        defaultVisibility = currentUser.department.default_visibility_level;
+      }
+    } else if (projects[groupId]) {
+      groupType = GroupType.Project;
+      defaultVisibility = projects[groupId].visibility;
     }
 
-    // Otherwise, try to infer details. 
-    // In strict mode, we should match groupId against known groups to find type.
-    const group = groups.find(g => g.id === groupId);
-    if (group) {
-      // TODO: We need real group type in DocumentGroup interface to be sure.
-      // For now, mapping based on our construction logic:
-
-      let newGroupType = GroupType.Department;
-      if (group.type === 'project') newGroupType = GroupType.Project;
-
-      createDocument('Untitled', groupId, newGroupType, parentId);
-    }
+    await createDocument('Untitled', groupId === 'private_group' ? undefined : groupId, groupType, parentId, defaultVisibility);
   };
+
+
 
 
   // --- Drag & Drop Logic ---

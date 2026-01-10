@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { Loader2, Sparkles, Send, User, Bot, Plus, History, MessageSquare } from 'lucide-react';
-import { useChatStore, ChatSession } from '../../stores/chatStore';
+import { useChatStore } from '../../stores/chatStore';
 
 export function RagPanel() {
   const [input, setInput] = useState('');

@@ -77,12 +77,11 @@ export interface ListDocumentsResponse {
 export interface UserInfo {
   user_id: string;
   username: string;
-  department_id?: string;
-  department_name?: string;
   position_id?: string;
   position_name?: string;
   role: string;
   tenant_id: string;
+  department?: DepartmentInfo;
 }
 
 export interface LoginResponse extends UserInfo {
@@ -97,8 +96,15 @@ export interface LoginResponse extends UserInfo {
   joined_projects?: ProjectInfo[];
 }
 
+export interface DepartmentInfo {
+  id: string;
+  name: string;
+  default_visibility_level: number;
+}
+
 export interface ProjectInfo {
   id: string;
   name: string;
   description?: string;
+  default_visibility_level: number;
 }

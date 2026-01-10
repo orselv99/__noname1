@@ -1,77 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Calendar, User, FileText, Plus, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity } from 'lucide-react';
+import { Tag, Calendar, User, FileText, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity } from 'lucide-react';
 import { useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { DocumentState, VisibilityLevel } from '../../types';
 
-// Add Tag Form Component
-const AddTagForm = ({ docId }: { docId: string }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [tagName, setTagName] = useState('');
-  const [evidence, setEvidence] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!tagName.trim()) return;
-
-    setIsSubmitting(true);
-    try {
-      await useDocumentStore.getState().addTagToDocument(docId, tagName.trim(), evidence.trim() || undefined);
-      setTagName('');
-      setEvidence('');
-      setIsExpanded(false);
-    } catch (error) {
-      console.error('Failed to add tag:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  if (!isExpanded) {
-    return (
-      <button
-        onClick={() => setIsExpanded(true)}
-        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-blue-400 transition-colors"
-      >
-        <Plus size={12} />
-        Add tag
-      </button>
-    );
-  }
-
-  return (
-    <div className="space-y-2 p-2 bg-zinc-900 rounded border border-zinc-800">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-zinc-400">Add Tag</span>
-        <button onClick={() => setIsExpanded(false)} className="text-zinc-500 hover:text-zinc-300">
-          <ChevronUp size={12} />
-        </button>
-      </div>
-      <input
-        type="text"
-        value={tagName}
-        onChange={(e) => setTagName(e.target.value)}
-        placeholder="Tag name"
-        className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-700 rounded text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500"
-      />
-      <input
-        type="text"
-        value={evidence}
-        onChange={(e) => setEvidence(e.target.value)}
-        placeholder="Evidence (optional)"
-        className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-700 rounded text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500"
-      />
-      <button
-        onClick={handleSubmit}
-        disabled={!tagName.trim() || isSubmitting}
-        className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 rounded text-xs text-white font-medium transition-colors"
-      >
-        {isSubmitting ? 'Adding...' : 'Add'}
-      </button>
-    </div>
-  );
-};
 
 const LinkList = ({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true);

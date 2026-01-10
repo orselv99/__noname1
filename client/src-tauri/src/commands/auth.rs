@@ -40,10 +40,6 @@ pub struct LoginResponse {
     #[serde(default)]
     pub position_name: Option<String>,
     #[serde(default)]
-    pub department_id: Option<String>,
-    #[serde(default)]
-    pub department_name: Option<String>,
-    #[serde(default)]
     pub phone_numbers: Vec<String>,
     #[serde(default)]
     pub contact: Option<String>,
@@ -54,7 +50,17 @@ pub struct LoginResponse {
     #[serde(default)]
     pub updated_at: Option<String>,
     #[serde(default)]
+    pub department: Option<DepartmentInfo>,
+    #[serde(default)]
     pub joined_projects: Vec<ProjectInfo>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct DepartmentInfo {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "default_visibility_level")]
+    pub visibility: i32, // Mapped from default_visibility_level
 }
 
 #[derive(Serialize, Deserialize)]
@@ -74,6 +80,8 @@ pub struct TenantInfo {
 pub struct ProjectInfo {
     pub id: String,
     pub name: String,
+    #[serde(default, rename = "default_visibility_level")]
+    pub visibility: i32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -136,7 +144,7 @@ pub async fn login(
                         tenant_id: login_res.tenant_id.clone(),
                         role: login_res.role.clone(),
                         position_id: login_res.position_id.clone(),
-                        department_id: login_res.department_id.clone(),
+                        department_id: login_res.department.as_ref().map(|d| d.id.clone()),
                         contact: login_res.contact.clone(),
                         birthday: login_res.birthday.clone(),
                         phone_numbers: phone_numbers_str,
@@ -220,14 +228,18 @@ fn try_offline_login(
                     username: user.username,
                     position_id: user.position_id,
                     position_name: None,
-                    department_id: user.department_id,
-                    department_name: None,
+                    // department_id/name removed
                     phone_numbers,
                     contact: user.contact,
                     birthday: user.birthday,
                     created_at: user.created_at,
                     updated_at: user.updated_at,
                     joined_projects: Vec::new(), // Offline: empty for now
+                    department: user.department_id.map(|id| DepartmentInfo {
+                        id,
+                        name: "Offline Department".to_string(), // TODO: Cache dept name
+                        visibility: 1, // Default to Hidden if unknown
+                    }),
                 })
             }
             Err(offline_err) => {
