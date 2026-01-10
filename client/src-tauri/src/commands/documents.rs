@@ -62,6 +62,7 @@ pub struct Document {
     pub size: Option<String>,
     pub is_favorite: bool,
     pub tags: Option<Vec<DocumentTag>>,
+    pub version: i32,
 }
 
 #[derive(Deserialize)]
@@ -76,6 +77,7 @@ pub struct SaveDocumentRequest {
     pub document_state: i32,
     pub visibility_level: i32,
     pub is_favorite: Option<bool>,
+    pub version: Option<i32>,
 }
 
 #[tauri::command]
@@ -120,8 +122,8 @@ pub async fn save_document(
             conn.execute(
                 "INSERT INTO documents (
                     id, user_id, document_state, visibility_level, group_type, group_id,
-                    title, content, summary, size, created_at, updated_at, is_favorite, last_synced_at, parent_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                    title, content, summary, size, created_at, updated_at, is_favorite, last_synced_at, parent_id, version
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
                 ON CONFLICT(id) DO UPDATE SET
                     title = excluded.title,
                     content = excluded.content,
@@ -134,7 +136,8 @@ pub async fn save_document(
                     size = excluded.size,
                     is_favorite = COALESCE(excluded.is_favorite, documents.is_favorite),
                     updated_at = excluded.updated_at,
-                    last_synced_at = excluded.last_synced_at
+                    last_synced_at = excluded.last_synced_at,
+                    version = excluded.version
                 ",
                 rusqlite::params![
                     doc_id,
@@ -151,7 +154,8 @@ pub async fn save_document(
                     updated_at_enc,
                     req.is_favorite.unwrap_or(false),
                     ts, // Plaintext timestamp
-                    req.parent_id
+                    req.parent_id,
+                    req.version.unwrap_or(1)
                 ],
             )
             .map_err(|e| format!("Failed to save document: {}", e))?;
@@ -180,6 +184,7 @@ pub async fn save_document(
         size: Some(size_str),
         is_favorite: req.is_favorite.unwrap_or(false),
         tags: None,
+        version: req.version.unwrap_or(1),
     })
 }
 
@@ -210,7 +215,7 @@ pub async fn list_documents(
         let mut query = "SELECT 
             d.id, d.user_id, d.document_state, d.visibility_level, d.group_type, d.group_id,
             d.title, d.content, d.summary, d.created_at, d.updated_at, d.accessed_at, d.size, d.is_favorite,
-            u.username, d.last_synced_at, d.parent_id
+            u.username, d.last_synced_at, d.parent_id, d.version
             FROM documents d
             LEFT JOIN users u ON d.user_id = u.id
             WHERE d.user_id = ?1".to_string();
@@ -256,8 +261,9 @@ pub async fn list_documents(
              // Index 15 is last_synced_at
              let last_synced_at: Option<i64> = row.get(15).ok();
              let parent_id: Option<String> = row.get(16).ok();
+             let version: i32 = row.get(17).unwrap_or(1);
 
-             Ok((id, uid, state, vis, gtype, gid, title_blob, content_blob, summary_blob, created_blob, updated_blob, accessed_blob, size_blob, is_favorite, username, last_synced_at, parent_id))
+             Ok((id, uid, state, vis, gtype, gid, title_blob, content_blob, summary_blob, created_blob, updated_blob, accessed_blob, size_blob, is_favorite, username, last_synced_at, parent_id, version))
         }).map_err(|e| e.to_string())?;
 
         let mut temp_docs = Vec::new();
@@ -267,14 +273,14 @@ pub async fn list_documents(
 
         println!("DEBUG: list_documents params - gt: {:?}, gid: {:?}, last_sync: {:?}", group_type, group_id, last_synced_at);
         println!("DEBUG: found {} rows", temp_docs.len());
-        for (id, _, _, _, gtype, gid, _, _, _, _, _, _, _, _, _, _, pid) in &temp_docs {
+        for (id, _, _, _, gtype, gid, _, _, _, _, _, _, _, _, _, _, pid, _) in &temp_docs {
              println!("DEBUG: DOC id={}, gtype={}, gid={:?}, pid={:?}", id, gtype, gid, pid);
         }
 
         let mut docs = Vec::new();
 
         // 2. Process and fetch tags
-        for (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav, username, ls_at, pid) in temp_docs {
+        for (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav, username, ls_at, pid, version) in temp_docs {
 
             // Fetch tags for this doc
             let mut tags = Vec::new();
@@ -325,6 +331,7 @@ pub async fn list_documents(
                 size,
                 is_favorite: is_fav,
                 tags: Some(tags),
+                version,
             });
         }
         
@@ -353,7 +360,7 @@ pub async fn get_document(
         let mut stmt = conn.prepare("SELECT 
             d.id, d.user_id, d.document_state, d.visibility_level, d.group_type, d.group_id,
             d.title, d.content, d.summary, d.created_at, d.updated_at, d.accessed_at, d.size, d.is_favorite,
-            u.username, d.last_synced_at, d.parent_id
+            u.username, d.last_synced_at, d.parent_id, d.version
             FROM documents d
             LEFT JOIN users u ON d.user_id = u.id
             WHERE d.id = ?1 AND d.user_id = ?2").map_err(|e| e.to_string())?;
@@ -377,11 +384,12 @@ pub async fn get_document(
              let username: Option<String> = row.get(14).ok();
              let last_synced_at: Option<i64> = row.get(15).ok();
              let parent_id: Option<String> = row.get(16).ok();
+             let version: i32 = row.get(17).unwrap_or(1);
 
-             Ok((id, uid, state, vis, gtype, gid, title_blob, content_blob, summary_blob, created_blob, updated_blob, accessed_blob, size_blob, is_favorite, username, last_synced_at, parent_id))
+             Ok((id, uid, state, vis, gtype, gid, title_blob, content_blob, summary_blob, created_blob, updated_blob, accessed_blob, size_blob, is_favorite, username, last_synced_at, parent_id, version))
         }).map_err(|e| e.to_string())?;
 
-        let (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav, username, ls_at, pid) = row;
+        let (id, uid, state, vis, gtype, gid, t_blob, c_blob, s_blob, cr_blob, up_blob, acc_blob, sz_blob, is_fav, username, ls_at, pid, version) = row;
         let mut tags = Vec::new();
         {
             let mut tag_stmt = conn.prepare("SELECT tag, evidence FROM document_tags WHERE document_id = ?1").map_err(|e| e.to_string())?;
@@ -429,6 +437,7 @@ pub async fn get_document(
             size,
             is_favorite: is_fav,
             tags: Some(tags),
+            version,
         })
     } else {
         Err("Database not initialized".to_string())

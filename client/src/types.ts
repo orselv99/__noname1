@@ -52,6 +52,7 @@ export interface Document {
   size?: string;
   is_favorite?: boolean;
   tags?: DocumentTag[];
+  version: number;
 }
 
 export interface SaveDocumentRequest {
@@ -67,6 +68,7 @@ export interface SaveDocumentRequest {
   is_favorite?: boolean;
   tags?: DocumentTag[];
   creator_name?: string;
+  version?: number;
 }
 
 export interface ListDocumentsResponse {

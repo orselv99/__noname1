@@ -81,6 +81,8 @@ export default function UserPickerPanel({
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
   const [localSelectedIds, setLocalSelectedIds] = useState<string[]>(selectedIds);
+  // Cache full user objects to prevent "Unknown User" when switching departments
+  const [cachedUsers, setCachedUsers] = useState<Record<string, UserData>>({});
   const hasFetched = useRef(false);
 
   const tenantId = typeof window !== 'undefined' ? window.location.hostname.split('.')[0] : '';
@@ -92,6 +94,11 @@ export default function UserPickerPanel({
   useEffect(() => {
     if (isOpen) {
       setLocalSelectedIds(selectedIds);
+      // Initialize cache with passed selectedUsers
+      const cache: Record<string, UserData> = {};
+      selectedUsers.forEach(u => cache[u.id] = u);
+      setCachedUsers(cache);
+
       if (!hasFetched.current) {
         fetchDepartments();
         hasFetched.current = true;
@@ -213,6 +220,7 @@ export default function UserPickerPanel({
       onSelect?.(user.id, user.username);
       onClose();
     } else {
+      setCachedUsers(prev => ({ ...prev, [user.id]: user }));
       setLocalSelectedIds(prev => {
         if (prev.includes(user.id)) {
           return prev.filter(id => id !== user.id);
@@ -225,8 +233,9 @@ export default function UserPickerPanel({
 
   const handleConfirmMulti = () => {
     if (onMultiSelect) {
-      // Resolve full objects for selected IDs
+      // Resolve full objects for selected IDs using cache or current list
       const resolvedUsers = localSelectedIds.map(id =>
+        cachedUsers[id] ||
         selectedUsers.find(u => u.id === id) ||
         users.find(u => u.id === id) ||
         { id, username: 'Unknown', email: '' } as UserData
@@ -307,7 +316,7 @@ export default function UserPickerPanel({
             {mode === 'multi' && localSelectedIds.length > 0 && (
               <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-900/50 flex flex-wrap gap-2 max-h-24 overflow-y-auto custom-scrollbar shrink-0">
                 {localSelectedIds.map(id => {
-                  const user = selectedUsers.find(u => u.id === id) || users.find(u => u.id === id) || { id, username: 'Unknown User', email: '' } as UserData;
+                  const user = cachedUsers[id] || selectedUsers.find(u => u.id === id) || users.find(u => u.id === id) || { id, username: 'Unknown User', email: '' } as UserData;
                   return (
                     <div key={id} className="flex items-center gap-1.5 bg-blue-500/10 text-blue-300 px-2.5 py-1 rounded text-xs border border-blue-500/20">
                       <span className="font-medium">{user.username}</span>
@@ -498,7 +507,7 @@ export default function UserPickerPanel({
                 <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-900/50 flex flex-wrap gap-2 max-h-24 overflow-y-auto custom-scrollbar shrink-0">
                   {localSelectedIds.map(id => {
                     // Resolve user object: passed prop OR current search result OR placeholder
-                    const user = selectedUsers.find(u => u.id === id) || users.find(u => u.id === id) || { id, username: 'Unknown User', email: '' } as UserData;
+                    const user = cachedUsers[id] || selectedUsers.find(u => u.id === id) || users.find(u => u.id === id) || { id, username: 'Unknown User', email: '' } as UserData;
                     return (
                       <div key={id} className="flex items-center gap-1.5 bg-blue-500/10 text-blue-300 px-2.5 py-1 rounded text-xs border border-blue-500/20">
                         <span className="font-medium">{user.username}</span>

@@ -76,20 +76,23 @@ pub fn bytes_to_embedding(bytes: &[u8]) -> Vec<f32> {
 /// Parse AI response to extract summary and tags with evidence
 fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<DocumentTag>) {
     // 1. Try to find markdown code block first
-    let json_str = if let Some(start_marker) = content.find("```json") {
-        if let Some(end_marker) = content[start_marker..].find("```") {
-             // Find the *next* ``` after json marker
-             // Actually find("```") finds the start marker itself.
-             // We need to jump past "```json"
-             let code_start = start_marker + 7; 
-             if let Some(end_req) = content[code_start..].find("```") {
-                 &content[code_start..code_start + end_req]
-             } else {
-                 &content[code_start..]
-             }
-        } else {
-            content
-        }
+    let json_str = if let Some(start_marker) = content.find("```") {
+         let code_start = start_marker + 3;
+         // Check if it has a lang identifier like "json"
+         let content_after = &content[code_start..];
+         let start_offset = if content_after.starts_with("json") {
+             4
+         } else {
+             0
+         };
+         
+         let actual_start = code_start + start_offset;
+         
+         if let Some(end_marker) = content[actual_start..].find("```") {
+             &content[actual_start..actual_start + end_marker]
+         } else {
+             &content[actual_start..]
+         }
     } else if let (Some(start), Some(end)) = (content.find('{'), content.rfind('}')) {
         // Fallback: outermost braces
         &content[start..=end]
@@ -110,9 +113,98 @@ fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<Docume
         Err(e) => {
             println!("Failed to parse AI JSON: {}", e);
             println!("Raw AI content: {}", content);
-            println!("Attempted JSON: {}", cleaned_json);
-            // Fallback to empty
-            (String::new(), Vec::new())
+            
+            // Fallback: Try to manually extract summary if JSON failed
+            let summary = if let Some(sum_start) = cleaned_json.find("\"summary\"") {
+                if let Some(colon) = cleaned_json[sum_start..].find(':') {
+                    let val_start = sum_start + colon + 1;
+                    if let Some(quote_start) = cleaned_json[val_start..].find('"') {
+                         let actual_start = val_start + quote_start + 1;
+                         // Find end quote (ignoring escaped?) - naive for now
+                         if let Some(quote_end) = cleaned_json[actual_start..].find('"') {
+                             cleaned_json[actual_start..actual_start + quote_end].to_string()
+                         } else {
+                             String::new()
+                         }
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
+            // Fallback: Try to manually extract tags
+            let mut tags = Vec::new();
+            let mut search_start = 0;
+            
+            while let Some(tag_key_idx) = cleaned_json[search_start..].find("\"tag\"") {
+                let absolute_tag_idx = search_start + tag_key_idx;
+                
+                // Extract Tag Value
+                let mut tag_val = String::new();
+                let mut current_pos = absolute_tag_idx;
+                
+                if let Some(colon) = cleaned_json[current_pos..].find(':') {
+                    let val_start = current_pos + colon + 1;
+                    if let Some(quote_start) = cleaned_json[val_start..].find('"') {
+                        let actual_start = val_start + quote_start + 1;
+                        if let Some(quote_end) = cleaned_json[actual_start..].find('"') {
+                            tag_val = cleaned_json[actual_start..actual_start + quote_end].to_string();
+                            current_pos = actual_start + quote_end + 1;
+                        }
+                    }
+                }
+                
+                // Extract Evidence Value (Look ahead near this tag)
+                let mut evidence_val = String::new();
+                // Limit search for evidence to avoid jumping to next item's evidence if missing? 
+                // Just search forward.
+                if !tag_val.is_empty() {
+                    if let Some(evi_key_idx) = cleaned_json[current_pos..].find("\"evidence\"") {
+                        let absolute_evi_idx = current_pos + evi_key_idx;
+                        // heuristic: if evidence is too far (e.g. > 200 chars), maybe it belongs to next?
+                        // But for now simple sequential is better than nothing.
+                        if let Some(colon) = cleaned_json[absolute_evi_idx..].find(':') {
+                             let val_start = absolute_evi_idx + colon + 1;
+                             if let Some(quote_start) = cleaned_json[val_start..].find('"') {
+                                 let actual_start = val_start + quote_start + 1;
+                                 if let Some(quote_end) = cleaned_json[actual_start..].find('"') {
+                                     evidence_val = cleaned_json[actual_start..actual_start + quote_end].to_string();
+                                     // Move search_start past this evidence to avoid re-finding
+                                     current_pos = actual_start + quote_end + 1;
+                                 }
+                             }
+                        }
+                    }
+                    
+                    tags.push(DocumentTag {
+                        tag: tag_val,
+                        evidence: if evidence_val.is_empty() { None } else { Some(evidence_val) },
+                    });
+                }
+                
+                // Advance search_start
+                // Ensure we move forward significantly
+                if current_pos > search_start {
+                    search_start = current_pos;
+                } else {
+                    search_start = absolute_tag_idx + 5; // force advance
+                }
+            }
+
+            if !summary.is_empty() {
+                return (summary, tags);
+            }
+
+            // Ultimate Fallback: Return raw content if it's not too long and looks like text
+            if content.len() < 500 && !content.contains("```") {
+                (content.to_string(), Vec::new())
+            } else {
+                (String::new(), Vec::new())
+            }
         }
     }
 }

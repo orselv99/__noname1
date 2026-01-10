@@ -11,7 +11,7 @@ interface FolderItem {
 interface NewDocumentDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate?: (data: { group: string; folder?: string; template: string; title: string }) => void;
+  onCreate?: (data: { groupId: string; groupType: 'department' | 'project'; folderId?: string; template: string; title: string }) => void;
   onCreateFolder?: (groupId: string, parentFolderId?: string) => void;
   onToggleGroup?: (groupId: string) => void;
   onToggleFolder?: (groupId: string, folderId: string) => void;
@@ -55,24 +55,12 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
     if (!group) return;
 
     // Find folder name recursively if selectedFolderId is set
-    let folderName: string | undefined;
-    if (selectedFolderId) {
-      const findFolder = (folders: FolderItem[]): string | undefined => {
-        for (const f of folders) {
-          if (f.id === selectedFolderId) return f.name;
-          if (f.children) {
-            const found = findFolder(f.children);
-            if (found) return found;
-          }
-        }
-        return undefined;
-      };
-      folderName = findFolder(group.folders);
-    }
+
 
     onCreate?.({
-      group: group.name,
-      folder: folderName,
+      groupId: group.id,
+      groupType: group.type,
+      folderId: selectedFolderId || undefined,
       template: selectedTemplate,
       title: title.trim()
     });
@@ -109,8 +97,8 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
       <div key={folder.id}>
         <div
           className={`w-full flex items-center group/folder relative pr-2 py-1.5 text-sm transition-colors cursor-pointer ${selectedFolderId === folder.id && selectedGroupId === groupId
-              ? 'bg-blue-500/20 text-blue-400'
-              : 'text-zinc-400 hover:bg-zinc-800'
+            ? 'bg-blue-500/20 text-blue-400'
+            : 'text-zinc-400 hover:bg-zinc-800'
             }`}
           style={{ paddingLeft: `${depth * 16 + 28}px` }}
           onClick={() => {
@@ -181,8 +169,8 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
               <div key={group.id}>
                 <div
                   className={`w-full flex items-center group/group relative pr-2 py-1.5 text-sm transition-colors cursor-pointer ${selectedGroupId === group.id && !selectedFolderId
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'text-zinc-400 hover:bg-zinc-800'
+                    ? 'bg-blue-500/20 text-blue-400'
+                    : 'text-zinc-400 hover:bg-zinc-800'
                     }`}
                   onClick={() => {
                     setSelectedGroupId(group.id);
@@ -233,8 +221,8 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
                     key={template.id}
                     onClick={() => setSelectedTemplate(template.id)}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${selectedTemplate === template.id
-                        ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/50'
-                        : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-700'
+                      ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/50'
+                      : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-700'
                       }`}
                   >
                     <template.icon size={16} />
@@ -268,8 +256,8 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
                         setTemplateSearch('');
                       }}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors ${selectedTemplate === template.id
-                          ? 'bg-blue-500/20 text-blue-400'
-                          : 'text-zinc-400 hover:bg-zinc-800'
+                        ? 'bg-blue-500/20 text-blue-400'
+                        : 'text-zinc-400 hover:bg-zinc-800'
                         }`}
                     >
                       <template.icon size={18} />

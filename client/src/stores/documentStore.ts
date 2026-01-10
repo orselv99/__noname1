@@ -39,6 +39,7 @@ interface DocumentStore {
   fetchDocuments: () => Promise<void>;
   addDocument: (doc: Document) => void;
   updateDocument: (doc: Document) => void;
+  saveDocument: (doc: Document) => Promise<void>;
   toggleFavorite: (docId: string) => Promise<void>;
   createDocument: (title?: string, groupId?: string, groupType?: GroupType, parentId?: string, defaultVisibility?: number) => Promise<void>;
   deleteDocument: (docId: string) => Promise<void>;
@@ -156,6 +157,35 @@ export const useDocumentStore = create<DocumentStore>()(
             t.docId === updatedDoc.id ? { ...t, title: updatedDoc.title } : t
           )
         }));
+      },
+
+      saveDocument: async (doc) => {
+        // Optimistic update
+        get().updateDocument(doc);
+
+        try {
+          const req: SaveDocumentRequest = {
+            id: doc.id,
+            title: doc.title,
+            content: doc.content,
+            summary: doc.summary,
+            group_type: doc.group_type,
+            group_id: doc.group_id,
+            parent_id: doc.parent_id,
+            document_state: doc.document_state,
+            visibility_level: doc.visibility_level,
+            is_favorite: doc.is_favorite,
+            tags: doc.tags,
+            version: doc.version,
+            creator_name: doc.creator_name
+          };
+          const savedDoc = await invoke<Document>('save_document', { req });
+          // Update again with server response (e.g. updated timestamps)
+          get().updateDocument(savedDoc);
+        } catch (error) {
+          console.error("Failed to save document:", error);
+          // Revert? For now just log. 
+        }
       },
 
       toggleFavorite: async (docId) => {

@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { Tag, Calendar, User, FileText, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity } from 'lucide-react';
 import { useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
-import { DocumentState, VisibilityLevel } from '../../types';
+import { DocumentState, VisibilityLevel, GroupType } from '../../types';
+import { useAuthStore } from '../../stores/authStore';
 
 
 
@@ -452,7 +453,7 @@ const VisibilityDropdown = ({ currentLevel, onLevelChange }: { currentLevel: Vis
 };
 
 export const MetadataPanel = () => {
-  const { documents, activeTabId, liveEditorContent, updateDocument } = useDocumentStore();
+  const { documents, activeTabId, liveEditorContent, saveDocument, highlightedEvidence } = useDocumentStore();
   const activeDoc = documents.find(d => d.id === activeTabId);
 
   // 섹션 펼침 상태 (Hooks는 조건부 return 전에 호출해야 함)
@@ -514,7 +515,18 @@ export const MetadataPanel = () => {
             <DocumentStateDropdown
               currentState={activeDoc.document_state}
               onStateChange={(state) => {
-                updateDocument({ ...activeDoc, document_state: state });
+                // If changing TO Published
+                if (state === DocumentState.Published && activeDoc.document_state !== DocumentState.Published) {
+                  const nextVersion = (activeDoc.version || 0) + 1;
+                  if (confirm(`Are you sure you want to publish this document?\n\nThis will bump the version to v${nextVersion}.`)) {
+                    saveDocument({ ...activeDoc, document_state: state, version: nextVersion });
+                  }
+                } else if (activeDoc.document_state === DocumentState.Published && state !== DocumentState.Published) {
+                  // User manually reverting to Draft/Feedback
+                  saveDocument({ ...activeDoc, document_state: state });
+                } else {
+                  saveDocument({ ...activeDoc, document_state: state });
+                }
               }}
             />
           </div>
@@ -526,7 +538,38 @@ export const MetadataPanel = () => {
             <VisibilityDropdown
               currentLevel={activeDoc.visibility_level}
               onLevelChange={(level) => {
-                updateDocument({ ...activeDoc, visibility_level: level });
+                // Check against group default visibility
+                let defaultVisibility = VisibilityLevel.Hidden;
+                const { departments, projects, user } = useAuthStore.getState();
+
+                if (activeDoc.group_type === GroupType.Department) {
+                  if (activeDoc.group_id && departments[activeDoc.group_id]) {
+                    defaultVisibility = departments[activeDoc.group_id].visibility;
+                  } else if (user?.department && user.department.id === activeDoc.group_id) {
+                    defaultVisibility = user.department.default_visibility_level;
+                  } else {
+                    // Fallback or possibly 'My Department' logic if group_id is missing but implicit?
+                    // Assuming data is consistent. If not found, default to Hidden is safe or keeping current might be better,
+                    // but let's stick to strict check or maybe 2 (Metadata) as reasonable default?
+                    // Actually, if we can't find group, maybe we shouldn't warn?
+                    // Let's assume Hidden as base.
+                  }
+                } else if (activeDoc.group_type === GroupType.Project) {
+                  if (activeDoc.group_id && projects[activeDoc.group_id]) {
+                    defaultVisibility = projects[activeDoc.group_id].visibility;
+                  }
+                }
+
+                // If switching TO a non-default visibility, warn.
+                // Or simply if New Level != Default Level?
+                // User request: "If changing to a visibility DIFFERENT from group default"
+                if (level !== defaultVisibility) {
+                  if (confirm(`The selected visibility (${VISIBILITY_LEVELS.find(v => v.value === level)?.label}) differs from the group's default (${VISIBILITY_LEVELS.find(v => v.value === defaultVisibility)?.label}).\n\nAre you sure you want to change it?`)) {
+                    saveDocument({ ...activeDoc, visibility_level: level });
+                  }
+                } else {
+                  saveDocument({ ...activeDoc, visibility_level: level });
+                }
               }}
             />
           </div>
@@ -569,9 +612,23 @@ export const MetadataPanel = () => {
                   <div key={i} className="group">
 
                     <span
-                      onMouseEnter={() => useDocumentStore.getState().setHighlightedEvidence(t.evidence || null)}
-                      onMouseLeave={() => useDocumentStore.getState().setHighlightedEvidence(null)}
-                      className="peer cursor-help px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-blue-400 hover:border-blue-500 hover:bg-zinc-800 transition-colors inline-flex items-center gap-1 max-w-full"
+                      onMouseEnter={() => {
+                        // Hover only shows tooltip, maybe partial highlight?
+                        // For now keep existing behavior but consider separate "preview" vs "navigate"
+                        // useDocumentStore.getState().setHighlightedEvidence(t.evidence || null)
+                      }}
+                      onMouseLeave={() => {
+                        // useDocumentStore.getState().setHighlightedEvidence(null)
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const current = useDocumentStore.getState().highlightedEvidence;
+                        useDocumentStore.getState().setHighlightedEvidence(current === t.evidence ? null : t.evidence || null);
+                      }}
+                      className={`peer cursor-pointer px-2 py-1 border rounded text-xs transition-colors inline-flex items-center gap-1 max-w-full ${useDocumentStore.getState().highlightedEvidence === t.evidence
+                        ? 'bg-blue-900/40 border-blue-500 text-blue-300'
+                        : 'bg-zinc-900 border-zinc-700 text-blue-400 hover:border-blue-500 hover:bg-zinc-800'
+                        }`}
                     >
                       <span className="truncate">#{t.tag}</span>
                       <button

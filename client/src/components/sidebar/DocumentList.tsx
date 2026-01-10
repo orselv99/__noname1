@@ -1132,8 +1132,27 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       <NewDocumentDialog
         isOpen={showNewDocDialog}
         onClose={() => setShowNewDocDialog(false)}
-        onCreate={() => { }}
-        groups={[]}
+        onCreate={(data) => {
+          const type = data.groupType === 'department' ? GroupType.Department : GroupType.Project;
+          createDocument(data.title, data.groupId, type, data.folderId);
+        }}
+        groups={[
+          // Map departments and projects to dialog format
+          ...(currentUser?.department ? [{
+            id: currentUser.department.id,
+            name: currentUser.department.name,
+            type: 'department' as const,
+            expanded: true,
+            folders: []
+          }] : []),
+          ...Object.entries(projects).map(([id, p]) => ({
+            id,
+            name: p.name,
+            type: 'project' as const,
+            expanded: false,
+            folders: []
+          }))
+        ]}
       />
 
       <GroupLinkDialog

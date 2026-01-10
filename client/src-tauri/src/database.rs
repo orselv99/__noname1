@@ -100,11 +100,28 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
             updated_at BLOB,
             last_synced_at INTEGER DEFAULT 0,
             accessed_at BLOB,
+            version INTEGER DEFAULT 1,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )",
       [],
     )
     .map_err(|e| format!("Failed to create documents table: {}", e))?;
+
+  // Migration: Add version column if not exists
+  let version_exists: bool = conn
+    .query_row(
+      "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name='version'",
+      [],
+      |row| row.get(0),
+    )
+    .unwrap_or(0) > 0;
+
+  if !version_exists {
+      println!("Debug: Migrating database - adding version column to documents");
+      conn
+        .execute("ALTER TABLE documents ADD COLUMN version INTEGER DEFAULT 1", [])
+        .map_err(|e| format!("Failed to add version column: {}", e))?;
+  }
 
   // Create document_deltas table (Versioning)
   conn
