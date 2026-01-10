@@ -475,19 +475,11 @@ export const useDocumentStore = create<DocumentStore>()(
       },
 
       restoreDocument: async (docId: string) => {
-        // Optimistic restore: Unset deleted_at (Recursive)
+        // Optimistic restore: Unset deleted_at (Only for the selected document, not children)
         set((state) => {
-          const idsToRestore = new Set<string>();
-          const collect = (id: string) => {
-            idsToRestore.add(id);
-            const children = state.documents.filter(d => d.parent_id === id);
-            children.forEach(c => collect(c.id));
-          };
-          collect(docId);
-
           const now = new Date().toISOString();
           const newDocuments = state.documents.map(d =>
-            idsToRestore.has(d.id) ? { ...d, deleted_at: undefined, updated_at: now } : d
+            d.id === docId ? { ...d, deleted_at: undefined, updated_at: now } : d
           );
 
           return { documents: newDocuments };

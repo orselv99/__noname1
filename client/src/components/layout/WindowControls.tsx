@@ -1,6 +1,7 @@
 import { Minus, X, Square, Copy } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useState, useEffect } from 'react';
+import { isTauri } from '../../utils/tauri';
 
 interface WindowControlsProps {
   onClose?: () => void;
@@ -16,6 +17,8 @@ export const WindowControls = ({
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
+    if (!isTauri()) return;
+
     const win = getCurrentWindow();
     win.isMaximized().then(setIsMaximized);
 
@@ -29,9 +32,14 @@ export const WindowControls = ({
     };
   }, []);
 
-  const minimize = () => getCurrentWindow().minimize();
+  const minimize = () => {
+    if (isTauri()) {
+      getCurrentWindow().minimize();
+    }
+  };
 
   const toggleMaximize = async () => {
+    if (!isTauri()) return;
     const win = getCurrentWindow();
     const maximized = await win.isMaximized();
     if (maximized) await win.unmaximize();
@@ -44,10 +52,15 @@ export const WindowControls = ({
       onClose();
     } else if (showConfirmOnClose && onShowCloseConfirm) {
       onShowCloseConfirm();
-    } else {
+    } else if (isTauri()) {
       getCurrentWindow().close();
     }
   };
+
+  // In browser mode, hide window controls entirely
+  if (!isTauri()) {
+    return null;
+  }
 
   return (
     <div className="flex items-center">

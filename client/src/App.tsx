@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown, Search, List } from 'lucide-react';
+import { isTauri } from './utils/tauri';
 
 // Layout Components
 import { WindowControls } from './components/layout/WindowControls';
@@ -28,7 +29,7 @@ import { LoginForm } from './components/auth/LoginForm';
 import { ChangePasswordForm } from './components/auth/ChangePasswordForm';
 
 // Editor Components
-import { CollaborativeEditor } from './components/editor/Editor';
+import { EditorContainer } from './components/editor/EditorContainer';
 import { EditorTabs } from './components/editor/EditorTabs';
 
 // Other
@@ -82,10 +83,13 @@ function AppContent() {
       return;
     }
     lastClickTimeRef.current = now;
-    getCurrentWindow().startDragging();
+    if (isTauri()) {
+      getCurrentWindow().startDragging();
+    }
   };
 
   const toggleMaximize = async () => {
+    if (!isTauri()) return;
     const win = getCurrentWindow();
     if (await win.isMaximized()) await win.unmaximize();
     else await win.maximize();
@@ -164,7 +168,9 @@ function AppContent() {
 
   const handleClose = () => {
     if (view === 'main') {
-      getCurrentWindow().minimize();
+      if (isTauri()) {
+        getCurrentWindow().minimize();
+      }
     } else {
       setShowCloseConfirm(true);
     }
@@ -317,7 +323,7 @@ function AppContent() {
                 </div>
               </div>
               <div className="flex-1 bg-zinc-900 overflow-hidden">
-                <CollaborativeEditor />
+                <EditorContainer />
               </div>
             </div>
 
@@ -412,7 +418,7 @@ function AppContent() {
         message="프로그램을 종료하시겠습니까?"
         confirmText="종료"
         cancelText="취소"
-        onConfirm={() => getCurrentWindow().close()}
+        onConfirm={() => { if (isTauri()) getCurrentWindow().close(); }}
         onCancel={() => setShowCloseConfirm(false)}
       />
 

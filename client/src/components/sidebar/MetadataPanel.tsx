@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, memo, useDeferredValue } from 'react';
 import { createPortal } from 'react-dom';
 import { Tag, Calendar, User, FileText, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity } from 'lucide-react';
 import { useMemo } from 'react';
@@ -456,9 +456,12 @@ const VisibilityDropdown = memo(({ currentLevel, onLevelChange }: { currentLevel
 
 export const MetadataPanel = () => {
   // Optimized selector: only re-render when activeDoc changes, not entire documents array
-  const activeDoc = useDocumentStore(
+  const activeDocImmediate = useDocumentStore(
     useCallback((state) => state.documents.find((d: Document) => d.id === state.activeTabId), [])
   );
+  // Use deferred value to allow tab switch to complete first before updating metadata
+  const activeDoc = useDeferredValue(activeDocImmediate);
+
   const liveEditorContent = useDocumentStore(state => state.liveEditorContent);
   const saveDocument = useDocumentStore(state => state.saveDocument);
   const { confirm } = useConfirm();
