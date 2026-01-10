@@ -21,29 +21,29 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// 태그와 청크 쌍
-type TagChunk struct {
+// 태그와 증거(근거 문장) 쌍
+type TagEvidence struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tag           string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
-	Chunk         string                 `protobuf:"bytes,2,opt,name=chunk,proto3" json:"chunk,omitempty"`
+	Evidence      string                 `protobuf:"bytes,2,opt,name=evidence,proto3" json:"evidence,omitempty"` // "chunk" -> "evidence"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TagChunk) Reset() {
-	*x = TagChunk{}
+func (x *TagEvidence) Reset() {
+	*x = TagEvidence{}
 	mi := &file_index_index_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TagChunk) String() string {
+func (x *TagEvidence) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TagChunk) ProtoMessage() {}
+func (*TagEvidence) ProtoMessage() {}
 
-func (x *TagChunk) ProtoReflect() protoreflect.Message {
+func (x *TagEvidence) ProtoReflect() protoreflect.Message {
 	mi := &file_index_index_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -55,21 +55,21 @@ func (x *TagChunk) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TagChunk.ProtoReflect.Descriptor instead.
-func (*TagChunk) Descriptor() ([]byte, []int) {
+// Deprecated: Use TagEvidence.ProtoReflect.Descriptor instead.
+func (*TagEvidence) Descriptor() ([]byte, []int) {
 	return file_index_index_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *TagChunk) GetTag() string {
+func (x *TagEvidence) GetTag() string {
 	if x != nil {
 		return x.Tag
 	}
 	return ""
 }
 
-func (x *TagChunk) GetChunk() string {
+func (x *TagEvidence) GetEvidence() string {
 	if x != nil {
-		return x.Chunk
+		return x.Evidence
 	}
 	return ""
 }
@@ -77,13 +77,14 @@ func (x *TagChunk) GetChunk() string {
 // 문서 데이터 구조
 type Document struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                 // 문서 ID
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`                           // 제목
-	Summary       string                 `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`                       // 원문 전체 요약
-	TagChunks     []*TagChunk            `protobuf:"bytes,4,rep,name=tag_chunks,json=tagChunks,proto3" json:"tag_chunks,omitempty"`  // 태그와 청크 목록
-	OwnerId       string                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`        // 문서 소유자 ID (필수)
-	UpdatedAt     int64                  `protobuf:"varint,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"` // 수정 시간
-	UserSalt      string                 `protobuf:"bytes,7,opt,name=user_salt,json=userSalt,proto3" json:"user_salt,omitempty"`     // 암호화용 사용자 Salt
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                         // 문서 ID
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`                                   // 제목
+	Summary       string                 `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`                               // 원문 전체 요약
+	TagEvidences  []*TagEvidence         `protobuf:"bytes,4,rep,name=tag_evidences,json=tagEvidences,proto3" json:"tag_evidences,omitempty"` // 태그와 증거 목록 (Was tag_chunks)
+	OwnerId       string                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`                // 문서 소유자 ID (필수)
+	UpdatedAt     int64                  `protobuf:"varint,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`         // 수정 시간
+	UserSalt      string                 `protobuf:"bytes,7,opt,name=user_salt,json=userSalt,proto3" json:"user_salt,omitempty"`             // 암호화용 사용자 Salt
+	Embedding     []float32              `protobuf:"fixed32,8,rep,packed,name=embedding,proto3" json:"embedding,omitempty"`                  // 문서 임베딩 벡터
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -139,9 +140,9 @@ func (x *Document) GetSummary() string {
 	return ""
 }
 
-func (x *Document) GetTagChunks() []*TagChunk {
+func (x *Document) GetTagEvidences() []*TagEvidence {
 	if x != nil {
-		return x.TagChunks
+		return x.TagEvidences
 	}
 	return nil
 }
@@ -165,6 +166,13 @@ func (x *Document) GetUserSalt() string {
 		return x.UserSalt
 	}
 	return ""
+}
+
+func (x *Document) GetEmbedding() []float32 {
+	if x != nil {
+		return x.Embedding
+	}
+	return nil
 }
 
 // 인덱싱 요청
@@ -550,20 +558,20 @@ var File_index_index_proto protoreflect.FileDescriptor
 
 const file_index_index_proto_rawDesc = "" +
 	"\n" +
-	"\x11index/index.proto\x12\x05index\"2\n" +
-	"\bTagChunk\x12\x10\n" +
-	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x14\n" +
-	"\x05chunk\x18\x02 \x01(\tR\x05chunk\"\xd1\x01\n" +
+	"\x11index/index.proto\x12\x05index\";\n" +
+	"\vTagEvidence\x12\x10\n" +
+	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x1a\n" +
+	"\bevidence\x18\x02 \x01(\tR\bevidence\"\xf8\x01\n" +
 	"\bDocument\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x18\n" +
-	"\asummary\x18\x03 \x01(\tR\asummary\x12.\n" +
-	"\n" +
-	"tag_chunks\x18\x04 \x03(\v2\x0f.index.TagChunkR\ttagChunks\x12\x19\n" +
+	"\asummary\x18\x03 \x01(\tR\asummary\x127\n" +
+	"\rtag_evidences\x18\x04 \x03(\v2\x12.index.TagEvidenceR\ftagEvidences\x12\x19\n" +
 	"\bowner_id\x18\x05 \x01(\tR\aownerId\x12\x1d\n" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\x03R\tupdatedAt\x12\x1b\n" +
-	"\tuser_salt\x18\a \x01(\tR\buserSalt\"C\n" +
+	"\tuser_salt\x18\a \x01(\tR\buserSalt\x12\x1c\n" +
+	"\tembedding\x18\b \x03(\x02R\tembedding\"C\n" +
 	"\x14IndexDocumentRequest\x12+\n" +
 	"\bdocument\x18\x01 \x01(\v2\x0f.index.DocumentR\bdocument\"l\n" +
 	"\x15IndexDocumentResponse\x12\x18\n" +
@@ -606,7 +614,7 @@ func file_index_index_proto_rawDescGZIP() []byte {
 
 var file_index_index_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_index_index_proto_goTypes = []any{
-	(*TagChunk)(nil),                // 0: index.TagChunk
+	(*TagEvidence)(nil),             // 0: index.TagEvidence
 	(*Document)(nil),                // 1: index.Document
 	(*IndexDocumentRequest)(nil),    // 2: index.IndexDocumentRequest
 	(*IndexDocumentResponse)(nil),   // 3: index.IndexDocumentResponse
@@ -617,7 +625,7 @@ var file_index_index_proto_goTypes = []any{
 	(*SyncResponse)(nil),            // 8: index.SyncResponse
 }
 var file_index_index_proto_depIdxs = []int32{
-	0, // 0: index.Document.tag_chunks:type_name -> index.TagChunk
+	0, // 0: index.Document.tag_evidences:type_name -> index.TagEvidence
 	1, // 1: index.IndexDocumentRequest.document:type_name -> index.Document
 	1, // 2: index.SearchResult.document:type_name -> index.Document
 	5, // 3: index.SearchDocumentsResponse.results:type_name -> index.SearchResult

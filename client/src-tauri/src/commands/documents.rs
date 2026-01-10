@@ -78,6 +78,7 @@ pub struct SaveDocumentRequest {
     pub visibility_level: i32,
     pub is_favorite: Option<bool>,
     pub version: Option<i32>,
+    pub tags: Option<Vec<DocumentTag>>,
 }
 
 #[tauri::command]
@@ -108,7 +109,7 @@ pub async fn save_document(
 
     let mut creator_name = None;
 
-    {
+    let _rag_data = {
         let db = db_state.lock().unwrap();
         if let Some(ref conn) = db.conn {
             // 1. Get username
@@ -159,8 +160,129 @@ pub async fn save_document(
                 ],
             )
             .map_err(|e| format!("Failed to save document: {}", e))?;
+
+            // 3. Save Tags if provided
+            if let Some(tags) = &req.tags {
+                 // Delete existing tags
+                 conn.execute("DELETE FROM document_tags WHERE document_id = ?1", [&doc_id])
+                     .map_err(|e| format!("Failed to clear tags: {}", e))?;
+                 
+                 for tag in tags {
+                     let tag_id = Uuid::new_v4().to_string();
+                     let tag_enc = encrypt_content(&user_id, &tag.tag)?;
+                     let evidence_enc = tag.evidence.as_ref()
+                         .map(|e| encrypt_content(&user_id, e))
+                         .transpose()?;
+                     let created_at_enc = encrypt_content(&user_id, &now)?; // reusing now
+
+                     conn.execute(
+                         "INSERT INTO document_tags (id, document_id, tag, evidence, created_at)
+                          VALUES (?1, ?2, ?3, ?4, ?5)",
+                         rusqlite::params![tag_id, doc_id, tag_enc, evidence_enc, created_at_enc],
+                     )
+                     .map_err(|e| format!("Failed to save tag: {}", e))?;
+                 }
+            }
+
+            // 4. Server RAG Sync (if Published)
+            if req.document_state == 3 { // Published
+                 // Spawn async task to not block save? 
+                 // But we are in async fn, so we can await. 
+                 // However, we hold DB lock. We should DROP DB lock before network call?
+                 // NO, we are iterating `req.tags` which is owned.
+                 // But we need `embedding` from `document_ai_data`.
+                 
+                 // Reuse conn to fetch embedding
+                 let embedding_blob: Option<Vec<u8>> = conn.query_row(
+                     "SELECT embedding FROM document_ai_data WHERE document_id = ?1",
+                     [&doc_id],
+                     |row| row.get(0)
+                 ).optional().unwrap_or(None);
+
+                 // fetch tags from req (latest) or DB? 
+                 // req.tags might be None if client didn't send them (partial update?).
+                 // But in `documentStore.ts`, we send everything.
+                 // Use `req.tags` if present, else empty? Or fetch from DB?
+                 // Safe to assume `req.tags` contains current tags if `saveDocument` sends full object.
+                 // But if `save_document` is called with partial... `documentStore` sends object spread `...doc`.
+                 
+                 let tags_to_send = req.tags.clone().unwrap_or_default();
+                 let summary_to_send = req.summary.clone().unwrap_or_default(); // Plaintext
+                 let title_to_send = req.title.clone(); // Plaintext
+
+                 // We need to release DB lock before making network call to avoid holding it too long?
+                 // Actually `db_state.lock()` returns a MutexGuard. 
+                 // We are inside `{ let db = ... }` scope.
+                 // We can do network call AFTER this scope.
+                 // But we need `embedding_blob` out.
+                 
+                 // Let's move RAG sync AFTER the DB scope.
+                 // But we need to pass data out.
+                 (embedding_blob, tags_to_send, summary_to_send, title_to_send)
+            } else {
+                 (None, Vec::new(), String::new(), String::new())
+            }
         } else {
             return Err("Database not initialized".to_string());
+        }
+    }; // End of DB lock scope
+
+    // Perform RAG Sync if we have data and state is Published (checked via returned tuple)
+    // Actually we need to check state again or use the tuple.
+    // If embedding_blob is Some, it means we attempted fetch.
+    // But embedding might be missing even if Published.
+    // Let's use `req.document_state` check again.
+    
+    if req.document_state == 3 {
+        // Prepare Payload
+        // We need auth token
+        let token = {
+            let auth = auth_state.lock().unwrap();
+            auth.token.clone()
+        };
+
+        if let Some(token) = token {
+             use crate::commands::ai::bytes_to_embedding;
+             
+             let embedding_vec = if let Some(blob) = _rag_data.0 {
+                 bytes_to_embedding(&blob)
+             } else {
+                 Vec::new() // Server might reject empty? Or we skip? 
+                 // If no embedding, we can't really index for RAG properly on server if server expects it.
+                 // But server implementation handles empty check.
+             };
+
+             // Construct JSON
+             let payload = serde_json::json!({
+                 "title": _rag_data.3,
+                 "summary": _rag_data.2, // Plaintext
+                 "tag_evidences": _rag_data.1.iter().map(|t| {
+                     serde_json::json!({
+                         "tag": t.tag,
+                         "evidence": t.evidence.clone().unwrap_or_default()
+                     })
+                 }).collect::<Vec<_>>(),
+                 "embedding": embedding_vec
+             });
+
+             // Send Request
+             let client = reqwest::Client::new();
+             let res = client.post("http://localhost:8080/api/v1/docs")
+                 .header("Authorization", format!("Bearer {}", token))
+                 .json(&payload)
+                 .send()
+                 .await;
+
+             match res {
+                 Ok(r) => {
+                     if !r.status().is_success() {
+                         println!("RAG Sync Failed: Status {}", r.status());
+                     } else {
+                         println!("RAG Sync Success for doc {}", doc_id);
+                     }
+                 },
+                 Err(e) => println!("RAG Sync Network Error: {}", e),
+             }
         }
     }
 
@@ -183,7 +305,7 @@ pub async fn save_document(
         accessed_at: None,
         size: Some(size_str),
         is_favorite: req.is_favorite.unwrap_or(false),
-        tags: None,
+        tags: req.tags, // Return the tags we just saved
         version: req.version.unwrap_or(1),
     })
 }

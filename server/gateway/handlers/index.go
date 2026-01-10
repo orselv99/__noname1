@@ -21,16 +21,18 @@ func NewIndexHandler(conn *grpc.ClientConn) *IndexHandler {
 	return &IndexHandler{client: client}
 }
 
-type TagChunk struct {
-	Tag   string `json:"tag"`
-	Chunk string `json:"chunk"`
+// 태그와 증거(근거 문장) 쌍
+type TagEvidence struct {
+	Tag      string `json:"tag"`
+	Evidence string `json:"evidence"`
 }
 
 // IndexDocumentRequest: 문서 인덱싱 요청 바디
 type IndexDocumentRequest struct {
-	Title     string     `json:"title"`
-	TagChunks []TagChunk `json:"tag_chunks"`
-	Summary   string     `json:"summary"`
+	Title        string        `json:"title"`
+	TagEvidences []TagEvidence `json:"tag_evidences"`
+	Summary      string        `json:"summary"`
+	Embedding    []float32     `json:"embedding"`
 }
 
 func (h *IndexHandler) IndexDocument(c *gin.Context) {
@@ -56,22 +58,23 @@ func (h *IndexHandler) IndexDocument(c *gin.Context) {
 		saltStr = "" // Fallback
 	}
 
-	// 변환
-	var protoTagChunks []*pb.TagChunk
-	for _, tc := range req.TagChunks {
-		protoTagChunks = append(protoTagChunks, &pb.TagChunk{
-			Tag:   tc.Tag,
-			Chunk: tc.Chunk,
+	// TagEvidences 변환
+	var tagEvidencesProto []*pb.TagEvidence
+	for _, tc := range req.TagEvidences {
+		tagEvidencesProto = append(tagEvidencesProto, &pb.TagEvidence{
+			Tag:      tc.Tag,
+			Evidence: tc.Evidence,
 		})
 	}
 
 	resp, err := h.client.IndexDocument(ctx, &pb.IndexDocumentRequest{
 		Document: &pb.Document{
-			Title:     req.Title,
-			TagChunks: protoTagChunks,
-			Summary:   req.Summary,
-			OwnerId:   userID.(string),
-			UserSalt:  saltStr, // Proto 필드 사용
+			Title:        req.Title,
+			TagEvidences: tagEvidencesProto,
+			Summary:      req.Summary,
+			OwnerId:      userID.(string),
+			UserSalt:     saltStr, // Proto 필드 사용
+			Embedding:    req.Embedding,
 		},
 	})
 	if err != nil {

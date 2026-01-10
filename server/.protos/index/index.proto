@@ -17,10 +17,10 @@ service IndexService {
   rpc SyncDocuments(stream SyncRequest) returns (stream SyncResponse);
 }
 
-// 태그와 청크 쌍
-message TagChunk {
+// 태그와 증거(근거 문장) 쌍
+message TagEvidence {
   string tag = 1;
-  string chunk = 2;
+  string evidence = 2; // "chunk" -> "evidence"
 }
 
 // 문서 데이터 구조
@@ -28,10 +28,11 @@ message Document {
   string id = 1;        // 문서 ID
   string title = 2;     // 제목
   string summary = 3;   // 원문 전체 요약
-  repeated TagChunk tag_chunks = 4; // 태그와 청크 목록
+  repeated TagEvidence tag_evidences = 4; // 태그와 증거 목록
   string owner_id = 5;  // 문서 소유자 ID (필수)
   int64 updated_at = 6; // 수정 시간
   string user_salt = 7; // 암호화용 사용자 Salt
+  repeated float embedding = 8; // 문서 임베딩 벡터
 }
 
 // 인덱싱 요청

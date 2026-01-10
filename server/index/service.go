@@ -16,65 +16,60 @@ type server struct {
 	db *gorm.DB
 }
 
-// TagChunk 구조체 (JSON 변환용)
-type TagChunk struct {
-	Tag   string `json:"tag"`
-	Chunk string `json:"chunk"`
+// TagEvidence 구조체 (JSON 변환용)
+type TagEvidence struct {
+	Tag      string `json:"tag"`
+	Evidence string `json:"evidence"`
 }
 
 func (s *server) IndexDocument(ctx context.Context, req *pb.IndexDocumentRequest) (*pb.IndexDocumentResponse, error) {
-	// TODO: 실제로는 여기서 AI Service를 호출해서 req.Document.Content에 대한 임베딩을 얻어와야 함
-	// 현재는 더미 벡터(1536차원)로 저장
-	vec := make([]float32, 1536)
-	// 테스트를 위해 일부 값 설정 (선택 사항)
-	vec[0] = 0.1
-	vec[1] = 0.2
-	vec[2] = 0.3
-	dummyVector := pgvector.NewVector(vec)
+	// Use provided embedding
+	vectorData := req.Document.Embedding
+	if len(vectorData) != 1536 {
+		// Fallback or Error?
+		// For now, if empty, we might want to error, or leave it as check constraints.
+		// If client sends empty, we can't search.
+		if len(vectorData) == 0 {
+			return &pb.IndexDocumentResponse{Success: false, Message: "Embedding is empty"}, nil
+		}
+		// If dimension mismatch, pgvector might complain on save if column is typed.
+	}
+	embeddingVector := pgvector.NewVector(vectorData)
 
-	// Proto TagChunks -> Struct TagChunks
-	var tagChunks []TagChunk
-	for _, tc := range req.Document.TagChunks {
-		tagChunks = append(tagChunks, TagChunk{
-			Tag:   tc.Tag,
-			Chunk: tc.Chunk,
+	// Proto TagEvidences -> Struct TagEvidences
+	var tagEvidences []TagEvidence
+	for _, tc := range req.Document.TagEvidences {
+		tagEvidences = append(tagEvidences, TagEvidence{
+			Tag:      tc.Tag,
+			Evidence: tc.Evidence,
 		})
 	}
 
-	// JSON Marshalling
-	tagChunksJson, err := json.Marshal(tagChunks)
+	// 1. Encrypt Data
+	// crypto.Encrypt expects (plaintext string, key string)
+
+	// TagEvidences -> JSON -> Encrypt
+	tagEvidencesJson, err := json.Marshal(tagEvidences)
 	if err != nil {
-		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to marshal tag chunks"}, nil
+		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to marshal tags"}, nil
+	}
+	encryptedTagEvidences, err := crypto.Encrypt(string(tagEvidencesJson), req.Document.UserSalt)
+	if err != nil {
+		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to encrypt tags"}, nil
 	}
 
-	// Metadata에서 Salt 추출 (Removed)
-	userSalt := req.Document.UserSalt
-
-	// Encrypt TagChunks using UserSalt
-	encryptedTagChunks, err := crypto.Encrypt(string(tagChunksJson), userSalt)
+	encryptedSummary, err := crypto.Encrypt(req.Document.Summary, req.Document.UserSalt)
 	if err != nil {
-		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to encrypt tag chunks: " + err.Error()}, nil
-	}
-
-	// Encrypt Summary using UserSalt
-	encryptedSummary, err := crypto.Encrypt(req.Document.Summary, userSalt)
-	if err != nil {
-		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to encrypt summary: " + err.Error()}, nil
-	}
-
-	// Encrypt Title using UserSalt
-	encryptedTitle, err := crypto.Encrypt(req.Document.Title, userSalt)
-	if err != nil {
-		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to encrypt title: " + err.Error()}, nil
+		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to encrypt summary"}, nil
 	}
 
 	doc := Document{
-		ID:        req.Document.Id,
-		Title:     encryptedTitle,     // 암호화된 문자열 저장
-		TagChunks: encryptedTagChunks, // 암호화된 문자열 저장
-		Summary:   encryptedSummary,   // 암호화된 문자열 저장
-		OwnerID:   req.Document.OwnerId,
-		Embedding: dummyVector,
+		ID:           req.Document.Id,
+		Title:        req.Document.Title,
+		TagEvidences: encryptedTagEvidences,
+		Summary:      encryptedSummary,
+		OwnerID:      req.Document.OwnerId,
+		Embedding:    embeddingVector,
 	}
 
 	// ID가 없으면 생성, 있으면 업데이트 (Upsert)
@@ -110,7 +105,6 @@ func (s *server) SearchDocuments(ctx context.Context, req *pb.SearchDocumentsReq
 
 	var results []*pb.SearchResult
 
-	// Metadata에서 Salt 추출 (Removed)
 	userSalt := req.UserSalt
 
 	for _, d := range docs {
@@ -127,30 +121,30 @@ func (s *server) SearchDocuments(ctx context.Context, req *pb.SearchDocumentsReq
 			decryptedSummary = "[Decryption Failed]"
 		}
 
-		// Decrypt TagChunks
-		decryptedTagChunksJson, err := crypto.Decrypt(d.TagChunks, userSalt)
-		var tagChunks []TagChunk
+		// Decrypt TagEvidences
+		decryptedTagEvidencesJson, err := crypto.Decrypt(d.TagEvidences, userSalt)
+		var tagEvidences []TagEvidence
 		if err == nil {
-			json.Unmarshal([]byte(decryptedTagChunksJson), &tagChunks)
+			json.Unmarshal([]byte(decryptedTagEvidencesJson), &tagEvidences)
 		}
 
-		// Struct TagChunks -> Proto TagChunks
-		var protoTagChunks []*pb.TagChunk
-		for _, tc := range tagChunks {
-			protoTagChunks = append(protoTagChunks, &pb.TagChunk{
-				Tag:   tc.Tag,
-				Chunk: tc.Chunk,
+		// Struct TagEvidences -> Proto TagEvidences
+		var tagEvidencesProto []*pb.TagEvidence
+		for _, tc := range tagEvidences {
+			tagEvidencesProto = append(tagEvidencesProto, &pb.TagEvidence{
+				Tag:      tc.Tag,
+				Evidence: tc.Evidence,
 			})
 		}
 
 		results = append(results, &pb.SearchResult{
 			Document: &pb.Document{
-				Id:        d.ID,
-				Title:     decryptedTitle,
-				TagChunks: protoTagChunks,
-				Summary:   decryptedSummary,
-				UpdatedAt: d.UpdatedAt.Unix(),
-				OwnerId:   d.OwnerID,
+				Id:           d.ID,
+				Title:        decryptedTitle,
+				TagEvidences: tagEvidencesProto,
+				Summary:      decryptedSummary,
+				UpdatedAt:    d.UpdatedAt.Unix(),
+				OwnerId:      d.OwnerID,
 			},
 			Score: 0.0,
 		})
