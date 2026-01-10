@@ -33,6 +33,7 @@ pub fn run() {
       commands::documents::list_documents,
       commands::documents::get_document,
       commands::documents::delete_document,
+      commands::documents::restore_document,
       commands::rag::ask_ai,
       commands::rag::create_new_chat,
       commands::rag::get_rag_chats,

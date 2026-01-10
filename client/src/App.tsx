@@ -11,6 +11,7 @@ import { ResizeHandle } from './components/layout/ResizeHandle';
 import { IconBar } from './components/sidebar/IconBar';
 import { DocumentList, SidebarMode } from './components/sidebar/DocumentList';
 import { MetadataPanel } from './components/sidebar/MetadataPanel';
+import { RecycleBin } from './components/sidebar/RecycleBin';
 import { useDocumentStore } from './stores/documentStore';
 import { useAuthStore } from './stores/authStore';
 import { LoginResponse } from './types';
@@ -20,6 +21,7 @@ import { SearchDialog } from './components/dialogs/SearchDialog';
 import { SettingsDialog } from './components/dialogs/SettingsDialog';
 import { ConfirmDialog } from './components/dialogs/ConfirmDialog';
 import { CalendarDialog } from './components/dialogs/CalendarDialog';
+import { ConfirmProvider } from './components/ConfirmProvider';
 
 // Auth Components
 import { LoginForm } from './components/auth/LoginForm';
@@ -228,11 +230,12 @@ function AppContent() {
                   onSettingsClick={() => setShowSettingsDialog(true)}
                 />
                 {isSidebarOpen && (
-                  <div style={{ width: `${leftSidebarWidth}px` }}>
+                  <div style={{ width: `${leftSidebarWidth}px` }} className="h-full flex flex-col">
                     <DocumentList
                       onSelectDocument={(id) => console.log('Selected:', id)}
                       mode={sidebarMode}
                     />
+                    <RecycleBin />
                   </div>
                 )}
               </div>
@@ -435,7 +438,9 @@ function AppContent() {
 function App() {
   return (
     <ToastProvider>
-      <AppContent />
+      <ConfirmProvider>
+        <AppContent />
+      </ConfirmProvider>
     </ToastProvider>
   );
 }

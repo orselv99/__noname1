@@ -1,3 +1,0 @@
-src/components/sidebar/MetadataPanel.tsx(9,7): error TS6133: 'AddTagForm' is declared but its value is never read.
-src/components/sidebar/RagPanel.tsx(3,24): error TS6133: 'ChatSession' is declared but its value is never read.
-src/stores/chatStore.ts(89,38): error TS6133: 'chats' is declared but its value is never read.

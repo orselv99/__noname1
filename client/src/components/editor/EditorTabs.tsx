@@ -7,30 +7,47 @@ interface SortableTabProps {
   title: string;
   isActive: boolean;
   isDirty?: boolean;
+  isRecycled?: boolean;
   onSelect: () => void;
   onClose: (e: React.MouseEvent) => void;
 }
 
-const SortableTab = ({ title, isActive, isDirty, onSelect, onClose }: SortableTabProps) => {
+const SortableTab = ({ title, isActive, isDirty, isRecycled, onSelect, onClose }: SortableTabProps) => {
+  // Logic for border color
+  let borderColor = 'border-t-transparent';
+  if (isActive) {
+    borderColor = isRecycled ? 'border-t-red-500' : 'border-t-blue-500';
+  }
+
+  // Logic for text color when active
+  let textClass = 'text-zinc-500 hover:text-zinc-200';
+  if (isActive) {
+    textClass = isRecycled ? 'bg-zinc-900 text-red-100' : 'bg-zinc-900 text-white';
+  }
+
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-1 text-xs h-full max-w-[200px] min-w-[120px] relative group cursor-pointer ${isActive
-        ? 'bg-zinc-900 border-t-2 border-t-blue-500 text-white'
-        : 'text-zinc-500 hover:bg-zinc-800 border-t-2 border-t-transparent hover:text-zinc-200'
-        }`}
+      className={`flex items-center gap-2 px-3 py-1 text-xs h-full max-w-[200px] min-w-[120px] relative group cursor-pointer border-t-2 ${borderColor} ${textClass} hover:bg-zinc-800 transition-colors`}
       onMouseDown={(e) => e.stopPropagation()} // Prevent window drag
       onClick={onSelect}
     >
-      <span className="truncate select-none">
-        {isDirty && <span className="text-blue-400 mr-1">●</span>}
+      <span className="truncate select-none flex-1">
         {title}
       </span>
-      <button
-        className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-zinc-700 rounded ml-auto transition-opacity"
-        onClick={(e) => onClose(e)}
-      >
-        <X size={12} />
-      </button>
+
+      <div className="flex items-center justify-center w-4 h-4 ml-1 relative shrink-0">
+        {isDirty && !isRecycled && (
+          <div className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity pointer-events-none">
+            <div className="w-2 h-2 rounded-full bg-blue-400" />
+          </div>
+        )}
+        <button
+          className={`absolute inset-0 flex items-center justify-center p-0.5 hover:bg-zinc-700 rounded text-zinc-500 hover:text-white transition-opacity ${isDirty && !isRecycled ? 'opacity-0 group-hover:opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          onClick={(e) => onClose(e)}
+        >
+          <X size={12} />
+        </button>
+      </div>
     </div>
   );
 };
@@ -61,20 +78,27 @@ export const EditorTabs = () => {
         ref={containerRef}
         className="flex h-full items-center overflow-hidden w-full"
       >
-        {tabs.map((tab) => (
-          <SortableTab
-            key={tab.id}
-            id={tab.id}
-            title={tab.title}
-            isActive={activeTabId === tab.id}
-            isDirty={tab.isDirty}
-            onSelect={() => setActiveTab(tab.id)}
-            onClose={(e) => {
-              e.stopPropagation();
-              closeTab(tab.id);
-            }}
-          />
-        ))}
+        {tabs.map((tab) => {
+          // Check if tab is recycled
+          const doc = useDocumentStore.getState().documents.find(d => d.id === tab.docId);
+          const isRecycled = doc?.group_id === 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+
+          return (
+            <SortableTab
+              key={tab.id}
+              id={tab.id}
+              title={tab.title}
+              isActive={activeTabId === tab.id}
+              isDirty={tab.isDirty}
+              isRecycled={isRecycled}
+              onSelect={() => setActiveTab(tab.id)}
+              onClose={(e) => {
+                e.stopPropagation();
+                closeTab(tab.id);
+              }}
+            />
+          )
+        })}
         {/* New Document Button */}
         <button
           onClick={triggerNewDocument}

@@ -1,4 +1,4 @@
-import { useEditor, EditorContent, ReactNodeViewRenderer, Extension } from '@tiptap/react';
+import { useEditor, EditorContent, Extension } from '@tiptap/react';
 import { invoke } from '@tauri-apps/api/core';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
@@ -18,9 +18,9 @@ import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
-import { FileText, Star, Save, MoreVertical, Lock, Unlock } from 'lucide-react';
+import { FileText, Star, Save, Lock, Unlock } from 'lucide-react';
 import { EditorToolbar } from './EditorToolbar';
 import { Document, DocumentState } from '../../types';
 import { useToast } from '../Toast';
@@ -73,7 +73,7 @@ export const Editor = () => {
 
 const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProvider }) => {
   const { showToast } = useToast();
-  const { fetchDocuments, activeTabId, documents, highlightedEvidence, toggleFavorite, updateDocument, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, updateTabTitle } = useDocumentStore();
+  const { fetchDocuments, activeTabId, documents, highlightedEvidence, toggleFavorite, updateDocument, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, updateTabTitle, markTabDirty } = useDocumentStore();
   const activeDoc = documents.find(d => d.id === activeTabId);
 
   const editor = useEditor({
@@ -127,6 +127,13 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
 
   const getDraftKey = (docId: string) => `draft-${docId}`;
 
+  // Sync isDirty with store for tab indicator
+  useEffect(() => {
+    if (activeTabId) {
+      markTabDirty(activeTabId, isDirty);
+    }
+  }, [isDirty, activeTabId, markTabDirty]);
+
   // Read-only toggle
   useEffect(() => {
     if (editor) {
@@ -134,13 +141,23 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
     }
   }, [editor, isReadOnly]);
 
+  const lastActiveTabId = useRef<string | null>(null);
+  const ignoreUpdate = useRef(false);
+
   // Load content
   useEffect(() => {
     if (!editor) return;
 
     if (activeTabId) {
+      // Only load content if the tab has changed
+      if (activeTabId === lastActiveTabId.current) {
+        return;
+      }
+      lastActiveTabId.current = activeTabId;
+
       const doc = documents.find(d => d.id === activeTabId);
       if (doc) {
+        ignoreUpdate.current = true; // Block update listener
         const draftKey = getDraftKey(activeTabId);
         const savedDraft = localStorage.getItem(draftKey);
 
@@ -148,30 +165,62 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
           try {
             const draft = JSON.parse(savedDraft);
             setTitle(draft.title || doc.title);
-            editor.commands.setContent(draft.content || doc.content, true);
+            editor.commands.setContent(draft.content || doc.content, false);
           } catch (e) {
             setTitle(doc.title);
-            editor.commands.setContent(doc.content, true);
+            editor.commands.setContent(doc.content, false);
           }
         } else {
           setTitle(doc.title);
-          editor.commands.setContent(doc.content, true);
+          editor.commands.setContent(doc.content, false);
         }
-        setIsDirty(false);
+
+        // Short delay to ensure we don't catch the echo update from Yjs if any
+        setTimeout(() => {
+          setIsDirty(false);
+          ignoreUpdate.current = false;
+        }, 50);
+
+        // Check if recycled
+        const isRecycled = doc.group_id === 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+        if (isRecycled) {
+          setIsReadOnly(true);
+          editor.setEditable(false);
+        } else {
+          setIsReadOnly(false);
+          editor.setEditable(true);
+        }
       }
     } else {
+      lastActiveTabId.current = null;
       setTitle('Untitled');
       if (editor) {
+        ignoreUpdate.current = true;
         editor.commands.clearContent();
-        setIsDirty(false);
+        setTimeout(() => {
+          setIsDirty(false);
+          ignoreUpdate.current = false;
+        }, 50);
       }
     }
   }, [activeTabId, documents, editor]);
+
+  // Enforce read-only for recycled docs even if user tries to toggle
+  useEffect(() => {
+    if (activeTabId) {
+      const doc = documents.find(d => d.id === activeTabId);
+      if (doc?.group_id === 'ffffffff-ffff-ffff-ffff-ffffffffffff') {
+        if (!isReadOnly) setIsReadOnly(true);
+        if (editor && editor.isEditable) editor.setEditable(false);
+      }
+    }
+  }, [isReadOnly, activeTabId, documents, editor]);
 
   // Track changes
   useEffect(() => {
     if (!editor) return;
     const handleUpdate = () => {
+      if (ignoreUpdate.current) return;
       setIsDirty(true);
       const state = useDocumentStore.getState();
       const currentDoc = state.documents.find(d => d.id === state.activeTabId);
@@ -223,7 +272,9 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        handleSave();
+        if (isDirty) {
+          handleSave();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -327,6 +378,13 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
             }
           }, 50);
         }
+      } else {
+        // Evidence provided but not found in doc -> Clear
+        editor.view.dispatch(
+          editor.view.state.tr.setMeta(evidencePluginKey, {
+            action: 'clear'
+          })
+        );
       }
     } else {
       // Clear decorations
@@ -456,26 +514,34 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
           <span className="text-zinc-400">{activeDoc?.group_type === 2 ? 'Private' : 'Public'} / {title}</span>
         </div>
         <div>
-          <button
-            onClick={() => setIsReadOnly(!isReadOnly)}
-            className={`p-2 rounded-lg transition-colors ${isReadOnly ? 'text-red-400 bg-red-900/20 hover:bg-red-900/30' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-            title={isReadOnly ? "Read-only Mode (Unlock)" : "Lock Document"}
-          >
-            {isReadOnly ? <Lock size={18} /> : <Unlock size={18} />}
-          </button>
-          <button
-            onClick={() => activeTabId && toggleFavorite(activeTabId)}
-            className={`p-2 rounded-lg hover:bg-zinc-800 transition-colors ${activeDoc?.is_favorite ? 'text-yellow-400' : 'text-zinc-400 hover:text-white'}`}
-          >
-            <Star size={18} className={activeDoc?.is_favorite ? 'fill-current' : ''} />
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!isDirty}
-            className={`p-2 rounded-lg transition-colors ${!isDirty ? 'text-zinc-700 cursor-not-allowed' : 'hover:bg-zinc-800 text-zinc-400 hover:text-white'}`}
-          >
-            <Save size={18} />
-          </button>
+          {activeDoc?.group_id === 'ffffffff-ffff-ffff-ffff-ffffffffffff' ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-950/30 border border-red-900/50 text-red-400 select-none">
+              <span className="text-[10px] font-bold tracking-wider">DELETED</span>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => setIsReadOnly(!isReadOnly)}
+                className={`p-2 rounded-lg transition-colors ${isReadOnly ? 'text-red-400 bg-red-900/20 hover:bg-red-900/30' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+                title={isReadOnly ? "Read-only Mode (Unlock)" : "Lock Document"}
+              >
+                {isReadOnly ? <Lock size={18} /> : <Unlock size={18} />}
+              </button>
+              <button
+                onClick={() => activeTabId && toggleFavorite(activeTabId)}
+                className={`p-2 rounded-lg hover:bg-zinc-800 transition-colors ${activeDoc?.is_favorite ? 'text-yellow-400' : 'text-zinc-400 hover:text-white'}`}
+              >
+                <Star size={18} className={activeDoc?.is_favorite ? 'fill-current' : ''} />
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!isDirty}
+                className={`p-2 rounded-lg transition-colors ${!isDirty ? 'text-zinc-700 cursor-not-allowed' : 'hover:bg-zinc-800 text-zinc-400 hover:text-white'}`}
+              >
+                <Save size={18} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -509,9 +575,11 @@ const TiptapEditor = ({ ydoc, provider }: { ydoc: Y.Doc, provider: WebsocketProv
               </div>
 
               <div className="px-4 py-4 sticky top-4 z-50 shrink-0">
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 backdrop-blur shadow-2xl mx-auto max-w-fit transition-all duration-300">
-                  <EditorToolbar editor={editor} />
-                </div>
+                {activeDoc?.group_id !== 'ffffffff-ffff-ffff-ffff-ffffffffffff' && (
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 backdrop-blur shadow-2xl mx-auto max-w-fit transition-all duration-300">
+                    <EditorToolbar editor={editor} />
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 px-12 pb-20 w-full">

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Trash2, Edit2 } from 'lucide-react';
 
 import { useDocumentStore } from '../../stores/documentStore';
-import { GroupType, SortOption, VisibilityLevel } from '../../types';
+import { GroupType, SortOption, VisibilityLevel, PRIVATE_GROUP_ID } from '../../types';
 import {
   ChevronDown,
   ChevronRight,
@@ -22,6 +22,7 @@ import {
   Star,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { useConfirm } from '../ConfirmProvider';
 import { GroupLinkDialog } from '../dialogs/GroupLinkDialog';
 import { GroupInfoDialog } from '../dialogs/GroupInfoDialog';
 import {
@@ -515,6 +516,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
   // --- State ---
   const { documents, createDocument, renameDocument, deleteDocument, fetchDocuments, addTab, activeTabId, currentUser, newDocTrigger } = useDocumentStore();
   const { departments, projects } = useAuthStore();
+  const { confirm } = useConfirm();
 
   // State Hoisting
   const [groupSortOptions, setGroupSortOptions] = useState<Record<string, SortOption>>({});
@@ -568,10 +570,23 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this document?')) {
+    setContextMenu(null);
+
+    // Check for active (non-recycled) children
+    const hasChildren = documents.some(d => d.parent_id === id && !d.deleted_at);
+
+    const message = hasChildren
+      ? '이 문서를 삭제하시겠습니까?\n포함된 하위 문서들도 모두 함께 삭제됩니다.'
+      : '이 문서를 삭제하시겠습니까?';
+
+    if (await confirm({
+      title: '문서 삭제',
+      message: message,
+      confirmText: '삭제',
+      variant: 'danger'
+    })) {
       await deleteDocument(id);
     }
-    setContextMenu(null);
   };
 
   // State for real groups
@@ -584,8 +599,11 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
   // Sync store documents to groups
   useEffect(() => {
     // 1. Favorites View (Flat)
+    const activeDocs = documents.filter(d => !d.deleted_at);
+
+    // 1. Favorites View (Flat)
     if (isFavoriteFilter) {
-      const favs = documents.filter(d => d.is_favorite);
+      const favs = activeDocs.filter(d => d.is_favorite);
       // Sort favorites by updated_at desc default
       favs.sort((a, b) => (b.updated_at || b.created_at || '').localeCompare(a.updated_at || a.created_at || ''));
 
@@ -608,7 +626,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
 
 
     // 2. Standard Tree View
-    const effectiveDocuments = documents;
+    const effectiveDocuments = activeDocs;
 
     // Use persisted expansion state
     const expandedIds = expandedIdsRef.current;
@@ -650,7 +668,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
 
     // 1. Private Group
     const privateDocs = effectiveDocuments.filter(
-      d => d.group_type === GroupType.Private && !d.group_id
+      d => d.group_type === GroupType.Private && (!d.group_id || d.group_id === PRIVATE_GROUP_ID)
     );
 
     newGroups.push({
@@ -827,14 +845,29 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
   };
 
   const toggleAllGroups = () => {
-    // Check if any group or item is collapsed, if so expand all. If all expanded, collapse all.
-    const anyCollapsed = groups.some(g => !g.expanded);
+    // Check if any group or item is collapsed.
+    // Logic: If ANY group or item is collapsed, we Expand All.
+    // If everything is already expanded, we Collapse All.
+
+    const isAnyItemCollapsed = (items: DocumentItem[]): boolean => {
+      for (const item of items) {
+        if (item.children && item.children.length > 0) {
+          if (!item.expanded) return true;
+          if (isAnyItemCollapsed(item.children)) return true;
+        }
+      }
+      return false;
+    };
+
+    const anyCollapsed = groups.some(g => !g.expanded || isAnyItemCollapsed(g.items));
 
     // Recursive function to set expanded state for all items
     const setAllExpanded = (items: DocumentItem[], expanded: boolean): DocumentItem[] => {
       return items.map(item => {
-        if (expanded) expandedIdsRef.current.add(item.id);
-        else expandedIdsRef.current.delete(item.id);
+        if (item.children && item.children.length > 0) {
+          if (expanded) expandedIdsRef.current.add(item.id);
+          else expandedIdsRef.current.delete(item.id);
+        }
 
         return {
           ...item,
@@ -845,7 +878,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
     };
 
     setGroups(prev => prev.map(g => {
-      const newExpanded = !anyCollapsed;
+      const newExpanded = anyCollapsed; // If any collapsed, we expand (true). Else collapse (false).
       if (newExpanded) expandedGroupsRef.current.add(g.id);
       else expandedGroupsRef.current.delete(g.id);
 
@@ -922,7 +955,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       defaultVisibility = projects[groupId].visibility;
     }
 
-    await createDocument('Untitled', groupId === 'private_group' ? undefined : groupId, groupType, parentId, defaultVisibility);
+    await createDocument('Untitled', groupId === 'private_group' ? PRIVATE_GROUP_ID : groupId, groupType, parentId, defaultVisibility);
   };
 
 
@@ -1030,7 +1063,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
   }, [dragState.activeId, groups]);
 
   return (
-    <div className="w-full bg-zinc-950 flex flex-col h-full font-sans">
+    <div className="w-full bg-zinc-950 flex flex-col flex-1 min-h-0 font-sans">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-2 py-2 shrink-0">
         <div className="flex items-center gap-1">

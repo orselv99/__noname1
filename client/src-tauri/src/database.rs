@@ -98,6 +98,7 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
             is_favorite INTEGER DEFAULT 0,
             created_at BLOB,
             updated_at BLOB,
+            deleted_at DATETIME,
             last_synced_at INTEGER DEFAULT 0,
             accessed_at BLOB,
             version INTEGER DEFAULT 1,
@@ -107,6 +108,23 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Failed to create documents table: {}", e))?;
 
+  // Migration: Add deleted_at column if not exists
+  let deleted_at_exists: bool = conn
+    .query_row(
+      "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name='deleted_at'",
+      [],
+      |row| row.get(0),
+    )
+    .unwrap_or(0)
+    > 0;
+
+  if !deleted_at_exists {
+    println!("Debug: Migrating database - adding deleted_at column to documents");
+    conn
+      .execute("ALTER TABLE documents ADD COLUMN deleted_at DATETIME", [])
+      .map_err(|e| format!("Failed to add deleted_at column: {}", e))?;
+  }
+
   // Migration: Add version column if not exists
   let version_exists: bool = conn
     .query_row(
@@ -114,13 +132,17 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
       [],
       |row| row.get(0),
     )
-    .unwrap_or(0) > 0;
+    .unwrap_or(0)
+    > 0;
 
   if !version_exists {
-      println!("Debug: Migrating database - adding version column to documents");
-      conn
-        .execute("ALTER TABLE documents ADD COLUMN version INTEGER DEFAULT 1", [])
-        .map_err(|e| format!("Failed to add version column: {}", e))?;
+    println!("Debug: Migrating database - adding version column to documents");
+    conn
+      .execute(
+        "ALTER TABLE documents ADD COLUMN version INTEGER DEFAULT 1",
+        [],
+      )
+      .map_err(|e| format!("Failed to add version column: {}", e))?;
   }
 
   // Create document_deltas table (Versioning)

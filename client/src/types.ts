@@ -17,6 +17,9 @@ export enum GroupType {
   Private = 2,
 }
 
+export const RECYCLE_BIN_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+export const PRIVATE_GROUP_ID = '00000000-0000-0000-0000-000000000000';
+
 
 
 // 정렬 옵션
@@ -52,6 +55,7 @@ export interface Document {
   size?: string;
   is_favorite?: boolean;
   tags?: DocumentTag[];
+  deleted_at?: string;
   version: number;
 }
 

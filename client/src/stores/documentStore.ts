@@ -43,6 +43,7 @@ interface DocumentStore {
   toggleFavorite: (docId: string) => Promise<void>;
   createDocument: (title?: string, groupId?: string, groupType?: GroupType, parentId?: string, defaultVisibility?: number) => Promise<void>;
   deleteDocument: (docId: string) => Promise<void>;
+  restoreDocument: (docId: string) => Promise<void>;
   renameDocument: (docId: string, newTitle: string) => Promise<void>;
 
   // User
@@ -61,7 +62,7 @@ interface DocumentStore {
   setAiAnalysisStatus: (status: string | null) => void;
   setAutoSaveStatus: (status: string | null) => void;
   setLiveEditorContent: (content: string | null) => void;
-  // markTabDirty: (tabId: string, isDirty: boolean) => void; // Future use
+  markTabDirty: (tabId: string, isDirty: boolean) => void;
 }
 
 export const useDocumentStore = create<DocumentStore>()(
@@ -180,8 +181,17 @@ export const useDocumentStore = create<DocumentStore>()(
             creator_name: doc.creator_name
           };
           const savedDoc = await invoke<Document>('save_document', { req });
-          // Update again with server response (e.g. updated timestamps)
-          get().updateDocument(savedDoc);
+
+          // 서버 응답에서 AI 필드(summary, tags)가 누락될 경우 기존 데이터 보존
+          // 백엔드에서 부분 업데이트 시 이 필드들을 반환하지 않을 수 있음
+          const mergedDoc = {
+            ...savedDoc,
+            summary: savedDoc.summary || doc.summary,
+            tags: (savedDoc.tags && savedDoc.tags.length > 0) ? savedDoc.tags : doc.tags,
+            creator_name: savedDoc.creator_name || doc.creator_name
+          };
+
+          get().updateDocument(mergedDoc);
         } catch (error) {
           console.error("Failed to save document:", error);
           // Revert? For now just log. 
@@ -375,49 +385,119 @@ export const useDocumentStore = create<DocumentStore>()(
       },
 
       deleteDocument: async (docId: string) => {
-        // Optimistic delete (recursive)
+        // Optimistic delete
         const allDocs = get().documents;
-        const toDeleteIds = new Set<string>();
+        const targetDoc = allDocs.find(d => d.id === docId);
 
-        const collect = (id: string) => {
-          toDeleteIds.add(id);
-          const children = allDocs.filter(d => d.parent_id === id);
-          children.forEach(c => collect(c.id));
-        };
-        collect(docId);
+        if (!targetDoc) return;
 
-        set((state) => {
-          const newDocs = state.documents.filter(d => !toDeleteIds.has(d.id));
-          const newTabs = state.tabs.filter(t => !toDeleteIds.has(t.docId));
+        // Soft Delete if Private AND not already deleted
+        const isSoftDelete = targetDoc.group_type === 2 && !targetDoc.deleted_at;
 
-          let newActiveId = state.activeTabId;
-          if (newActiveId && toDeleteIds.has(newActiveId)) {
-            // Select the rightmost tab if available
-            if (newTabs.length > 0) {
-              newActiveId = newTabs[newTabs.length - 1].id;
-            } else {
-              newActiveId = null;
+        if (isSoftDelete) {
+          // Soft Delete: Mark deleted_at (Recursive) AND Close Tabs
+          set((state) => {
+            const idsToRecycle = new Set<string>();
+            const collect = (id: string) => {
+              idsToRecycle.add(id);
+              const children = state.documents.filter(d => d.parent_id === id);
+              children.forEach(c => collect(c.id));
+            };
+            collect(docId);
+
+            const now = new Date().toISOString();
+            const newDocuments = state.documents.map(d =>
+              idsToRecycle.has(d.id) ? { ...d, deleted_at: now, updated_at: now } : d
+            );
+
+            // Explicitly close tabs for all recycled docs
+            const newTabs = state.tabs.filter(t => !idsToRecycle.has(t.id));
+
+            let newActiveId = state.activeTabId;
+            if (newActiveId && idsToRecycle.has(newActiveId)) {
+              if (newTabs.length > 0) {
+                newActiveId = newTabs[newTabs.length - 1].id;
+              } else {
+                newActiveId = null;
+              }
             }
-          }
 
-          return {
-            documents: newDocs,
-            tabs: newTabs,
-            activeTabId: newActiveId
+            return {
+              documents: newDocuments,
+              tabs: newTabs,
+              activeTabId: newActiveId
+            };
+          });
+
+        } else {
+          // Hard Delete: Remove completely (if already deleted or not private)
+          const toDeleteIds = new Set<string>();
+
+          const collect = (id: string) => {
+            toDeleteIds.add(id);
+            const children = allDocs.filter(d => d.parent_id === id);
+            children.forEach(c => collect(c.id));
           };
-        });
+          collect(docId);
 
-        // 삭제된 문서들의 localStorage draft도 함께 삭제
-        toDeleteIds.forEach(id => {
-          localStorage.removeItem(`draft-${id}`);
-        });
+          set((state) => {
+            const newDocs = state.documents.filter(d => !toDeleteIds.has(d.id));
+            const newTabs = state.tabs.filter(t => !toDeleteIds.has(t.docId));
+
+            let newActiveId = state.activeTabId;
+            if (newActiveId && toDeleteIds.has(newActiveId)) {
+              if (newTabs.length > 0) {
+                newActiveId = newTabs[newTabs.length - 1].id;
+              } else {
+                newActiveId = null;
+              }
+            }
+
+            return {
+              documents: newDocs,
+              tabs: newTabs,
+              activeTabId: newActiveId
+            };
+          });
+
+          // Clear drafts
+          toDeleteIds.forEach(id => {
+            localStorage.removeItem(`draft-${id}`);
+          });
+        }
 
         try {
           await invoke('delete_document', { id: docId });
         } catch (error) {
           console.error('Failed to delete document:', error);
-          // Revert? Hard to revert recursive delete without backup.
-          // For now, reload from server.
+          get().fetchDocuments();
+        }
+      },
+
+      restoreDocument: async (docId: string) => {
+        // Optimistic restore: Unset deleted_at (Recursive)
+        set((state) => {
+          const idsToRestore = new Set<string>();
+          const collect = (id: string) => {
+            idsToRestore.add(id);
+            const children = state.documents.filter(d => d.parent_id === id);
+            children.forEach(c => collect(c.id));
+          };
+          collect(docId);
+
+          const now = new Date().toISOString();
+          const newDocuments = state.documents.map(d =>
+            idsToRestore.has(d.id) ? { ...d, deleted_at: undefined, updated_at: now } : d
+          );
+
+          return { documents: newDocuments };
+        });
+
+        try {
+          // Call backend restore
+          await invoke('restore_document', { id: docId });
+        } catch (error) {
+          console.error('Failed to restore document:', error);
           get().fetchDocuments();
         }
       },
@@ -450,6 +530,12 @@ export const useDocumentStore = create<DocumentStore>()(
           console.error("Failed to rename document:", error);
           get().fetchDocuments();
         }
+      },
+
+      markTabDirty: (tabId: string, isDirty: boolean) => {
+        set((state) => ({
+          tabs: state.tabs.map(t => t.id === tabId ? { ...t, isDirty } : t)
+        }));
       },
 
       currentUser: null,

@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { DocumentState, VisibilityLevel, GroupType } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
+import { useConfirm } from '../ConfirmProvider';
 
 
 
@@ -453,8 +454,9 @@ const VisibilityDropdown = ({ currentLevel, onLevelChange }: { currentLevel: Vis
 };
 
 export const MetadataPanel = () => {
-  const { documents, activeTabId, liveEditorContent, saveDocument, highlightedEvidence } = useDocumentStore();
+  const { documents, activeTabId, liveEditorContent, saveDocument, highlightedEvidence: _highlightedEvidence } = useDocumentStore();
   const activeDoc = documents.find(d => d.id === activeTabId);
+  const { confirm } = useConfirm();
 
   // 섹션 펼침 상태 (Hooks는 조건부 return 전에 호출해야 함)
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
@@ -514,11 +516,16 @@ export const MetadataPanel = () => {
             </h3>
             <DocumentStateDropdown
               currentState={activeDoc.document_state}
-              onStateChange={(state) => {
+              onStateChange={async (state) => {
                 // If changing TO Published
                 if (state === DocumentState.Published && activeDoc.document_state !== DocumentState.Published) {
                   const nextVersion = (activeDoc.version || 0) + 1;
-                  if (confirm(`Are you sure you want to publish this document?\n\nThis will bump the version to v${nextVersion}.`)) {
+                  if (await confirm({
+                    title: '문서 게시',
+                    message: `이 문서를 게시하시겠습니까?\n\n버전이 v${nextVersion}로 올라갑니다.`,
+                    confirmText: '게시',
+                    variant: 'primary'
+                  })) {
                     saveDocument({ ...activeDoc, document_state: state, version: nextVersion });
                   }
                 } else if (activeDoc.document_state === DocumentState.Published && state !== DocumentState.Published) {
@@ -537,7 +544,7 @@ export const MetadataPanel = () => {
             </h3>
             <VisibilityDropdown
               currentLevel={activeDoc.visibility_level}
-              onLevelChange={(level) => {
+              onLevelChange={async (level) => {
                 // Check against group default visibility
                 let defaultVisibility = VisibilityLevel.Hidden;
                 const { departments, projects, user } = useAuthStore.getState();
@@ -563,8 +570,14 @@ export const MetadataPanel = () => {
                 // If switching TO a non-default visibility, warn.
                 // Or simply if New Level != Default Level?
                 // User request: "If changing to a visibility DIFFERENT from group default"
+                // User request: "If changing to a visibility DIFFERENT from group default"
                 if (level !== defaultVisibility) {
-                  if (confirm(`The selected visibility (${VISIBILITY_LEVELS.find(v => v.value === level)?.label}) differs from the group's default (${VISIBILITY_LEVELS.find(v => v.value === defaultVisibility)?.label}).\n\nAre you sure you want to change it?`)) {
+                  if (await confirm({
+                    title: '가시성 변경 확인',
+                    message: `선택한 가시성(${VISIBILITY_LEVELS.find(v => v.value === level)?.label})이 그룹 기본값(${VISIBILITY_LEVELS.find(v => v.value === defaultVisibility)?.label})과 다릅니다.\n\n정말 변경하시겠습니까?`,
+                    confirmText: '변경',
+                    variant: 'primary'
+                  })) {
                     saveDocument({ ...activeDoc, visibility_level: level });
                   }
                 } else {
@@ -587,7 +600,7 @@ export const MetadataPanel = () => {
           </div>
           {isSummaryExpanded && (
             <p className="text-xs text-zinc-400 leading-relaxed wrap-break-word">
-              {activeDoc.summary || <span className="text-zinc-600 italic">No summary available</span>}
+              {activeDoc.summary || <span className="text-zinc-600 italic">No summary</span>}
             </p>
           )}
         </div>
@@ -662,7 +675,7 @@ export const MetadataPanel = () => {
           )}
         </div>
 
-        {/* Linked Mentions */}
+        {/* Footnotes */}
         <LinkList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} />
 
         {/* Attached Resources */}
