@@ -1,16 +1,27 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { Loader2, Sparkles, Send, User, Bot, Plus, History, MessageSquare } from 'lucide-react';
+import { Loader2, Sparkles, Send, User, Bot, Plus, History, MessageSquare, X, Pencil } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
 
 export function RagPanel() {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
 
   const {
     chats, currentChatId, messages,
     isLoading, isLoadingMore, hasMore,
-    loadChats, selectChat, createNewChat, sendMessage, loadMoreMessages
+    loadChats, selectChat, createNewChat, sendMessage, loadMoreMessages, renameChat
   } = useChatStore();
+
+  const handleRename = async (chatId: string) => {
+    if (!editTitle.trim()) {
+      setEditingChatId(null);
+      return;
+    }
+    await renameChat(chatId, editTitle);
+    setEditingChatId(null);
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -112,32 +123,95 @@ export function RagPanel() {
 
         {/* History List Overlay/View */}
         {showHistory ? (
-          <div className="absolute inset-0 overflow-y-auto p-2 bg-zinc-950 z-10 custom-scrollbar">
-            {chats.length === 0 ? (
-              <div className="text-center text-zinc-600 mt-10 text-xs">No history</div>
-            ) : (
-              <div className="space-y-1">
-                {chats.map(chat => (
-                  <button
-                    key={chat.id}
-                    onClick={() => handleSelectChat(chat.id)}
-                    className={`w-full text-left p-3 rounded border transition-all flex items-start gap-3 group
-                                    ${currentChatId === chat.id
-                        ? 'bg-zinc-900 border-blue-900/50 text-blue-100'
-                        : 'bg-zinc-950 border-zinc-900 hover:bg-zinc-900 hover:border-zinc-800 text-zinc-400'}
-                                `}
-                  >
-                    <MessageSquare size={14} className={`mt-0.5 shrink-0 ${currentChatId === chat.id ? 'text-blue-500' : 'text-zinc-600 group-hover:text-zinc-500'}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{chat.title}</div>
-                      <div className="text-[10px] text-zinc-600 mt-1">
-                        {new Date(chat.created_at).toLocaleString()}
+          <div className="absolute inset-0 overflow-y-auto bg-zinc-950 z-10 custom-scrollbar flex flex-col">
+            {/* Search Input */}
+            <div className="p-3 sticky top-0 bg-zinc-950 z-10 border-b border-zinc-900">
+              <input
+                type="text"
+                placeholder="Search history..."
+                className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-blue-500 transition-colors"
+                onChange={(e) => loadChats(e.target.value)}
+              />
+            </div>
+
+            <div className="p-2 flex-1">
+              {chats.length === 0 ? (
+                <div className="text-center text-zinc-600 mt-10 text-xs">No history</div>
+              ) : (
+                <div className="space-y-1">
+                  {chats.map(chat => {
+                    const isEditing = editingChatId === chat.id;
+                    return (
+                      <div key={chat.id} className="group relative">
+                        <div
+                          className={`w-full text-left p-3 rounded border transition-all flex items-center gap-3 
+                                        ${currentChatId === chat.id
+                              ? 'bg-zinc-900 border-blue-900/50 text-blue-100'
+                              : 'bg-zinc-950 border-zinc-900 hover:bg-zinc-900 hover:border-zinc-800 text-zinc-400'}
+                                    `}
+                        >
+                          <button onClick={() => !isEditing && handleSelectChat(chat.id)} className="flex items-center gap-3 flex-1 min-w-0">
+                            <MessageSquare size={14} className={`shrink-0 ${currentChatId === chat.id ? 'text-blue-500' : 'text-zinc-600 group-hover:text-zinc-500'}`} />
+                            <div className="flex-1 min-w-0 pr-12 text-left">
+                              {isEditing ? (
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  className="w-full bg-zinc-800 border border-blue-500/50 rounded px-1 py-0.5 text-sm text-zinc-200 focus:outline-none"
+                                  value={editTitle}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => setEditTitle(e.target.value)}
+                                  onBlur={() => handleRename(chat.id)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleRename(chat.id);
+                                    if (e.key === 'Escape') setEditingChatId(null);
+                                  }}
+                                />
+                              ) : (
+                                <>
+                                  <div className="text-sm font-medium truncate">{chat.title}</div>
+                                  <div className="text-[10px] text-zinc-600 mt-0.5">
+                                    {new Date(chat.created_at).toLocaleString()}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </button>
+                        </div>
+
+                        {!isEditing && (
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingChatId(chat.id);
+                                setEditTitle(chat.title);
+                              }}
+                              className="p-1.5 text-zinc-600 hover:text-blue-400 rounded hover:bg-zinc-800 transition-colors"
+                              title="Rename Chat"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm('Delete this chat?')) {
+                                  useChatStore.getState().deleteChat(chat.id);
+                                }
+                              }}
+                              className="p-1.5 text-zinc-600 hover:text-red-400 rounded hover:bg-zinc-800 transition-colors"
+                              title="Delete Chat"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           /* Chat Messages Area */

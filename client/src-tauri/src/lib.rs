@@ -36,7 +36,9 @@ pub fn run() {
       commands::rag::ask_ai,
       commands::rag::create_new_chat,
       commands::rag::get_rag_chats,
-      commands::rag::get_rag_messages
+      commands::rag::get_rag_messages,
+      commands::rag::delete_rag_chat,
+      commands::rag::update_rag_chat_title
     ])
     .setup(|app| {
       // Kill any existing sidecar processes to prevent orphans on startup

@@ -29,9 +29,11 @@ interface ChatStore {
   isLoadingMore: boolean;
   hasMore: boolean;
 
-  loadChats: () => Promise<void>;
+  loadChats: (search?: string) => Promise<void>;
   selectChat: (chatId: string) => Promise<void>;
   createNewChat: () => Promise<void>;
+  deleteChat: (chatId: string) => Promise<void>;
+  renameChat: (chatId: string, newTitle: string) => Promise<void>;
 
   // Send message handles optimistically adding user/assistant msgs
   sendMessage: (content: string) => Promise<void>;
@@ -50,12 +52,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isLoadingMore: false,
   hasMore: true,
 
-  loadChats: async () => {
+  loadChats: async (search?: string) => {
     try {
-      const chats = await invoke<ChatSession[]>('get_rag_chats');
+      const chats = await invoke<ChatSession[]>('get_rag_chats', { search });
       set({ chats });
     } catch (error) {
       console.error('Failed to load chats:', error);
+    }
+  },
+
+  deleteChat: async (chatId: string) => {
+    try {
+      await invoke('delete_rag_chat', { chatId });
+      // If the deleted chat was selected, clear selection
+      const { currentChatId, loadChats } = get();
+      if (currentChatId === chatId) {
+        set({ currentChatId: null, messages: [] });
+      }
+      // Refresh list
+      await loadChats();
+    } catch (error) {
+      console.error('Failed to delete chat:', error);
+    }
+  },
+
+  renameChat: async (chatId: string, newTitle: string) => {
+    try {
+      await invoke('update_rag_chat_title', { chatId, newTitle });
+      await get().loadChats();
+    } catch (error) {
+      console.error('Failed to rename chat:', error);
     }
   },
 

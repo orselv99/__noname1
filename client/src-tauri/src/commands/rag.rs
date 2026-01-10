@@ -97,6 +97,8 @@ struct SearchResult {
     document_id: String,
     distance: f32, 
     content: String,
+    summary: Option<String>,
+    tags: Vec<String>,
 }
 
 /// Helper to create a new chat session
@@ -180,6 +182,7 @@ pub async fn create_new_chat(
 pub async fn get_rag_chats(
     auth_state: State<'_, Mutex<AuthState>>,
     db_state: State<'_, Mutex<DatabaseState>>,
+    search: Option<String>,
 ) -> Result<Vec<RagChat>, String> {
      let user_id = {
         let auth = auth_state.lock().unwrap();
@@ -206,9 +209,80 @@ pub async fn get_rag_chats(
 
         let mut chats = Vec::new();
         for r in rows {
-            chats.push(r.map_err(|e| e.to_string())?);
+            let chat = r.map_err(|e| e.to_string())?;
+            if let Some(q) = &search {
+                if chat.title.to_lowercase().contains(&q.to_lowercase()) {
+                    chats.push(chat);
+                }
+            } else {
+                chats.push(chat);
+            }
         }
         Ok(chats)
+    } else {
+        Err("Database not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn delete_rag_chat(
+    auth_state: State<'_, Mutex<AuthState>>,
+    db_state: State<'_, Mutex<DatabaseState>>,
+    chat_id: String,
+) -> Result<(), String> {
+    let _user_id = {
+        let auth = auth_state.lock().unwrap();
+        auth.user_id.clone().ok_or("Not authenticated")?
+    };
+
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+        // Delete messages first
+        conn.execute(
+            "DELETE FROM rag_messages WHERE chat_id = ?1",
+            rusqlite::params![chat_id],
+        ).map_err(|e| e.to_string())?;
+
+        // Delete chat
+        let count = conn.execute(
+            "DELETE FROM rag_chats WHERE id = ?1",
+            rusqlite::params![chat_id],
+        ).map_err(|e| e.to_string())?;
+
+        if count == 0 {
+             return Err("Chat not found".to_string());
+        }
+
+        Ok(())
+    } else {
+        Err("Database not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn update_rag_chat_title(
+    auth_state: State<'_, Mutex<AuthState>>,
+    db_state: State<'_, Mutex<DatabaseState>>,
+    chat_id: String,
+    new_title: String,
+) -> Result<(), String> {
+    let user_id = {
+        let auth = auth_state.lock().unwrap();
+        auth.user_id.clone().ok_or("Not authenticated")?
+    };
+
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+        let title_enc = encrypt_content(&user_id, &new_title)?;
+        let count = conn.execute(
+            "UPDATE rag_chats SET title = ?1 WHERE id = ?2",
+            rusqlite::params![title_enc, chat_id],
+        ).map_err(|e| e.to_string())?;
+
+        if count == 0 {
+             return Err("Chat not found".to_string());
+        }
+        Ok(())
     } else {
         Err("Database not initialized".to_string())
     }
@@ -323,7 +397,7 @@ pub async fn ask_ai(
         let db = db_state.lock().unwrap();
         if let Some(ref conn) = db.conn {
             let mut stmt = conn.prepare(
-                "SELECT d.id, vec_distance_cosine(da.embedding, ?1) as distance, d.content 
+                "SELECT d.id, vec_distance_cosine(da.embedding, ?1) as distance, d.content, d.summary 
                  FROM document_ai_data da
                  JOIN documents d ON da.document_id = d.id
                  WHERE d.user_id = ?2
@@ -332,23 +406,61 @@ pub async fn ask_ai(
             ).map_err(|e| e.to_string())?;
 
             let rows = stmt.query_map(rusqlite::params![query_bytes, user_id], |row| {
-                Ok(SearchResult {
-                    document_id: row.get(0)?,
-                    distance: row.get(1)?,
-                    content: {
-                        let blob: Vec<u8> = row.get(2)?;
-                        decrypt_content(&user_id, &blob).unwrap_or_default()
-                    }
-                })
+                let doc_id: String = row.get(0)?;
+                let dist: f32 = row.get(1)?;
+                let content_blob: Vec<u8> = row.get(2)?;
+                let summary_blob: Option<Vec<u8>> = row.get(3).ok();
+
+                Ok((doc_id, dist, content_blob, summary_blob))
             }).map_err(|e| e.to_string())?;
-            for r in rows { results.push(r.map_err(|e| e.to_string())?); }
+
+            // Collect temp results to release borrow on stmt/conn (if needed, but here simple map)
+            // Actually we need to query tags for each, so we need the conn.
+            // Let's collect raw data first.
+            let mut temp_results = Vec::new();
+            for r in rows { temp_results.push(r.map_err(|e| e.to_string())?); }
+
+            for (doc_id, dist, c_blob, s_blob) in temp_results {
+                let content = decrypt_content(&user_id, &c_blob).unwrap_or_default();
+                let summary = s_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
+                
+                // Fetch tags
+                let mut tags = Vec::new();
+                let mut tag_stmt = conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1").map_err(|e| e.to_string())?;
+                let tag_rows = tag_stmt.query_map([&doc_id], |row| {
+                    let t_blob: Vec<u8> = row.get(0)?;
+                    Ok(t_blob)
+                }).map_err(|e| e.to_string())?;
+
+                for tr in tag_rows {
+                     if let Ok(tb) = tr {
+                         if let Ok(t) = decrypt_content(&user_id, &tb) {
+                             tags.push(t);
+                         }
+                     }
+                }
+
+                results.push(SearchResult {
+                    document_id: doc_id,
+                    distance: dist,
+                    content,
+                    summary,
+                    tags,
+                });
+            }
         }
     }
 
     let mut context_text = String::new();
     for (i, res) in results.iter().enumerate() {
         let safe_content: String = res.content.chars().take(1000).collect();
-        context_text.push_str(&format!("Document {}:\n{}\n\n", i + 1, safe_content));
+        let summary_text = res.summary.as_deref().unwrap_or("No summary");
+        let tags_text = if res.tags.is_empty() { "None".to_string() } else { res.tags.join(", ") };
+
+        context_text.push_str(&format!(
+            "Document {}:\nSummary: {}\nTags: {}\nContent:\n{}\n\n", 
+            i + 1, summary_text, tags_text, safe_content
+        ));
     }
 
     if context_text.is_empty() {
@@ -356,7 +468,7 @@ pub async fn ask_ai(
     }
 
     let prompt = format!(
-        "<|im_start|>system\nYou are a helpful AI assistant. Answer the user's question based ONLY on the following provided documents. If the answer is not in the documents, say 'I cannot find the answer in the provided documents'. Answer in Korean.\n\nDocuments:\n{}\n<|im_end|><|im_start|>user\n{}\n<|im_end|><|im_start|>assistant\n",
+        "<|im_start|>system\nYou are a helpful AI assistant. Answer the user's question based ONLY on the following provided documents. Use the provided Summary and Tags to understand the context better. If the answer is not in the documents, say 'I cannot find the answer in the provided documents'. Answer in Korean.\n\nDocuments:\n{}\n<|im_end|><|im_start|>user\n{}\n<|im_end|><|im_start|>assistant\n",
         context_text,
         cleaned_question
     );
