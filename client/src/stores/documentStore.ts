@@ -103,12 +103,20 @@ export const useDocumentStore = create<DocumentStore>()(
             let newDocs = [...state.documents];
 
             if (effectiveLastSync) {
-              // Merge delta
+              // Merge delta - preserve existing data if server returns null/empty
               console.log(`Incremental sync: received ${deltaDocs.length} updates`);
               deltaDocs.forEach(d => {
                 const idx = newDocs.findIndex(e => e.id === d.id);
                 if (idx !== -1) {
-                  newDocs[idx] = d;
+                  // Merge: preserve existing summary/tags if new ones are empty
+                  const existing = newDocs[idx];
+                  newDocs[idx] = {
+                    ...d,
+                    summary: d.summary || existing.summary,
+                    tags: (d.tags && d.tags.length > 0) ? d.tags : existing.tags,
+                    updated_at: d.updated_at || existing.updated_at,
+                    created_at: d.created_at || existing.created_at,
+                  };
                 } else {
                   newDocs.push(d);
                 }
@@ -270,7 +278,8 @@ export const useDocumentStore = create<DocumentStore>()(
       },
 
       setActiveTab: (tabId) => {
-        set({ activeTabId: tabId });
+        // Clear highlighted evidence when switching tabs to prevent cross-document highlighting
+        set({ activeTabId: tabId, highlightedEvidence: null });
       },
 
       reorderTabs: (newTabs) => {

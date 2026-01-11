@@ -164,7 +164,7 @@ interface SingleTabEditorProps {
  */
 export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) => {
   const { showToast } = useToast();
-  const { fetchDocuments, highlightedEvidence, toggleFavorite, updateDocument, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, updateTabTitle, markTabDirty, addTab } = useDocumentStore();
+  const { fetchDocuments, highlightedEvidence, toggleFavorite, updateDocument, aiAnalysisStatus, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, updateTabTitle, markTabDirty, addTab } = useDocumentStore();
 
   // Get document data for this specific editor
   const doc = useDocumentStore(
@@ -239,7 +239,6 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
   });
 
   const [, setAiResult] = useState<any>(null);
-  const [isExtracting, setIsExtracting] = useState(false);
   const [title, setTitle] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -400,11 +399,53 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
       let matchIndex = stringAccumulator.indexOf(highlightedEvidence);
       let matchLen = highlightedEvidence.length;
 
+      // Fallback 1: Try trimmed version
       if (matchIndex === -1) {
         const trimmed = highlightedEvidence.trim();
         matchIndex = stringAccumulator.indexOf(trimmed);
         matchLen = trimmed.length;
       }
+
+      // Fallback 2: Try fuzzy matching - find significant words
+      if (matchIndex === -1) {
+        // Extract significant words (3+ chars, exclude common Korean particles)
+        const words = highlightedEvidence
+          .split(/[\s.,!?;:'"()[\]{}]+/)
+          .filter(w => w.length >= 3)
+          .filter(w => !['이다', '있다', '하다', '되다', '이며', '있으며', '한다', '된다'].includes(w))
+          .slice(0, 8);
+
+        console.log('Fuzzy search words:', words);
+
+        for (const word of words) {
+          const wordIndex = stringAccumulator.indexOf(word);
+          if (wordIndex !== -1) {
+            console.log(`Found word "${word}" at index ${wordIndex}`);
+            matchIndex = wordIndex;
+            matchLen = Math.min(100, highlightedEvidence.length);
+            break;
+          }
+        }
+      }
+
+      // Fallback 3: If still not found, try to find the tag name itself
+      if (matchIndex === -1) {
+        // The highlightedEvidence might be the evidence, but we can also search for any Korean proper noun
+        const koreanWords = highlightedEvidence.match(/[가-힣]{2,}/g) || [];
+        for (const word of koreanWords) {
+          if (word.length >= 2) {
+            const wordIndex = stringAccumulator.indexOf(word);
+            if (wordIndex !== -1) {
+              console.log(`Found Korean word "${word}" at index ${wordIndex}`);
+              matchIndex = wordIndex;
+              matchLen = word.length + 30;
+              break;
+            }
+          }
+        }
+      }
+
+      console.log(`Final match: index=${matchIndex}, len=${matchLen}`);
 
       if (matchIndex !== -1) {
         const matchEnd = matchIndex + matchLen;
@@ -482,7 +523,6 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
     const text = editor.getText();
     if (!text.trim()) return;
 
-    setIsExtracting(true);
     setAiAnalysisStatus('AI 분석중...');
     setAiResult(null);
 
@@ -501,8 +541,6 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
       console.error('AI Extraction Failed:', error);
       setAiAnalysisStatus('AI 분석 실패');
       setTimeout(() => setAiAnalysisStatus(null), 3000);
-    } finally {
-      setIsExtracting(false);
     }
   };
 
@@ -710,12 +748,12 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
         {/* AI FAB */}
         <div className="absolute bottom-8 right-8 z-50">
           <button
-            className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium shadow-xl transition-all ${isExtracting ? 'bg-zinc-800 text-zinc-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white hover:scale-105 active:scale-95'
+            className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium shadow-xl transition-all ${aiAnalysisStatus ? 'bg-zinc-800 text-zinc-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white hover:scale-105 active:scale-95'
               }`}
             onClick={handleAiExtraction}
-            disabled={isExtracting}
+            disabled={!!aiAnalysisStatus}
           >
-            {isExtracting ? '분석중...' : 'AI 분석'}
+            {aiAnalysisStatus || 'AI 분석'}
           </button>
         </div>
       </div>

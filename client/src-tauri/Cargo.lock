@@ -4107,6 +4107,7 @@ dependencies = [
  "base64 0.22.1",
  "bcrypt",
  "chrono",
+ "regex",
  "reqwest",
  "rusqlite",
  "serde",

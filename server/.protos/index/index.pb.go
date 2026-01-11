@@ -80,7 +80,7 @@ type Document struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                         // 문서 ID
 	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`                                   // 제목
 	Summary       string                 `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`                               // 원문 전체 요약
-	TagEvidences  []*TagEvidence         `protobuf:"bytes,4,rep,name=tag_evidences,json=tagEvidences,proto3" json:"tag_evidences,omitempty"` // 태그와 증거 목록 (Was tag_chunks)
+	TagEvidences  []*TagEvidence         `protobuf:"bytes,4,rep,name=tag_evidences,json=tagEvidences,proto3" json:"tag_evidences,omitempty"` // 태그와 증거 목록
 	OwnerId       string                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`                // 문서 소유자 ID (필수)
 	UpdatedAt     int64                  `protobuf:"varint,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`         // 수정 시간
 	UserSalt      string                 `protobuf:"bytes,7,opt,name=user_salt,json=userSalt,proto3" json:"user_salt,omitempty"`             // 암호화용 사용자 Salt

@@ -644,9 +644,11 @@ export const MetadataPanel = () => {
                       onClick={(e) => {
                         e.stopPropagation();
                         const current = useDocumentStore.getState().highlightedEvidence;
-                        useDocumentStore.getState().setHighlightedEvidence(current === t.evidence ? null : t.evidence || null);
+                        // Search for tag name itself instead of evidence (which may be incorrect)
+                        const searchText = t.tag;
+                        useDocumentStore.getState().setHighlightedEvidence(current === searchText ? null : searchText);
                       }}
-                      className={`peer cursor-pointer px-2 py-1 border rounded text-xs transition-colors inline-flex items-center gap-1 max-w-full ${useDocumentStore.getState().highlightedEvidence === t.evidence
+                      className={`peer cursor-pointer px-2 py-1 border rounded text-xs transition-colors inline-flex items-center gap-1 max-w-full ${useDocumentStore.getState().highlightedEvidence === t.tag
                         ? 'bg-blue-900/40 border-blue-500 text-blue-300'
                         : 'bg-zinc-900 border-zinc-700 text-blue-400 hover:border-blue-500 hover:bg-zinc-800'
                         }`}
@@ -684,6 +686,9 @@ export const MetadataPanel = () => {
         </div>
 
         {/* Footnotes */}
+        <LinkList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} />
+
+        {/* Linked Mentions */}
         <LinkList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} />
 
         {/* Attached Resources */}
