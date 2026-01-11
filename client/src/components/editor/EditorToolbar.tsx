@@ -14,7 +14,7 @@ import {
 import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import type { Editor } from '@tiptap/react';
-import { FootnoteDialog } from '../modals/FootnoteDialog';
+import { FootnoteDialog } from '../dialogs/FootnoteDialog';
 
 interface EditorToolbarProps {
   editor: Editor | null;

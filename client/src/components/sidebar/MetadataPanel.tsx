@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Calendar, User, FileText, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity } from 'lucide-react';
+import { Tag, Calendar, User, FileText, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity, Quote } from 'lucide-react';
 import { useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { DocumentState, VisibilityLevel, GroupType, Document } from '../../types';
@@ -15,6 +15,77 @@ const VISIBILITY_LEVELS = [
   { value: VisibilityLevel.Snippet, label: 'Snippet', icon: Eye, color: 'bg-amber-900/50 text-amber-300', hoverColor: 'hover:bg-amber-800/50' },
   { value: VisibilityLevel.Public, label: 'Public', icon: Globe, color: 'bg-green-900/50 text-green-300', hoverColor: 'hover:bg-green-800/50' },
 ];
+
+
+const FootnoteList = memo(({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  // Sync expanded state
+  useEffect(() => {
+    if (forceExpanded !== undefined) {
+      setIsExpanded(forceExpanded);
+    }
+  }, [forceExpanded]);
+
+  const effectiveContent = liveContent ?? content;
+
+  // Parsed Footnotes
+  const footnotes = useMemo(() => {
+    if (!effectiveContent) return [];
+    try {
+      const doc = new DOMParser().parseFromString(effectiveContent, 'text/html');
+      // Find all paragraphs starting with 'fn-' id
+      const fnElements = Array.from(doc.querySelectorAll('p[id^="fn-"]'));
+      return fnElements.map(el => {
+        // Text clean up: Remove simple numbering if it exists at start [1]
+        // Actually showing the number is good context.
+        return {
+          id: el.id,
+          text: el.textContent?.trim() || ''
+        };
+      }).filter(f => f.text);
+    } catch (e) {
+      return [];
+    }
+  }, [effectiveContent]);
+
+  if (footnotes.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <div
+        className="flex items-center gap-2 mb-2 text-zinc-500 cursor-pointer hover:text-zinc-300 select-none"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <Quote size={12} />
+        <h3 className="text-xs font-medium flex-1">Footnotes ({footnotes.length})</h3>
+        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </div>
+
+      {isExpanded && (
+        <div className="space-y-2 pl-1">
+          {footnotes.map((fn, i) => (
+            <div
+              key={fn.id}
+              className="group flex flex-col gap-1 text-xs bg-zinc-900/50 p-2 rounded border border-zinc-800 hover:border-zinc-700 transition-colors"
+            >
+              <div className="text-zinc-400 leading-relaxed break-words whitespace-pre-wrap">
+                {/* Highlight the [N] part if present */}
+                {fn.text.startsWith('[') ? (
+                  <>
+                    <span className="text-blue-400 font-medium mr-1">{fn.text.split(']')[0] + ']'}</span>
+                    {fn.text.substring(fn.text.indexOf(']') + 1).trim()}
+                  </>
+                ) : fn.text}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 
 const LinkList = memo(({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -768,7 +839,7 @@ export const MetadataPanel = () => {
         </div>
 
         {/* 고민중: Footnotes */}
-        {/* <LinkList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} /> */}
+        <FootnoteList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} />
 
         {/* Linked Mentions */}
         <LinkList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} />

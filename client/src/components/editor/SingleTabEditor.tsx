@@ -365,6 +365,66 @@ interface SingleTabEditorProps {
   isActive: boolean;
 }
 
+// 타이틀 입력을 별도 컴포넌트로 분리하여 불필요한 리렌더링 방지
+interface TitleInputProps {
+  initialTitle: string;
+  docId: string;
+  onTitleChange: (newTitle: string) => void;
+  onFocusEditor: () => void;
+}
+
+const TitleInput = memo(({ initialTitle, docId, onTitleChange, onFocusEditor }: TitleInputProps) => {
+  const [localTitle, setLocalTitle] = useState(initialTitle);
+  const { updateTabTitle } = useDocumentStore();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevInitialTitleRef = useRef(initialTitle);
+  const hasUserEditedRef = useRef(false);
+
+  // Sync with initialTitle when it changes (e.g., after doc loads)
+  useEffect(() => {
+    // Only sync if user hasn't started editing OR if docId changed
+    if (!hasUserEditedRef.current || prevInitialTitleRef.current === '') {
+      setLocalTitle(initialTitle);
+    }
+    prevInitialTitleRef.current = initialTitle;
+  }, [initialTitle, docId]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTitle = e.target.value;
+    hasUserEditedRef.current = true; // Mark that user has started editing
+    setLocalTitle(newTitle);
+    onTitleChange(newTitle);
+
+    // Debounce store update
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      updateTabTitle(docId, newTitle);
+    }, 300);
+  }, [docId, onTitleChange, updateTabTitle]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      onFocusEditor();
+    }
+  }, [onFocusEditor]);
+
+  return (
+    <input
+      type="text"
+      value={localTitle}
+      onKeyDown={handleKeyDown}
+      onChange={handleChange}
+      placeholder="Untitled"
+      className="w-full bg-transparent text-4xl font-bold text-white placeholder-zinc-700 focus:outline-none"
+    />
+  );
+});
+
+TitleInput.displayName = 'TitleInput';
+
 /**
  * SingleTabEditor - A TipTap editor instance for a single document tab.
  * Each tab has its own editor instance to enable instant tab switching.
@@ -372,7 +432,7 @@ interface SingleTabEditorProps {
  */
 export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) => {
   const { showToast } = useToast();
-  const { fetchDocuments, highlightedEvidence, toggleFavorite, updateDocument, aiAnalysisStatus, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, updateTabTitle, markTabDirty, addTab } = useDocumentStore();
+  const { fetchDocuments, highlightedEvidence, toggleFavorite, updateDocument, aiAnalysisStatus, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, markTabDirty, addTab } = useDocumentStore();
 
   // Get document data for this specific editor
   const doc = useDocumentStore(
@@ -493,7 +553,7 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
   });
 
   const [, setAiResult] = useState<any>(null);
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(() => doc?.title || '');
   const [isDirty, setIsDirty] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const ignoreUpdate = useRef(false);
@@ -545,6 +605,11 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
     setTitle(titleToLoad);
     editor.commands.setContent(contentToLoad, false);
 
+    // Push content to metadata panel after loading
+    if (isActive) {
+      setLiveEditorContent(contentToLoad);
+    }
+
     setTimeout(() => {
       setIsDirty(false);
       ignoreUpdate.current = false;
@@ -556,7 +621,7 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
       setIsReadOnly(true);
       editor.setEditable(false);
     }
-  }, [editor, doc, docId]);
+  }, [editor, doc, docId, isActive, setLiveEditorContent]);
 
   // Track changes
   useEffect(() => {
@@ -577,41 +642,66 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
   // Real-time metadata update (only when active)
   useEffect(() => {
     if (!editor || !isActive) return;
-    const updateMetadata = () => {
-      if (isDirty) {
-        const currentContent = editor.getHTML();
-        setLiveEditorContent(currentContent);
-      } else {
-        setLiveEditorContent(null);
-      }
-    };
-    const timeoutId = setTimeout(updateMetadata, 300);
-    return () => clearTimeout(timeoutId);
-  }, [editor?.state.doc, isActive, isDirty, setLiveEditorContent]);
 
-  // Auto-save
+    const pushContent = () => {
+      const currentContent = editor.getHTML();
+      setLiveEditorContent(currentContent);
+    };
+
+    // Push content immediately when tab becomes active
+    pushContent();
+
+    // Debounce metadata updates on editor changes
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const debouncedUpdate = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(pushContent, 300);
+    };
+
+    editor.on('update', debouncedUpdate);
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      editor.off('update', debouncedUpdate);
+      // Clear content when tab becomes inactive
+      setLiveEditorContent(null);
+    };
+  }, [editor, isActive, setLiveEditorContent]);
+
+  // Auto-save (triggered by editor changes, not on every render)
   useEffect(() => {
     if (!editor || !isDirty) return;
-    const autoSaveTimeout = setTimeout(() => {
-      const currentContent = editor.getHTML();
-      const draftKey = getDraftKey(docId);
-      try {
-        const draft = {
-          title,
-          content: currentContent,
-          savedAt: new Date().toISOString()
-        };
-        localStorage.setItem(draftKey, JSON.stringify(draft));
-        if (isActive) {
-          setAutoSaveStatus('자동저장됨');
-          setTimeout(() => setAutoSaveStatus(null), 2000);
+
+    let autoSaveTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const handleAutoSave = () => {
+      if (autoSaveTimeoutId) clearTimeout(autoSaveTimeoutId);
+      autoSaveTimeoutId = setTimeout(() => {
+        const currentContent = editor.getHTML();
+        const draftKey = getDraftKey(docId);
+        try {
+          const draft = {
+            title,
+            content: currentContent,
+            savedAt: new Date().toISOString()
+          };
+          localStorage.setItem(draftKey, JSON.stringify(draft));
+          if (isActive) {
+            setAutoSaveStatus('자동저장됨');
+            setTimeout(() => setAutoSaveStatus(null), 2000);
+          }
+        } catch (e) {
+          console.error('Draft auto-save failed:', e);
         }
-      } catch (e) {
-        console.error('Draft auto-save failed:', e);
-      }
-    }, 5000);
-    return () => clearTimeout(autoSaveTimeout);
-  }, [editor?.state.doc, docId, title, isDirty, isActive, setAutoSaveStatus]);
+      }, 5000);
+    };
+
+    editor.on('update', handleAutoSave);
+    return () => {
+      if (autoSaveTimeoutId) clearTimeout(autoSaveTimeoutId);
+      editor.off('update', handleAutoSave);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, docId, isDirty, isActive, setAutoSaveStatus]); // title is accessed inside closure
 
   // Shortcuts (only when active)
   useEffect(() => {
@@ -947,23 +1037,14 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
           <div className="flex-1 flex flex-col items-center min-h-full">
             <div className="w-full max-w-4xl flex flex-col relative">
               <div className="px-12 pt-10 pb-4 shrink-0">
-                <input
-                  type="text"
-                  value={title}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      editor?.commands.focus('start');
-                    }
-                  }}
-                  onChange={(e) => {
-                    const newTitle = e.target.value;
+                <TitleInput
+                  initialTitle={title}
+                  docId={docId}
+                  onTitleChange={(newTitle) => {
                     setTitle(newTitle);
                     setIsDirty(true);
-                    updateTabTitle(docId, newTitle);
                   }}
-                  placeholder="Untitled"
-                  className="w-full bg-transparent text-4xl font-bold text-white placeholder-zinc-700 focus:outline-none"
+                  onFocusEditor={() => editor?.commands.focus('start')}
                 />
               </div>
 
