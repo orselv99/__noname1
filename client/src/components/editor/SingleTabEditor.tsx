@@ -1,4 +1,4 @@
-import { useEditor, EditorContent, Extension } from '@tiptap/react';
+import { useEditor, EditorContent, Extension, Mark, mergeAttributes } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -13,6 +13,8 @@ import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
+import Superscript from '@tiptap/extension-superscript';
+import Paragraph from '@tiptap/extension-paragraph';
 import { findParentNode } from '@tiptap/core';
 import { useEffect, useState, useRef, useCallback, memo, useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -59,6 +61,70 @@ const EvidenceHighlightExtension = Extension.create({
     ];
   }
 });
+
+// Custom Footnote Reference Mark
+const FootnoteRef = Mark.create({
+  name: 'footnoteRef',
+
+  addOptions() {
+    return {
+      HTMLAttributes: {
+        class: 'footnote-ref text-blue-500 cursor-pointer font-medium',
+      },
+    }
+  },
+
+  addAttributes() {
+    return {
+      'data-footnote-target': {
+        default: null,
+      },
+      id: {
+        default: null,
+      },
+      class: {
+        default: null,
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-footnote-target]',
+      },
+      {
+        tag: 'span.footnote-ref',
+      }
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  }
+});
+
+// Custom Extensions to allow attributes
+const CustomParagraph = Paragraph.extend({
+  addAttributes() {
+    return {
+      class: {
+        default: null,
+      },
+      id: {
+        default: null,
+      },
+      style: {
+        default: null,
+      },
+      contenteditable: {
+        default: null,
+      },
+    }
+  }
+});
+
+
 
 // --- Custom Extension for Auto-Embedding Pasted/Dropped Images ---
 const ImageEmbedExtension = Extension.create({
@@ -350,7 +416,10 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
     extensions: [
       StarterKit.configure({
         history: false, // Disabled since we're not using collaboration per-tab
+        // Use CustomParagraph instead
       }),
+      CustomParagraph,
+      FootnoteRef,
       TaskList,
       TaskItem.configure({
         nested: true,
@@ -378,9 +447,48 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
       TableRow,
       TableHeader,
       TableCell,
+      Superscript, // Standard Superscript is fine now
       EvidenceHighlightExtension,
       ImageEmbedExtension,
     ],
+    editorProps: {
+      handleClick: (_view, _pos, event) => {
+        const target = event.target as HTMLElement;
+
+        // 1. Check for FootnoteRef (span with data-target)
+        const footnoteRef = target.closest('span[data-footnote-target]');
+        if (footnoteRef) {
+          const id = footnoteRef.getAttribute('data-footnote-target');
+          if (id) {
+            const element = document.getElementById(id);
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              return true;
+            }
+          }
+        }
+
+        const anchor = target.closest('a');
+        if (anchor) {
+          // Check for internal anchor links
+          const href = anchor.getAttribute('href');
+          const hash = anchor.hash; // Browser property, includes #
+
+          if ((href && href.startsWith('#')) || (hash && hash.startsWith('#'))) {
+            event.preventDefault();
+            event.stopPropagation(); // Ensure no other handlers fire
+
+            const id = hash ? hash.substring(1) : href!.substring(1);
+            const element = document.getElementById(id);
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+    },
     content: '', // Will be set on mount
   });
 

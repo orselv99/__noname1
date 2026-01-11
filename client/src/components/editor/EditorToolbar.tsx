@@ -9,11 +9,12 @@ import {
   List, ListOrdered, CheckSquare, Link as LinkIcon, Image as ImageIcon,
   Highlighter, Type, Grid,
   ChevronDown, Pilcrow,
-  Indent, Outdent, Upload, Globe, Loader2, X
+  Indent, Outdent, Upload, Globe, Loader2, X, MessageSquare
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import type { Editor } from '@tiptap/react';
+import { FootnoteDialog } from '../modals/FootnoteDialog';
 
 interface EditorToolbarProps {
   editor: Editor | null;
@@ -198,6 +199,7 @@ export const EditorToolbar = ({ editor }: EditorToolbarProps) => {
   const [alignDropdownOpen, setAlignDropdownOpen] = useState(false);
   const [listDropdownOpen, setListDropdownOpen] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [footnoteDialogOpen, setFootnoteDialogOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const colorDropdownRef = useRef<HTMLDivElement>(null);
   const highlightDropdownRef = useRef<HTMLDivElement>(null);
@@ -247,6 +249,53 @@ export const EditorToolbar = ({ editor }: EditorToolbarProps) => {
   }, []);
 
   if (!editor) return null;
+
+  const handleFootnote = (content: string) => {
+    if (!editor) return;
+
+    // 1. Calculate next number
+    const text = editor.getText();
+    const regex = /\[(\d+)\]/g;
+    let maxNum = 0;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      const num = parseInt(match[1], 10);
+      if (num > maxNum) maxNum = num;
+    }
+    const nextNum = maxNum + 1;
+    const ref = `[${nextNum}]`;
+    const fnId = `fn-${nextNum}`;
+    const refId = `ref-${nextNum}`;
+
+    // 2. Insert reference at cursor
+    // Using FootnoteRef Mark (span) to avoid browser link behavior
+    editor.chain()
+      .focus()
+      // .setTextSelection(to) // Let the chain handle selection naturally from focus
+      .insertContent(`<span data-footnote-target="${fnId}" id="${refId}" class="footnote-ref text-blue-500 cursor-pointer font-medium"><sup>${ref}</sup></span> `)
+      .run();
+
+    // 3. Append content at bottom
+    const html = editor.getHTML();
+    const hasSeparator = html.includes('<hr');
+
+    let appendHtml = '';
+    if (!hasSeparator) {
+      appendHtml += '<hr class="my-4 border-zinc-700" contenteditable="false">';
+    }
+
+    // Add the footnote content
+    // contenteditable="false" makes it read-only
+    // Styles to remove indent and margins (!m-0 !p-0 !indent-0 leading-tight)
+    appendHtml += `<p id="${fnId}" class="text-xs text-zinc-500 !m-0 !p-0 !indent-0 leading-tight" contenteditable="false">
+      <span data-footnote-target="${refId}" class="footnote-ref text-blue-500 hover:text-blue-600 cursor-pointer font-medium"><sup>${ref}</sup></span>
+      <span class="ml-1">${content}</span>
+    </p>`;
+
+    // Append to end
+    const endPos = editor.state.doc.content.size;
+    editor.chain().insertContentAt(endPos, appendHtml).run();
+  };
 
   const handleInsertImage = (dataUrl: string) => {
     editor.chain().focus().setImage({ src: dataUrl }).run();
@@ -393,7 +442,7 @@ export const EditorToolbar = ({ editor }: EditorToolbarProps) => {
           <ChevronDown size={10} />
         </button>
         {colorDropdownOpen && (
-          <div className="absolute top-full left-0 mt-3 left-[-6px] bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 z-50">
+          <div className="absolute top-full mt-3 left-[-6px] bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-2 z-50">
             <div className="grid grid-cols-4 gap-1">
               {textColors.flat().map((color, idx) => (
                 <button
@@ -580,6 +629,16 @@ export const EditorToolbar = ({ editor }: EditorToolbarProps) => {
       <ToolbarButton onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Insert Table">
         <Grid size={16} />
       </ToolbarButton>
+
+      <ToolbarButton onClick={() => setFootnoteDialogOpen(true)} title="Insert Footnote">
+        <MessageSquare size={16} />
+      </ToolbarButton>
+
+      <FootnoteDialog
+        isOpen={footnoteDialogOpen}
+        onClose={() => setFootnoteDialogOpen(false)}
+        onSubmit={handleFootnote}
+      />
 
     </div>
   );
