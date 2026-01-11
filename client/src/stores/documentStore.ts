@@ -63,6 +63,7 @@ interface DocumentStore {
   setAutoSaveStatus: (status: string | null) => void;
   setLiveEditorContent: (content: string | null) => void;
   markTabDirty: (tabId: string, isDirty: boolean) => void;
+  emptyRecycleBin: () => Promise<void>;
 }
 
 export const useDocumentStore = create<DocumentStore>()(
@@ -501,18 +502,49 @@ export const useDocumentStore = create<DocumentStore>()(
           const newDocuments = state.documents.map(d =>
             d.id === docId ? { ...d, deleted_at: undefined, updated_at: now } : d
           );
-
           return { documents: newDocuments };
         });
 
         try {
-          // Call backend restore
           await invoke('restore_document', { id: docId });
         } catch (error) {
           console.error('Failed to restore document:', error);
           get().fetchDocuments();
         }
       },
+
+      emptyRecycleBin: async () => {
+        // Optimistic: Remove all docs with deleted_at
+        set((state) => {
+          const newDocuments = state.documents.filter(d => !d.deleted_at);
+          // Also cleanup any tabs that might reference deleted docs (though they should be closed on delete)
+          const deletedIds = new Set(state.documents.filter(d => d.deleted_at).map(d => d.id));
+          const newTabs = state.tabs.filter(t => !deletedIds.has(t.docId));
+
+          let newActiveId = state.activeTabId;
+          if (newActiveId && deletedIds.has(newActiveId)) {
+            if (newTabs.length > 0) {
+              newActiveId = newTabs[newTabs.length - 1].id;
+            } else {
+              newActiveId = null;
+            }
+          }
+
+          return {
+            documents: newDocuments,
+            tabs: newTabs,
+            activeTabId: newActiveId
+          };
+        });
+
+        try {
+          await invoke('empty_recycle_bin');
+        } catch (error) {
+          console.error('Failed to empty recycle bin:', error);
+          get().fetchDocuments();
+        }
+      },
+
 
       renameDocument: async (docId: string, newTitle: string) => {
         const doc = get().documents.find(d => d.id === docId);

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, memo, useDeferredValue } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Tag, Calendar, User, FileText, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity } from 'lucide-react';
 import { useMemo } from 'react';
@@ -220,10 +220,15 @@ const ResourceList = memo(({ content, liveContent, forceExpanded }: { content: s
         });
 
         // 오디오 추출
-        const audios = Array.from(doc.getElementsByTagName('audio'));
-        audios.forEach(audio => {
-          const src = audio.getAttribute('src') || audio.querySelector('source')?.getAttribute('src');
-          if (src) {
+        // Audio
+        Array.from(doc.getElementsByTagName('audio')).forEach(audio => {
+          let src = audio.getAttribute('src');
+          if (!src) {
+            const source = audio.querySelector('source');
+            if (source) src = source.getAttribute('src');
+          }
+
+          if (src) { // Ensure src is not null or undefined before proceeding
             const size = getDataUrlSize(src);
             items.push({ type: 'audio', src, size: size || undefined });
           }
@@ -477,11 +482,9 @@ const VisibilityDropdown = memo(({ currentLevel, onLevelChange }: { currentLevel
 
 export const MetadataPanel = () => {
   // Optimized selector: only re-render when activeDoc changes, not entire documents array
-  const activeDocImmediate = useDocumentStore(
+  const activeDoc = useDocumentStore(
     useCallback((state) => state.documents.find((d: Document) => d.id === state.activeTabId), [])
   );
-  // Use deferred value to allow tab switch to complete first before updating metadata
-  const activeDoc = useDeferredValue(activeDocImmediate);
 
   const liveEditorContent = useDocumentStore(state => state.liveEditorContent);
   const saveDocument = useDocumentStore(state => state.saveDocument);
@@ -489,46 +492,61 @@ export const MetadataPanel = () => {
 
   // Calculate total media size from content
   const { binary: totalMediaSize, encoded: totalEncodedMediaSize } = useMemo(() => {
-    let binary = 0;
-    let encoded = 0;
-    const content = liveEditorContent ?? activeDocImmediate?.content;
-    if (!content) return { binary: 0, encoded: 0 };
+    // Helper to calculate size from HTML string
+    const calculateFromHtml = (htmlContent: string) => {
+      let binary = 0;
+      let encoded = 0;
+      try {
+        const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
 
-    try {
-      const doc = new DOMParser().parseFromString(content, 'text/html');
-
-      // Helper to process elements
-      const processElement = (el: Element) => {
-        // Try src attribute first
-        let src = el.getAttribute('src');
-
-        // For video/audio, check source children if src is missing
-        if (!src && (el.tagName === 'VIDEO' || el.tagName === 'AUDIO')) {
-          src = el.querySelector('source')?.getAttribute('src');
-        }
-
-        if (src?.startsWith('data:')) {
-          const parts = src.split(',');
-          const base64Part = parts[1];
-          // Add metadata part length (e.g. "data:image/png;base64,") to encoded size as well
-          const metaPart = parts[0] + ',';
-
-          if (base64Part) {
-            binary += Math.floor(base64Part.length * 0.75);
-            encoded += (base64Part.length + metaPart.length);
+        const processElement = (el: Element) => {
+          let src = el.getAttribute('src');
+          if (!src && (el.tagName === 'VIDEO' || el.tagName === 'AUDIO')) {
+            src = el.querySelector('source')?.getAttribute('src') ?? null;
           }
-        }
-      };
 
-      Array.from(doc.getElementsByTagName('img')).forEach(processElement);
-      Array.from(doc.getElementsByTagName('video')).forEach(processElement);
-      Array.from(doc.getElementsByTagName('audio')).forEach(processElement);
+          if (src?.startsWith('data:')) {
+            const parts = src.split(',');
+            const base64Part = parts[1];
+            // const metaPart = parts[0] + ','; // "data:image/png;base64,"
 
-    } catch (e) {
-      // ignore
+            if (base64Part) {
+              binary += Math.floor(base64Part.length * 0.75);
+              // encoded += (base64Part.length + metaPart.length); // REMOVED: Use approximation for consistency
+            }
+          }
+        };
+
+        Array.from(doc.getElementsByTagName('img')).forEach(processElement);
+        Array.from(doc.getElementsByTagName('video')).forEach(processElement);
+        Array.from(doc.getElementsByTagName('audio')).forEach(processElement);
+
+        // Derive encoded size from binary to match View Mode logic (Stable Display)
+        encoded = binary > 0 ? Math.ceil(binary / 0.75) : 0;
+      } catch (e) { /* ignore */ }
+      return { binary, encoded };
+    };
+
+    // 1. Edit Mode: Use live content
+    if (liveEditorContent) {
+      return calculateFromHtml(liveEditorContent);
     }
-    return { binary, encoded };
-  }, [liveEditorContent, activeDocImmediate?.content]);
+
+    // 2. View Mode: Use persisted value if available
+    if (activeDoc?.media_size) {
+      const binary = parseInt(activeDoc.media_size, 10);
+      // Approximation for encoded size: Binary / 0.75
+      const encoded = binary > 0 ? Math.ceil(binary / 0.75) : 0;
+      return { binary, encoded };
+    }
+
+    // 3. Fallback for legacy docs (no media_size in DB): Calculate from stored content
+    if (activeDoc?.content) {
+      return calculateFromHtml(activeDoc.content);
+    }
+
+    return { binary: 0, encoded: 0 };
+  }, [liveEditorContent, activeDoc?.content, activeDoc?.media_size]);
 
   // 섹션 펼침 상태 (Hooks는 조건부 return 전에 호출해야 함)
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
@@ -849,11 +867,13 @@ export const MetadataPanel = () => {
           <span className="flex items-center gap-1"><FileText size={12} /> Size</span>
           <span>
             {(() => {
+              // activeDoc.size is the total size including base64 media
               const totalSize = parseInt(activeDoc.size || '0', 10);
+              // Derive true text size by subtracting encoded media size
               const textSize = Math.max(0, totalSize - totalEncodedMediaSize);
 
               if (totalMediaSize > 0) {
-                return `${formatBytes(totalSize)} (${formatBytes(textSize)} text + ${formatBytes(totalMediaSize)} media)`;
+                return `${formatBytes(totalSize)} (${formatBytes(textSize)} + ${formatBytes(totalMediaSize)} media)`;
               }
               return formatBytes(totalSize);
             })()}

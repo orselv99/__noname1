@@ -145,6 +145,23 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
       .map_err(|e| format!("Failed to add version column: {}", e))?;
   }
 
+  // Migration: Add media_size column if not exists
+  let media_size_exists: bool = conn
+    .query_row(
+      "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name='media_size'",
+      [],
+      |row| row.get(0),
+    )
+    .unwrap_or(0)
+    > 0;
+
+  if !media_size_exists {
+    println!("Debug: Migrating database - adding media_size column to documents");
+    conn
+      .execute("ALTER TABLE documents ADD COLUMN media_size BLOB", [])
+      .map_err(|e| format!("Failed to add media_size column: {}", e))?;
+  }
+
   // Create document_deltas table (Versioning)
   conn
     .execute(

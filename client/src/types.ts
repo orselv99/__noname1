@@ -57,6 +57,7 @@ export interface Document {
   tags?: DocumentTag[];
   deleted_at?: string;
   version: number;
+  media_size?: string; // Added for persistence
 }
 
 export interface SaveDocumentRequest {

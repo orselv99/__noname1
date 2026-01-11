@@ -470,12 +470,16 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
   useEffect(() => {
     if (!editor || !isActive) return;
     const updateMetadata = () => {
-      const currentContent = editor.getHTML();
-      setLiveEditorContent(currentContent);
+      if (isDirty) {
+        const currentContent = editor.getHTML();
+        setLiveEditorContent(currentContent);
+      } else {
+        setLiveEditorContent(null);
+      }
     };
     const timeoutId = setTimeout(updateMetadata, 300);
     return () => clearTimeout(timeoutId);
-  }, [editor?.state.doc, isActive, setLiveEditorContent]);
+  }, [editor?.state.doc, isActive, isDirty, setLiveEditorContent]);
 
   // Auto-save
   useEffect(() => {

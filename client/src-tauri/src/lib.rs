@@ -34,6 +34,7 @@ pub fn run() {
       commands::documents::get_document,
       commands::documents::delete_document,
       commands::documents::restore_document,
+      commands::documents::empty_recycle_bin,
       commands::media::download_image,
       commands::media::read_local_file_as_data_url,
       commands::rag::ask_ai,

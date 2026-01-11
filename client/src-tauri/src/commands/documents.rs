@@ -63,6 +63,7 @@ pub struct Document {
   pub is_favorite: bool,
   pub tags: Option<Vec<DocumentTag>>,
   pub deleted_at: Option<String>, // Added for Soft Delete
+  pub media_size: Option<String>, // Added for Media Size Persistence
   pub version: i32,
 }
 
@@ -95,6 +96,7 @@ pub async fn save_document(
 
   let doc_id = req.id.unwrap_or_else(|| Uuid::new_v4().to_string());
   let now = chrono_now(); // ISO String
+  let mut return_created_at = now.clone();
   let ts = Utc::now().timestamp(); // Integer timestamp
   let size_str = req.content.len().to_string();
 
@@ -109,6 +111,20 @@ pub async fn save_document(
   let created_at_enc = encrypt_content(&user_id, &now)?;
   let updated_at_enc = encrypt_content(&user_id, &now)?;
   let size_enc = encrypt_content(&user_id, &size_str)?;
+
+  // Calculate media size from content
+  let mut media_size_bytes = 0;
+  // Regex to find data URLs: src="data:image/png;base64,..."
+  // Simply summing up base64 lengths and converting to binary size
+  // Note: This matches the frontend logic
+  let re = regex::Regex::new(r#"src="data:[^;]+;base64,([^"]+)""#).unwrap();
+  for cap in re.captures_iter(&req.content) {
+    if let Some(base64_part) = cap.get(1) {
+      media_size_bytes += (base64_part.as_str().len() as f64 * 0.75).floor() as u64;
+    }
+  }
+  let media_size_str = media_size_bytes.to_string();
+  let media_size_enc = encrypt_content(&user_id, &media_size_str)?;
 
   let mut creator_name = None;
 
@@ -125,12 +141,28 @@ pub async fn save_document(
         .optional()
         .unwrap_or(None);
 
+      // Check for existing created_at
+      let existing_created_at_blob: Option<Vec<u8>> = conn
+        .query_row(
+          "SELECT created_at FROM documents WHERE id = ?1",
+          [&doc_id],
+          |row| row.get(0),
+        )
+        .optional()
+        .unwrap_or(None);
+
+      if let Some(blob) = existing_created_at_blob {
+        if let Ok(decrypted) = decrypt_content(&user_id, &blob) {
+          return_created_at = decrypted;
+        }
+      }
+
       // 2. Insert/Update
       conn.execute(
                 "INSERT INTO documents (
                     id, user_id, document_state, visibility_level, group_type, group_id,
-                    title, content, summary, size, created_at, updated_at, is_favorite, last_synced_at, parent_id, version
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+                    title, content, summary, size, created_at, updated_at, is_favorite, last_synced_at, parent_id, version, media_size
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
                 ON CONFLICT(id) DO UPDATE SET
                     title = excluded.title,
                     content = excluded.content,
@@ -144,7 +176,8 @@ pub async fn save_document(
                     is_favorite = COALESCE(excluded.is_favorite, documents.is_favorite),
                     updated_at = excluded.updated_at,
                     last_synced_at = excluded.last_synced_at,
-                    version = excluded.version
+                    version = excluded.version,
+                    media_size = excluded.media_size
                 ",
                 rusqlite::params![
                     doc_id,
@@ -162,7 +195,8 @@ pub async fn save_document(
                     req.is_favorite.unwrap_or(false),
                     ts, // Plaintext timestamp
                     req.parent_id,
-                    req.version.unwrap_or(1)
+                    req.version.unwrap_or(1),
+                    media_size_enc
                 ],
             )
             .map_err(|e| format!("Failed to save document: {}", e))?;
@@ -317,7 +351,7 @@ pub async fn save_document(
     group_id: req.group_id,
     parent_id: req.parent_id,
     summary: None,
-    created_at: Some(now.clone()),
+    created_at: Some(return_created_at),
     updated_at: Some(now),
     last_synced_at: Some(ts),
     accessed_at: None,
@@ -325,6 +359,7 @@ pub async fn save_document(
     is_favorite: req.is_favorite.unwrap_or(false),
     tags: req.tags, // Return the tags we just saved
     deleted_at: None,
+    media_size: Some(media_size_str),
     version: req.version.unwrap_or(1),
   })
 }
@@ -356,7 +391,7 @@ pub async fn list_documents(
     let mut query = "SELECT 
             d.id, d.user_id, d.document_state, d.visibility_level, d.group_type, d.group_id,
             d.title, d.content, d.summary, d.created_at, d.updated_at, d.accessed_at, d.size, d.is_favorite,
-            u.username, d.last_synced_at, d.parent_id, d.version, d.deleted_at
+            u.username, d.last_synced_at, d.parent_id, d.version, d.deleted_at, d.media_size
             FROM documents d
             LEFT JOIN users u ON d.user_id = u.id
             WHERE d.user_id = ?1".to_string();
@@ -405,6 +440,7 @@ pub async fn list_documents(
         let parent_id: Option<String> = row.get(16).ok();
         let version: i32 = row.get(17).unwrap_or(1);
         let deleted_at_blob: Option<Vec<u8>> = row.get(18).ok();
+        let media_size_blob: Option<Vec<u8>> = row.get(19).ok();
 
         Ok((
           id,
@@ -426,6 +462,7 @@ pub async fn list_documents(
           parent_id,
           version,
           deleted_at_blob,
+          media_size_blob,
         ))
       })
       .map_err(|e| e.to_string())?;
@@ -440,7 +477,7 @@ pub async fn list_documents(
       group_type, group_id, last_synced_at
     );
     println!("DEBUG: found {} rows", temp_docs.len());
-    for (id, _, _, _, gtype, gid, _, _, _, _, _, _, _, _, _, _, pid, _, _) in &temp_docs {
+    for (id, _, _, _, gtype, gid, _, _, _, _, _, _, _, _, _, _, pid, _, _, _) in &temp_docs {
       println!(
         "DEBUG: DOC id={}, gtype={}, gid={:?}, pid={:?}",
         id, gtype, gid, pid
@@ -470,6 +507,7 @@ pub async fn list_documents(
       pid,
       version,
       deleted_at_blob,
+      media_size_blob,
     ) in temp_docs
     {
       // Fetch tags for this doc
@@ -506,6 +544,7 @@ pub async fn list_documents(
       let accessed_at = acc_blob.and_then(|b| decrypt_content(&uid, &b).ok());
       let size = sz_blob.and_then(|b| decrypt_content(&uid, &b).ok());
       let deleted_at = deleted_at_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+      let media_size = media_size_blob.and_then(|b| decrypt_content(&uid, &b).ok());
 
       docs.push(Document {
         id,
@@ -528,6 +567,7 @@ pub async fn list_documents(
         tags: Some(tags),
         version,
         deleted_at,
+        media_size,
       });
     }
 
@@ -556,7 +596,7 @@ pub async fn get_document(
     let mut stmt = conn.prepare("SELECT 
             d.id, d.user_id, d.document_state, d.visibility_level, d.group_type, d.group_id,
             d.title, d.content, d.summary, d.created_at, d.updated_at, d.accessed_at, d.size, d.is_favorite,
-            u.username, d.last_synced_at, d.parent_id, d.version, d.deleted_at
+            u.username, d.last_synced_at, d.parent_id, d.version, d.deleted_at, d.media_size
             FROM documents d
             LEFT JOIN users u ON d.user_id = u.id
             WHERE d.id = ?1 AND d.user_id = ?2").map_err(|e| e.to_string())?;
@@ -582,7 +622,8 @@ pub async fn get_document(
         let last_synced_at: Option<i64> = row.get(15).ok();
         let parent_id: Option<String> = row.get(16).ok();
         let version: i32 = row.get(17).unwrap_or(1);
-        let deleted_at: Option<String> = row.get(18).ok();
+        let deleted_at_blob: Option<Vec<u8>> = row.get(18).ok();
+        let media_size_blob: Option<Vec<u8>> = row.get(19).ok();
 
         Ok((
           id,
@@ -603,7 +644,8 @@ pub async fn get_document(
           last_synced_at,
           parent_id,
           version,
-          deleted_at,
+          deleted_at_blob,
+          media_size_blob,
         ))
       })
       .map_err(|e| e.to_string())?;
@@ -615,19 +657,20 @@ pub async fn get_document(
       vis,
       gtype,
       gid,
-      t_blob,
-      c_blob,
-      s_blob,
-      cr_blob,
-      up_blob,
-      acc_blob,
-      sz_blob,
+      title_blob,
+      content_blob,
+      summary_blob,
+      created_blob,
+      updated_blob,
+      accessed_blob,
+      size_blob,
       is_fav,
       username,
       ls_at,
       pid,
       version,
-      deleted_at,
+      deleted_at_blob,
+      media_size_blob,
     ) = row;
     let mut tags = Vec::new();
     {
@@ -653,13 +696,15 @@ pub async fn get_document(
     }
 
     // Decrypt
-    let title = decrypt_content(&uid, &t_blob).unwrap_or_default();
-    let content = decrypt_content(&uid, &c_blob).unwrap_or_default();
-    let summary = s_blob.and_then(|b| decrypt_content(&uid, &b).ok());
-    let created_at = cr_blob.and_then(|b| decrypt_content(&uid, &b).ok());
-    let updated_at = up_blob.and_then(|b| decrypt_content(&uid, &b).ok());
-    let accessed_at = acc_blob.and_then(|b| decrypt_content(&uid, &b).ok());
-    let size = sz_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+    let title = decrypt_content(&uid, &title_blob).unwrap_or_default();
+    let content = decrypt_content(&uid, &content_blob).unwrap_or_default();
+    let summary = summary_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+    let created_at = created_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+    let updated_at = updated_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+    let accessed_at = accessed_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+    let size = size_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+    let deleted_at = deleted_at_blob.and_then(|b| decrypt_content(&uid, &b).ok());
+    let media_size = media_size_blob.and_then(|b| decrypt_content(&uid, &b).ok());
 
     Ok(Document {
       id,
@@ -682,6 +727,7 @@ pub async fn get_document(
       tags: Some(tags),
       version,
       deleted_at,
+      media_size,
     })
   } else {
     Err("Database not initialized".to_string())
@@ -861,6 +907,80 @@ pub async fn restore_document(
         .map_err(|e| format!("Failed to restore document: {}", e))?;
     }
 
+    Ok(())
+  } else {
+    Err("Database not initialized".to_string())
+  }
+}
+
+#[tauri::command]
+pub async fn empty_recycle_bin(
+  auth_state: State<'_, Mutex<AuthState>>,
+  db_state: State<'_, Mutex<DatabaseState>>,
+) -> Result<(), String> {
+  let user_id = {
+    let auth = auth_state.lock().unwrap();
+    auth.user_id.clone().ok_or("Not authenticated")?
+  };
+
+  let mut db = db_state.lock().unwrap();
+  if let Some(ref mut conn) = db.conn {
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    {
+      // 1. Get IDs of all deleted documents for this user
+      let mut stmt = tx
+        .prepare("SELECT id FROM documents WHERE user_id = ?1 AND deleted_at IS NOT NULL")
+        .map_err(|e| e.to_string())?;
+
+      let deleted_ids: Vec<String> = stmt
+        .query_map([&user_id], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(Result::ok)
+        .collect();
+
+      if deleted_ids.is_empty() {
+        return Ok(());
+      }
+
+      // 2. Delete related data for each ID
+      // Note: We could use "WHERE document_id IN (...)" but SQLite limit is 999 vars.
+      // Iterating is safer for now given the context, or we could chunk it.
+      // Since it's a transaction, it's atomic.
+
+      let mut delete_tags_stmt = tx
+        .prepare("DELETE FROM document_tags WHERE document_id = ?1")
+        .map_err(|e| e.to_string())?;
+      let mut delete_deltas_stmt = tx
+        .prepare("DELETE FROM document_deltas WHERE document_id = ?1")
+        .map_err(|e| e.to_string())?;
+      let mut delete_snapshots_stmt = tx
+        .prepare("DELETE FROM document_snapshots WHERE document_id = ?1")
+        .map_err(|e| e.to_string())?;
+      let mut delete_ai_stmt = tx
+        .prepare("DELETE FROM document_ai_queue WHERE document_id = ?1")
+        .map_err(|e| e.to_string())?;
+      let mut delete_doc_stmt = tx
+        .prepare("DELETE FROM documents WHERE id = ?1 AND user_id = ?2")
+        .map_err(|e| e.to_string())?;
+
+      for id in deleted_ids {
+        delete_tags_stmt.execute([&id]).map_err(|e| e.to_string())?;
+        delete_deltas_stmt
+          .execute([&id])
+          .map_err(|e| e.to_string())?;
+        delete_snapshots_stmt
+          .execute([&id])
+          .map_err(|e| e.to_string())?;
+        delete_ai_stmt.execute([&id]).map_err(|e| e.to_string())?;
+        // Finally delete the doc
+        delete_doc_stmt
+          .execute([&id, &user_id])
+          .map_err(|e| e.to_string())?;
+      }
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(())
   } else {
     Err("Database not initialized".to_string())
