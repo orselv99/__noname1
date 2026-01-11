@@ -9,13 +9,185 @@ import {
   List, ListOrdered, CheckSquare, Link as LinkIcon, Image as ImageIcon,
   Highlighter, Type, Grid,
   ChevronDown, Pilcrow,
-  Indent, Outdent
+  Indent, Outdent, Upload, Globe, Loader2, X
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { invoke } from '@tauri-apps/api/core';
 import type { Editor } from '@tiptap/react';
 
 interface EditorToolbarProps {
   editor: Editor | null;
 }
+
+// Image Picker Modal Component
+interface ImagePickerModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onInsert: (dataUrl: string) => void;
+}
+
+const ImagePickerModal = ({ isOpen, onClose, onInsert }: ImagePickerModalProps) => {
+  const [mode, setMode] = useState<'local' | 'url'>('local');
+  const [url, setUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (!isOpen) return null;
+
+  const handleLocalFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // Read file as base64 directly in browser
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        onInsert(dataUrl);
+        onClose();
+      };
+      reader.onerror = () => {
+        setError('파일을 읽는데 실패했습니다.');
+        setIsLoading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setError(String(err));
+      setIsLoading(false);
+    }
+  };
+
+  const handleUrlSubmit = async () => {
+    if (!url.trim()) return;
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      // Download and convert to base64 via Tauri
+      const dataUrl = await invoke<string>('download_image', { url: url.trim() });
+      onInsert(dataUrl);
+      onClose();
+    } catch (err) {
+      setError(String(err));
+      setIsLoading(false);
+    }
+  };
+
+  return createPortal(
+    <div
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-[99999]"
+      onClick={onClose}
+    >
+      <div
+        className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-[400px] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-zinc-700">
+          <h3 className="text-base font-medium text-white">이미지 삽입</h3>
+          <button
+            onClick={onClose}
+            className="text-zinc-400 hover:text-white transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Mode Tabs */}
+        <div className="flex border-b border-zinc-700">
+          <button
+            onClick={() => { setMode('local'); setError(''); }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm transition-colors ${mode === 'local'
+              ? 'bg-zinc-800 text-white border-b-2 border-blue-500'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+              }`}
+          >
+            <Upload size={16} />
+            로컬 파일
+          </button>
+          <button
+            onClick={() => { setMode('url'); setError(''); }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm transition-colors ${mode === 'url'
+              ? 'bg-zinc-800 text-white border-b-2 border-blue-500'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+              }`}
+          >
+            <Globe size={16} />
+            URL 입력
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4">
+          {mode === 'local' ? (
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleLocalFile}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="w-full py-8 border-2 border-dashed border-zinc-600 rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors flex flex-col items-center gap-2 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <Loader2 size={24} className="animate-spin" />
+                ) : (
+                  <>
+                    <Upload size={24} />
+                    <span className="text-sm">클릭하여 이미지 선택</span>
+                    <span className="text-xs text-zinc-500">JPG, PNG, GIF, WebP 지원</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
+              />
+              <button
+                onClick={handleUrlSubmit}
+                disabled={isLoading || !url.trim()}
+                className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <><Loader2 size={16} className="animate-spin" /> 다운로드 중...</>
+                ) : (
+                  '이미지 다운로드 및 삽입'
+                )}
+              </button>
+              <p className="text-xs text-zinc-500 text-center">
+                이미지가 문서에 임베딩되어 오프라인에서도 볼 수 있습니다
+              </p>
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="mt-3 p-2 bg-red-900/30 border border-red-700 rounded text-red-400 text-xs">
+              {error}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
 
 export const EditorToolbar = ({ editor }: EditorToolbarProps) => {
   // Force re-render on editor state changes to update button highlights
@@ -25,6 +197,7 @@ export const EditorToolbar = ({ editor }: EditorToolbarProps) => {
   const [highlightDropdownOpen, setHighlightDropdownOpen] = useState(false);
   const [alignDropdownOpen, setAlignDropdownOpen] = useState(false);
   const [listDropdownOpen, setListDropdownOpen] = useState(false);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const colorDropdownRef = useRef<HTMLDivElement>(null);
   const highlightDropdownRef = useRef<HTMLDivElement>(null);
@@ -75,11 +248,8 @@ export const EditorToolbar = ({ editor }: EditorToolbarProps) => {
 
   if (!editor) return null;
 
-  const addImage = () => {
-    const url = window.prompt('Enter Image URL:');
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run();
-    }
+  const handleInsertImage = (dataUrl: string) => {
+    editor.chain().focus().setImage({ src: dataUrl }).run();
   };
 
   const setLink = () => {
@@ -396,9 +566,16 @@ export const EditorToolbar = ({ editor }: EditorToolbarProps) => {
         <LinkIcon size={16} />
       </ToolbarButton>
 
-      <ToolbarButton onClick={addImage} title="Insert Image">
+      <ToolbarButton onClick={() => setImageModalOpen(true)} title="Insert Image">
         <ImageIcon size={16} />
       </ToolbarButton>
+
+      {/* Image Picker Modal */}
+      <ImagePickerModal
+        isOpen={imageModalOpen}
+        onClose={() => setImageModalOpen(false)}
+        onInsert={handleInsertImage}
+      />
 
       <ToolbarButton onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Insert Table">
         <Grid size={16} />

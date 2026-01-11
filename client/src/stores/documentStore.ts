@@ -99,6 +99,17 @@ export const useDocumentStore = create<DocumentStore>()(
           const deltaDocs = response.docs;
           const serverTime = response.last_synced_at;
 
+          if (deltaDocs.length > 0) {
+            console.log(`Fetched ${deltaDocs.length} documents from server`);
+            deltaDocs.forEach(d => {
+              if (d.content && d.content.length > 0) {
+                console.log(`Doc [${d.title}] content length: ${d.content.length}`);
+              } else {
+                console.log(`Doc [${d.title}] has EMPTY content`);
+              }
+            });
+          }
+
           set((state) => {
             let newDocs = [...state.documents];
 

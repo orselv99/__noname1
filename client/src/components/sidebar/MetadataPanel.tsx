@@ -85,7 +85,29 @@ interface ResourceItem {
   type: 'image' | 'video' | 'audio';
   src: string;
   alt?: string;
+  size?: number; // Size in bytes
 }
+
+// Format bytes to human readable string
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
+// Calculate size from data URL or external URL hint
+const getDataUrlSize = (src: string): number => {
+  if (src.startsWith('data:')) {
+    // base64 data URL: size = base64 length * 3/4
+    const base64Part = src.split(',')[1];
+    if (base64Part) {
+      return Math.floor(base64Part.length * 0.75);
+    }
+  }
+  return 0; // External URL - size unknown without fetch
+};
 
 // 리소스 미리보기 다이얼로그
 const ResourcePreviewDialog = ({
@@ -155,13 +177,7 @@ const ResourcePreviewDialog = ({
   );
 };
 
-// Mock 데이터 (테스트용)
-const MOCK_RESOURCES: ResourceItem[] = [
-  { type: 'image', src: 'https://picsum.photos/400/300', alt: 'Sample Image 1' },
-  { type: 'image', src: 'https://picsum.photos/300/400', alt: 'Sample Image 2' },
-  { type: 'video', src: 'https://example.com/sample-video.mp4', alt: 'Sample Video' },
-  { type: 'audio', src: 'https://example.com/sample-audio.mp3', alt: 'Sample Audio' },
-];
+// MOCK_RESOURCES 제거됨 - 실제 콘텐츠만 표시
 
 const ResourceList = memo(({ content, liveContent, forceExpanded }: { content: string; liveContent?: string | null; forceExpanded?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -188,7 +204,8 @@ const ResourceList = memo(({ content, liveContent, forceExpanded }: { content: s
         images.forEach(img => {
           const src = img.getAttribute('src');
           if (src) {
-            items.push({ type: 'image', src, alt: img.getAttribute('alt') || undefined });
+            const size = getDataUrlSize(src);
+            items.push({ type: 'image', src, alt: img.getAttribute('alt') || undefined, size: size || undefined });
           }
         });
 
@@ -197,7 +214,8 @@ const ResourceList = memo(({ content, liveContent, forceExpanded }: { content: s
         videos.forEach(video => {
           const src = video.getAttribute('src') || video.querySelector('source')?.getAttribute('src');
           if (src) {
-            items.push({ type: 'video', src });
+            const size = getDataUrlSize(src);
+            items.push({ type: 'video', src, size: size || undefined });
           }
         });
 
@@ -206,7 +224,8 @@ const ResourceList = memo(({ content, liveContent, forceExpanded }: { content: s
         audios.forEach(audio => {
           const src = audio.getAttribute('src') || audio.querySelector('source')?.getAttribute('src');
           if (src) {
-            items.push({ type: 'audio', src });
+            const size = getDataUrlSize(src);
+            items.push({ type: 'audio', src, size: size || undefined });
           }
         });
       } catch (e) {
@@ -214,8 +233,7 @@ const ResourceList = memo(({ content, liveContent, forceExpanded }: { content: s
       }
     }
 
-    // Mock 데이터 추가 (테스트용 - 나중에 제거)
-    return [...items, ...MOCK_RESOURCES];
+    return items;
   }, [effectiveContent]);
 
   if (resources.length === 0) return null;
@@ -269,7 +287,10 @@ const ResourceList = memo(({ content, liveContent, forceExpanded }: { content: s
               </span>
               <div className="flex-1 min-w-0">
                 <span className="font-medium truncate block">{resource.alt || getFileName(resource.src)}</span>
-                <span className="text-[10px] text-zinc-600">{getTypeLabel(resource.type)}</span>
+                <div className="flex items-center gap-2 text-[10px] text-zinc-600">
+                  <span>{getTypeLabel(resource.type)}</span>
+                  {resource.size && <span>· {formatBytes(resource.size)}</span>}
+                </div>
               </div>
             </div>
           ))}
@@ -465,6 +486,49 @@ export const MetadataPanel = () => {
   const liveEditorContent = useDocumentStore(state => state.liveEditorContent);
   const saveDocument = useDocumentStore(state => state.saveDocument);
   const { confirm } = useConfirm();
+
+  // Calculate total media size from content
+  const { binary: totalMediaSize, encoded: totalEncodedMediaSize } = useMemo(() => {
+    let binary = 0;
+    let encoded = 0;
+    const content = liveEditorContent ?? activeDocImmediate?.content;
+    if (!content) return { binary: 0, encoded: 0 };
+
+    try {
+      const doc = new DOMParser().parseFromString(content, 'text/html');
+
+      // Helper to process elements
+      const processElement = (el: Element) => {
+        // Try src attribute first
+        let src = el.getAttribute('src');
+
+        // For video/audio, check source children if src is missing
+        if (!src && (el.tagName === 'VIDEO' || el.tagName === 'AUDIO')) {
+          src = el.querySelector('source')?.getAttribute('src');
+        }
+
+        if (src?.startsWith('data:')) {
+          const parts = src.split(',');
+          const base64Part = parts[1];
+          // Add metadata part length (e.g. "data:image/png;base64,") to encoded size as well
+          const metaPart = parts[0] + ',';
+
+          if (base64Part) {
+            binary += Math.floor(base64Part.length * 0.75);
+            encoded += (base64Part.length + metaPart.length);
+          }
+        }
+      };
+
+      Array.from(doc.getElementsByTagName('img')).forEach(processElement);
+      Array.from(doc.getElementsByTagName('video')).forEach(processElement);
+      Array.from(doc.getElementsByTagName('audio')).forEach(processElement);
+
+    } catch (e) {
+      // ignore
+    }
+    return { binary, encoded };
+  }, [liveEditorContent, activeDocImmediate?.content]);
 
   // 섹션 펼침 상태 (Hooks는 조건부 return 전에 호출해야 함)
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
@@ -685,8 +749,8 @@ export const MetadataPanel = () => {
           )}
         </div>
 
-        {/* Footnotes */}
-        <LinkList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} />
+        {/* 고민중: Footnotes */}
+        {/* <LinkList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} /> */}
 
         {/* Linked Mentions */}
         <LinkList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isLinksExpanded} />
@@ -783,7 +847,17 @@ export const MetadataPanel = () => {
         </div>
         <div className="flex justify-between">
           <span className="flex items-center gap-1"><FileText size={12} /> Size</span>
-          <span>{activeDoc.size || '0'} bytes</span>
+          <span>
+            {(() => {
+              const totalSize = parseInt(activeDoc.size || '0', 10);
+              const textSize = Math.max(0, totalSize - totalEncodedMediaSize);
+
+              if (totalMediaSize > 0) {
+                return `${formatBytes(totalSize)} (${formatBytes(textSize)} text + ${formatBytes(totalMediaSize)} media)`;
+              }
+              return formatBytes(totalSize);
+            })()}
+          </span>
         </div>
       </div>
 

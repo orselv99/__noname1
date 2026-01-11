@@ -20,6 +20,7 @@
         "minHeight": 700,
         "decorations": false,
         "transparent": false,
+        "dragDropEnabled": false,
         "backgroundColor": [
           9,
           9,

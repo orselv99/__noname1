@@ -482,11 +482,7 @@ fn save_document_tags(
 
 /// Get current timestamp as ISO 8601 string
 fn chrono_now() -> String {
-  use std::time::{SystemTime, UNIX_EPOCH};
-  let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-  let secs = duration.as_secs();
-  // Simple ISO 8601 format
-  format!("1970-01-01T00:00:00Z+{}s", secs)
+  chrono::Utc::now().to_rfc3339()
 }
 
 // ============================================================================
