@@ -873,55 +873,46 @@ export const MetadataPanel = () => {
           <div className="px-4 pb-3 overflow-y-auto custom-scrollbar max-h-48">
             {/* Git Graph Style Revisions */}
             <div className="relative pl-5">
-              {/* Vertical Line */}
-              <div className="absolute left-[7px] top-3 bottom-3 w-px bg-zinc-700" />
+              {/* Vertical Line - only show if version > 1 */}
+              {activeDoc.version > 1 && (
+                <div className="absolute left-[7px] top-3 bottom-3 w-px bg-zinc-700" />
+              )}
 
               {/* Revision Items */}
               <div className="space-y-2">
-                {/* Current - 파란색 큰 점 */}
+                {/* Current Version - 파란색 큰 점 */}
                 <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1.5 rounded">
                   <div className="absolute left-[3px] top-2.5 w-2.5 h-2.5 rounded-full bg-blue-500 ring-2 ring-zinc-950" />
                   <div className="flex-1 min-w-0 ml-1">
-                    <div className="text-xs text-zinc-200 truncate">v5. <span className="text-zinc-400">Real Real Final review</span> <span className="text-zinc-500">· orseL</span></div>
-                    <div className="text-[10px] text-zinc-600">2025-01-11 15:17</div>
+                    <div className="text-xs text-zinc-200 truncate">
+                      v{activeDoc.version}. <span className="text-zinc-400">{activeDoc.title}</span> <span className="text-zinc-500">· {activeDoc.creator_name || 'Unknown'}</span>
+                    </div>
+                    <div className="text-[10px] text-zinc-600">{formatDate(activeDoc.updated_at)}</div>
                   </div>
                 </div>
 
-                {/* v4 - 회색 작은 점 */}
-                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
-                  <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                  <div className="flex-1 min-w-0 ml-1">
-                    <div className="text-xs text-zinc-500 truncate">v4. <span className="text-zinc-600">Real Final review</span> <span className="text-zinc-600">· Someone</span></div>
-                    <div className="text-[10px] text-zinc-700">2025-01-10 12:45</div>
+                {/* Previous Versions Placeholder - show message if version is 1 */}
+                {activeDoc.version === 1 ? (
+                  <div className="text-xs text-zinc-600 italic pl-4">
+                    No previous versions. Publish to create a new version.
                   </div>
-                </div>
-
-                {/* v3 - 회색 작은 점 */}
-                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
-                  <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                  <div className="flex-1 min-w-0 ml-1">
-                    <div className="text-xs text-zinc-500 truncate">v3. <span className="text-zinc-600">Final review</span> <span className="text-zinc-600">· IDK</span></div>
-                    <div className="text-[10px] text-zinc-700">2025-01-09 10:30</div>
-                  </div>
-                </div>
-
-                {/* v2 - 회색 작은 점 */}
-                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
-                  <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                  <div className="flex-1 min-w-0 ml-1">
-                    <div className="text-xs text-zinc-500 truncate">v2. <span className="text-zinc-600">Added summary section</span> <span className="text-zinc-600">· Jane</span></div>
-                    <div className="text-[10px] text-zinc-700">2025-01-08 15:22</div>
-                  </div>
-                </div>
-
-                {/* v1 - 회색 작은 점 */}
-                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
-                  <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                  <div className="flex-1 min-w-0 ml-1">
-                    <div className="text-xs text-zinc-500 truncate">v1. <span className="text-zinc-600">Initial draft</span> <span className="text-zinc-600">· John</span></div>
-                    <div className="text-[10px] text-zinc-700">2025-01-07 09:15</div>
-                  </div>
-                </div>
+                ) : (
+                  // Show placeholder for version history (to be implemented with revision table)
+                  Array.from({ length: Math.min(activeDoc.version - 1, 4) }, (_, idx) => {
+                    const v = activeDoc.version - 1 - idx;
+                    return (
+                      <div key={v} className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
+                        <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                        <div className="flex-1 min-w-0 ml-1">
+                          <div className="text-xs text-zinc-500 truncate">
+                            v{v}. <span className="text-zinc-600">{activeDoc.title}</span> <span className="text-zinc-600">· {activeDoc.creator_name || 'Unknown'}</span>
+                          </div>
+                          <div className="text-[10px] text-zinc-700">(History data not available)</div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>

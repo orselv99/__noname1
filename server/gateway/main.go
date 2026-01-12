@@ -110,9 +110,7 @@ func main() {
 			protected.POST("/access/grant", aclHandler.GrantAccess)
 			protected.GET("/access/requests", aclHandler.ListAccessRequests)
 
-			// Advanced ACL - Visibility & Approvals
-			protected.POST("/documents/metadata", aclHandler.CreateDocumentMetadata)
-			protected.PUT("/documents/visibility", aclHandler.UpdateDocumentVisibility)
+			// Advanced ACL - Approvals
 			protected.GET("/access/approvals", aclHandler.ListVisibilityApprovals)
 			protected.POST("/access/approvals/review", aclHandler.ApproveVisibilityChange)
 
