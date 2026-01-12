@@ -930,6 +930,9 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
   };
 
   const handleAddSubPage = async (groupId: string, parentId?: string) => {
+    // Ensure the target group stays expanded after document creation
+    expandedGroupsRef.current.add(groupId);
+
     // Auto-expand parent if creating a sub-page
     if (parentId) {
       expandItem(groupId, parentId);
@@ -955,7 +958,7 @@ export const DocumentList = ({ onSelectDocument }: DocumentListProps) => {
       defaultVisibility = projects[groupId].visibility;
     }
 
-    await createDocument('Untitled', groupId === 'private_group' ? PRIVATE_GROUP_ID : groupId, groupType, parentId, defaultVisibility);
+    await createDocument('Untitled', groupId === 'private_group' ? undefined : groupId, groupType, parentId, defaultVisibility);
   };
 
 

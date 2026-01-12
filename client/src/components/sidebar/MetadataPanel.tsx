@@ -626,6 +626,9 @@ export const MetadataPanel = () => {
   const [isResourcesExpanded, setIsResourcesExpanded] = useState(true);
   const [isMentionsExpanded, setIsMentionsExpanded] = useState(true);
 
+  // 선택된 태그 인덱스 (동일한 evidence를 가진 태그들을 구분하기 위해)
+  const [selectedTagIndex, setSelectedTagIndex] = useState<number | null>(null);
+
   // Revision 펼침 상태 (상단 모두펼치기에 영향 안받음)
   const [isRevisionExpanded, setIsRevisionExpanded] = useState(false);
 
@@ -796,12 +799,17 @@ export const MetadataPanel = () => {
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        const current = useDocumentStore.getState().highlightedEvidence;
-                        // Search for tag name itself instead of evidence (which may be incorrect)
-                        const searchText = t.tag;
-                        useDocumentStore.getState().setHighlightedEvidence(current === searchText ? null : searchText);
+                        // Toggle selection based on index to handle duplicate evidence
+                        if (selectedTagIndex === i) {
+                          setSelectedTagIndex(null);
+                          useDocumentStore.getState().setHighlightedEvidence(null);
+                        } else {
+                          setSelectedTagIndex(i);
+                          const searchText = t.evidence || t.tag; // Fallback to tag if no evidence
+                          useDocumentStore.getState().setHighlightedEvidence(searchText);
+                        }
                       }}
-                      className={`peer cursor-pointer px-2 py-1 border rounded text-xs transition-colors inline-flex items-center gap-1 max-w-full ${useDocumentStore.getState().highlightedEvidence === t.tag
+                      className={`peer cursor-pointer px-2 py-1 border rounded text-xs transition-colors inline-flex items-center gap-1 max-w-full ${selectedTagIndex === i
                         ? 'bg-blue-900/40 border-blue-500 text-blue-300'
                         : 'bg-zinc-900 border-zinc-700 text-blue-400 hover:border-blue-500 hover:bg-zinc-800'
                         }`}

@@ -24,6 +24,7 @@ export default function CreatePositionModal({ isOpen, onClose, onSuccess }: Crea
   // Bulk Create States
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<any[]>([]);
+  const [importMode, setImportMode] = useState<'upsert' | 'replace'>('upsert');
 
   // Common
   const [isLoading, setIsLoading] = useState(false);
@@ -66,7 +67,7 @@ export default function CreatePositionModal({ isOpen, onClose, onSuccess }: Crea
         return;
       }
 
-      const result = await batchCreatePositions(requests);
+      const result = await batchCreatePositions(requests, importMode);
       onSuccess({ bulkCount: result?.success_count || requests.length });
       onClose();
       resetForm();
@@ -93,7 +94,7 @@ export default function CreatePositionModal({ isOpen, onClose, onSuccess }: Crea
     return data;
   };
 
-  const batchCreatePositions = async (items: any[]) => {
+  const batchCreatePositions = async (items: any[], mode: string) => {
     const res = await fetch('/api/v1/positions/batch', {
       method: 'POST',
       headers: {
@@ -101,7 +102,7 @@ export default function CreatePositionModal({ isOpen, onClose, onSuccess }: Crea
         'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         'X-Tenant-ID': window.location.hostname.split('.')[0]
       },
-      body: JSON.stringify({ requests: items }),
+      body: JSON.stringify({ requests: items, import_mode: mode }),
     });
 
     const data = await res.json();
@@ -141,6 +142,7 @@ export default function CreatePositionModal({ isOpen, onClose, onSuccess }: Crea
     setError('');
     setCsvFile(null);
     setCsvPreview([]);
+    setImportMode('upsert');
     setActiveTab('single');
   };
 
@@ -219,6 +221,61 @@ export default function CreatePositionModal({ isOpen, onClose, onSuccess }: Crea
                 </form>
               ) : (
                 <div className="space-y-4">
+                  {/* Import Mode Selection */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-400">Import Mode</label>
+                    <div className="flex bg-zinc-800/50 p-1 rounded-lg border border-zinc-700/50">
+                      <label
+                        className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-md cursor-pointer transition-all ${importMode === 'upsert'
+                          ? 'bg-blue-600 shadow-lg ring-1 ring-blue-500'
+                          : 'hover:bg-zinc-700/50 text-gray-400'
+                          }`}
+                      >
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="upsert"
+                          checked={importMode === 'upsert'}
+                          onChange={() => setImportMode('upsert')}
+                          className="hidden"
+                        />
+                        <span className={`text-xs font-semibold ${importMode === 'upsert' ? 'text-white' : 'text-gray-300'}`}>
+                          Upsert
+                        </span>
+                        <span className={`text-[10px] mt-0.5 ${importMode === 'upsert' ? 'text-blue-200' : 'text-gray-500'}`}>
+                          Add new, update existing
+                        </span>
+                      </label>
+
+                      <label
+                        className={`flex-1 flex flex-col items-center justify-center py-3 px-2 rounded-md cursor-pointer transition-all ml-1 ${importMode === 'replace'
+                          ? 'bg-red-600 shadow-lg ring-1 ring-red-500'
+                          : 'hover:bg-zinc-700/50 text-gray-400'
+                          }`}
+                      >
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="replace"
+                          checked={importMode === 'replace'}
+                          onChange={() => setImportMode('replace')}
+                          className="hidden"
+                        />
+                        <span className={`text-xs font-semibold ${importMode === 'replace' ? 'text-white' : 'text-gray-300'}`}>
+                          Replace
+                        </span>
+                        <span className={`text-[10px] mt-0.5 ${importMode === 'replace' ? 'text-red-200' : 'text-gray-500'}`}>
+                          Delete all, then import
+                        </span>
+                      </label>
+                    </div>
+                    {importMode === 'replace' && (
+                      <div className="mt-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                        ⚠️ This will delete ALL existing positions and replace them with the imported data.
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex justify-end">
                     <button
                       type="button"

@@ -475,8 +475,8 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        history: false, // Disabled since we're not using collaboration per-tab
-        // Use CustomParagraph instead
+        // History is enabled by default for Undo/Redo (Ctrl+Z, Ctrl+Y)
+        // Use CustomParagraph instead of default Paragraph
       }),
       CustomParagraph,
       FootnoteRef,
@@ -754,11 +754,69 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
         matchLen = trimmed.length;
       }
 
-      // Fallback 2: Try fuzzy matching - find significant words
+      // Fallback 2: Normalized search ignoring whitespace differences
+      // This handles cases where AI-generated evidence has different spacing than the original
+      if (matchIndex === -1) {
+        // Normalize both strings by collapsing all whitespace to single spaces
+        const normalizeText = (text: string) => text.replace(/\s+/g, ' ').trim();
+        const normalizedEvidence = normalizeText(highlightedEvidence);
+        const normalizedAccumulator = normalizeText(stringAccumulator);
+
+        const normalizedMatchIndex = normalizedAccumulator.indexOf(normalizedEvidence);
+        if (normalizedMatchIndex !== -1) {
+          console.log('Found via normalized search at index:', normalizedMatchIndex);
+
+          // Map normalized index back to original index
+          // Count how much whitespace was removed before this position
+          let originalIndex = 0;
+          let normalizedIndex = 0;
+
+          // Skip leading whitespace in original
+          while (originalIndex < stringAccumulator.length && /\s/.test(stringAccumulator[originalIndex])) {
+            originalIndex++;
+          }
+
+          // Walk through to find the original position
+          while (normalizedIndex < normalizedMatchIndex && originalIndex < stringAccumulator.length) {
+            if (/\s/.test(stringAccumulator[originalIndex])) {
+              // Skip extra whitespace
+              while (originalIndex < stringAccumulator.length && /\s/.test(stringAccumulator[originalIndex])) {
+                originalIndex++;
+              }
+              normalizedIndex++; // Count as one space in normalized
+            } else {
+              originalIndex++;
+              normalizedIndex++;
+            }
+          }
+
+          matchIndex = originalIndex;
+
+          // Calculate match length in original text
+          let endOriginalIndex = originalIndex;
+          let normalizedLen = 0;
+          while (normalizedLen < normalizedEvidence.length && endOriginalIndex < stringAccumulator.length) {
+            if (/\s/.test(stringAccumulator[endOriginalIndex])) {
+              // Skip extra whitespace
+              while (endOriginalIndex < stringAccumulator.length && /\s/.test(stringAccumulator[endOriginalIndex])) {
+                endOriginalIndex++;
+              }
+              normalizedLen++; // Count as one space
+            } else {
+              endOriginalIndex++;
+              normalizedLen++;
+            }
+          }
+
+          matchLen = endOriginalIndex - matchIndex;
+        }
+      }
+
+      // Fallback 3: Try fuzzy matching - find significant words
       if (matchIndex === -1) {
         // Extract significant words (3+ chars, exclude common Korean particles)
         const words = highlightedEvidence
-          .split(/[\s.,!?;:'"()[\]{}]+/)
+          .split(/[\s.,!?;:'"()\[\]{}]+/)
           .filter(w => w.length >= 3)
           .filter(w => !['이다', '있다', '하다', '되다', '이며', '있으며', '한다', '된다'].includes(w))
           .slice(0, 8);
@@ -776,7 +834,7 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
         }
       }
 
-      // Fallback 3: If still not found, try to find the tag name itself
+      // Fallback 4: If still not found, try to find the tag name itself
       if (matchIndex === -1) {
         // The highlightedEvidence might be the evidence, but we can also search for any Korean proper noun
         const koreanWords = highlightedEvidence.match(/[가-힣]{2,}/g) || [];

@@ -208,7 +208,9 @@ export const useDocumentStore = create<DocumentStore>()(
             ...savedDoc,
             summary: savedDoc.summary || doc.summary,
             tags: (savedDoc.tags && savedDoc.tags.length > 0) ? savedDoc.tags : doc.tags,
-            creator_name: savedDoc.creator_name || doc.creator_name
+            creator_name: savedDoc.creator_name || doc.creator_name,
+            // Preserve parent_id if backend doesn't return it
+            parent_id: savedDoc.parent_id !== undefined ? savedDoc.parent_id : doc.parent_id,
           };
 
           get().updateDocument(mergedDoc);
@@ -412,8 +414,8 @@ export const useDocumentStore = create<DocumentStore>()(
 
         if (!targetDoc) return;
 
-        // Soft Delete if Private AND not already deleted
-        const isSoftDelete = targetDoc.group_type === 2 && !targetDoc.deleted_at;
+        // Soft Delete if not already deleted (all group types go to recycle bin first)
+        const isSoftDelete = !targetDoc.deleted_at;
 
         if (isSoftDelete) {
           // Soft Delete: Mark deleted_at (Recursive) AND Close Tabs

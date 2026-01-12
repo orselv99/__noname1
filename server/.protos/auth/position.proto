@@ -68,6 +68,7 @@ message BatchCreatePositionsRequest {
     string name = 1;
   }
   repeated Request requests = 2;
+  string import_mode = 3; // "upsert" or "replace"
 }
 
 message BatchCreatePositionsResponse {

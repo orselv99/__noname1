@@ -161,9 +161,9 @@ pub fn spawn_sidecars(app: &AppHandle) -> Result<(), String> {
   let gen_model = resource_path
     .join("model")
     //.join("qwen2.5-1.5b-instruct-q4_k_m.gguf");
-    //.join("gemma-2-2b-it-Q4_K_M.gguf");
-    //.join("google_gemma-3-4b-it-IQ3_M.gguf");
-    .join("google_gemma-3-4b-it-IQ2_M.gguf");
+    .join("gemma-2-2b-it-Q4_K_M.gguf");
+  //.join("google_gemma-3-4b-it-IQ3_M.gguf");
+  //.join("google_gemma-3-4b-it-IQ2_M.gguf");
 
   println!("Debug: Spawning Generation Server (Sidecar)...");
   let gen_sidecar = app

@@ -164,6 +164,7 @@ func (h *PositionHandler) BatchCreatePositions(c *gin.Context) {
 		Requests []struct {
 			Name string `json:"name"`
 		} `json:"requests"`
+		ImportMode string `json:"import_mode"` // "upsert" or "replace"
 	}
 
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
@@ -179,8 +180,9 @@ func (h *PositionHandler) BatchCreatePositions(c *gin.Context) {
 	}
 
 	req := pb.BatchCreatePositionsRequest{
-		TenantId: tenantID,
-		Requests: pbRequests,
+		TenantId:   tenantID,
+		Requests:   pbRequests,
+		ImportMode: reqBody.ImportMode,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

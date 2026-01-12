@@ -15,6 +15,7 @@ $protoCmd = "apk add --no-cache protobuf-dev && " +
             "protoc --proto_path=server/.protos/ --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import server/.protos/auth/acl.proto && " +
             "protoc --proto_path=server/.protos/ --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import server/.protos/auth/document.proto && " +
             "protoc --proto_path=server/.protos/ --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import server/.protos/auth/department.proto && " +
+            "protoc --proto_path=server/.protos/ --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import server/.protos/auth/position.proto && " +
             "protoc --proto_path=server/.protos/ --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import server/.protos/auth/project.proto && " +
             "protoc --proto_path=server/.protos/ --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import server/.protos/auth/auth.proto && " +
             "protoc --proto_path=server/.protos/ --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import server/.protos/index/index.proto && " +

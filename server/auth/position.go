@@ -151,10 +151,10 @@ func (s *server) BatchCreatePositions(ctx context.Context, req *pb.BatchCreatePo
 	failureCount := 0
 	var failureReasons []string
 
-	// Get current max order
-	var maxOrder int
-	if err := s.db.Model(&Position{}).Where("tenant_id = ?", req.TenantId).Select("COALESCE(MAX(sort_order), 0)").Scan(&maxOrder).Error; err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get max order: %v", err)
+	// Handle import_mode
+	importMode := req.ImportMode
+	if importMode == "" {
+		importMode = "upsert" // Default mode
 	}
 
 	tx := s.db.Begin()
@@ -164,10 +164,40 @@ func (s *server) BatchCreatePositions(ctx context.Context, req *pb.BatchCreatePo
 		}
 	}()
 
+	// Map to track existing positions by name
+	existingNames := make(map[string]bool)
+
+	if importMode == "replace" {
+		// Delete all existing positions for this tenant
+		if err := tx.Where("tenant_id = ?", req.TenantId).Delete(&Position{}).Error; err != nil {
+			tx.Rollback()
+			return nil, status.Errorf(codes.Internal, "failed to clear existing positions: %v", err)
+		}
+	} else {
+		// upsert mode: fetch existing positions to skip duplicates
+		var existingPositions []Position
+		tx.Where("tenant_id = ?", req.TenantId).Find(&existingPositions)
+		for _, p := range existingPositions {
+			existingNames[p.Name] = true
+		}
+	}
+
+	// Get current max order (after potential delete)
+	var maxOrder int
+	if err := tx.Model(&Position{}).Where("tenant_id = ?", req.TenantId).Select("COALESCE(MAX(sort_order), 0)").Scan(&maxOrder).Error; err != nil {
+		tx.Rollback()
+		return nil, status.Errorf(codes.Internal, "failed to get max order: %v", err)
+	}
+
 	for _, item := range req.Requests {
 		if item.Name == "" {
 			failureCount++
 			failureReasons = append(failureReasons, "name is required")
+			continue
+		}
+
+		// Skip if already exists in upsert mode
+		if existingNames[item.Name] {
 			continue
 		}
 
@@ -181,10 +211,9 @@ func (s *server) BatchCreatePositions(ctx context.Context, req *pb.BatchCreatePo
 		if err := tx.Create(&pos).Error; err != nil {
 			failureCount++
 			failureReasons = append(failureReasons, "failed to create position: "+item.Name)
-			// Don't rollback entire batch, just log failure (or could replicate partial success logic)
-			// here we treat it as best-effort transaction
 		} else {
 			successCount++
+			existingNames[item.Name] = true // Track to skip duplicates in same batch
 		}
 	}
 

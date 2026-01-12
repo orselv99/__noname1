@@ -54,6 +54,12 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
 
   let conn = Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))?;
 
+  // Disable foreign key enforcement for local client DB flexibility
+  // This allows documents to be created even if user caching fails
+  conn
+    .execute("PRAGMA foreign_keys = OFF", [])
+    .map_err(|e| format!("Failed to disable foreign keys: {}", e))?;
+
   // Create users table matching server schema (server/auth/model.go User)
   conn
     .execute(
