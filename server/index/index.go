@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	pb "server/.protos/index"
-	"server/common/crypto"
 
 	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"
@@ -25,7 +24,7 @@ type TagEvidence struct {
 func (s *server) IndexDocument(ctx context.Context, req *pb.IndexDocumentRequest) (*pb.IndexDocumentResponse, error) {
 	// Use provided embedding
 	vectorData := req.Document.Embedding
-	if len(vectorData) != 1536 {
+	if len(vectorData) != 768 {
 		// Fallback or Error?
 		// For now, if empty, we might want to error, or leave it as check constraints.
 		// If client sends empty, we can't search.
@@ -53,15 +52,9 @@ func (s *server) IndexDocument(ctx context.Context, req *pb.IndexDocumentRequest
 	if err != nil {
 		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to marshal tags"}, nil
 	}
-	encryptedTagEvidences, err := crypto.Encrypt(string(tagEvidencesJson), req.Document.UserSalt)
-	if err != nil {
-		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to encrypt tags"}, nil
-	}
-
-	encryptedSummary, err := crypto.Encrypt(req.Document.Summary, req.Document.UserSalt)
-	if err != nil {
-		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to encrypt summary"}, nil
-	}
+	// Client Side Encryption: 클라이언트가 이미 암호화해서 보냈으므로 그대로 저장
+	encryptedTagEvidences := string(tagEvidencesJson)
+	encryptedSummary := req.Document.Summary
 
 	doc := Document{
 		ID:           req.Document.Id,
@@ -69,6 +62,10 @@ func (s *server) IndexDocument(ctx context.Context, req *pb.IndexDocumentRequest
 		TagEvidences: encryptedTagEvidences,
 		Summary:      encryptedSummary,
 		OwnerID:      req.Document.OwnerId,
+		GroupID:      req.Document.GroupId,
+		GroupType:    req.Document.GroupType,
+		CreatedAt:    req.Document.CreatedAt,
+		UpdatedAt:    req.Document.UpdatedAt,
 		Embedding:    embeddingVector,
 	}
 
@@ -87,7 +84,7 @@ func (s *server) IndexDocument(ctx context.Context, req *pb.IndexDocumentRequest
 
 func (s *server) SearchDocuments(ctx context.Context, req *pb.SearchDocumentsRequest) (*pb.SearchDocumentsResponse, error) {
 	// TODO: req.Query를 AI Service에 보내 임베딩 벡터로 변환 (Query Embedding)
-	vec := make([]float32, 1536)
+	vec := make([]float32, 768)
 	// 테스트 매칭을 위해 IndexDocument와 동일한 더미 값 설정
 	vec[0] = 0.1
 	vec[1] = 0.2
@@ -105,28 +102,15 @@ func (s *server) SearchDocuments(ctx context.Context, req *pb.SearchDocumentsReq
 
 	var results []*pb.SearchResult
 
-	userSalt := req.UserSalt
-
 	for _, d := range docs {
-		// Decrypt Title
-		decryptedTitle, err := crypto.Decrypt(d.Title, userSalt)
-		if err != nil {
-			decryptedTitle = "[Decryption Failed]"
-		}
+		// Title, Summary는 암호화된 상태 그대로 반환
+		decryptedTitle := d.Title
+		decryptedSummary := d.Summary
 
-		// Decrypt Summary
-		decryptedSummary, err := crypto.Decrypt(d.Summary, userSalt)
-		if err != nil {
-			// 복호화 실패 시 로그 남기고 건너뛰거나 에러 처리 (여기서는 에러 문자열로 대체)
-			decryptedSummary = "[Decryption Failed]"
-		}
-
-		// Decrypt TagEvidences
-		decryptedTagEvidencesJson, err := crypto.Decrypt(d.TagEvidences, userSalt)
+		// TagEvidences: DB의 JSON 문자열을 파싱 (값은 암호화되어 있음)
 		var tagEvidences []TagEvidence
-		if err == nil {
-			json.Unmarshal([]byte(decryptedTagEvidencesJson), &tagEvidences)
-		}
+		// 에러 처리 생략 (또는 로그)
+		json.Unmarshal([]byte(d.TagEvidences), &tagEvidences)
 
 		// Struct TagEvidences -> Proto TagEvidences
 		var tagEvidencesProto []*pb.TagEvidence
@@ -143,7 +127,8 @@ func (s *server) SearchDocuments(ctx context.Context, req *pb.SearchDocumentsReq
 				Title:        decryptedTitle,
 				TagEvidences: tagEvidencesProto,
 				Summary:      decryptedSummary,
-				UpdatedAt:    d.UpdatedAt.Unix(),
+				UpdatedAt:    d.UpdatedAt,
+				CreatedAt:    d.CreatedAt,
 				OwnerId:      d.OwnerID,
 			},
 			Score: 0.0,

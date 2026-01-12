@@ -1,6 +1,7 @@
 use crate::commands::auth::AuthState;
 use crate::crypto::{self, decrypt_content, encrypt_content};
 use crate::database::DatabaseState;
+use base64::engine::Engine;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -81,6 +82,7 @@ pub struct SaveDocumentRequest {
   pub is_favorite: Option<bool>,
   pub version: Option<i32>,
   pub tags: Option<Vec<DocumentTag>>,
+  pub creator_name: Option<String>,
 }
 
 #[tauri::command]
@@ -108,7 +110,7 @@ pub async fn save_document(
     .as_ref()
     .map(|s| encrypt_content(&user_id, s))
     .transpose()?;
-  let created_at_enc = encrypt_content(&user_id, &now)?;
+  let mut created_at_enc = encrypt_content(&user_id, &now)?;
   let updated_at_enc = encrypt_content(&user_id, &now)?;
   let size_enc = encrypt_content(&user_id, &size_str)?;
 
@@ -152,6 +154,10 @@ pub async fn save_document(
         .unwrap_or(None);
 
       if let Some(blob) = existing_created_at_blob {
+        // Reuse existing encrypted timestamp for DB/Server
+        created_at_enc = blob.clone();
+
+        // Decrypt for return value
         if let Ok(decrypted) = decrypt_content(&user_id, &blob) {
           return_created_at = decrypted;
         }
@@ -195,7 +201,7 @@ pub async fn save_document(
                     req.is_favorite.unwrap_or(false),
                     ts, // Plaintext timestamp
                     req.parent_id,
-                    req.version.unwrap_or(1),
+                    req.version.unwrap_or(0),
                     media_size_enc
                 ],
             )
@@ -231,6 +237,36 @@ pub async fn save_document(
         }
       }
 
+      // 4. Save Revision (Snapshot)
+      // Constraints: No Private Docs (2), No Version 0
+      let current_version = req.version.unwrap_or(0);
+      if req.group_type != 2 && current_version > 0 {
+        let revision_id = Uuid::new_v4().to_string();
+        // Use updated_at_enc for revision timestamp (current time)
+        let revision_created_at_enc = encrypt_content(&user_id, &now)?;
+
+        conn
+          .execute(
+            "INSERT INTO document_revisions (
+                  id, document_id, version, snapshot, title, creator_name, created_at
+              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+              ON CONFLICT(document_id, version) DO UPDATE SET
+                  snapshot = excluded.snapshot,
+                  title = excluded.title,
+                  created_at = excluded.created_at",
+            rusqlite::params![
+              revision_id,
+              doc_id,
+              current_version,
+              content_enc,
+              title_enc,
+              req.creator_name,
+              revision_created_at_enc
+            ],
+          )
+          .map_err(|e| format!("Failed to save revision: {}", e))?;
+      }
+
       // 4. Server RAG Sync (if Published)
       if req.document_state == 3 {
         // Published
@@ -258,20 +294,19 @@ pub async fn save_document(
         // But if `save_document` is called with partial... `documentStore` sends object spread `...doc`.
 
         let tags_to_send = req.tags.clone().unwrap_or_default();
-        let summary_to_send = req.summary.clone().unwrap_or_default(); // Plaintext
-        let title_to_send = req.title.clone(); // Plaintext
 
-        // We need to release DB lock before making network call to avoid holding it too long?
-        // Actually `db_state.lock()` returns a MutexGuard.
-        // We are inside `{ let db = ... }` scope.
-        // We can do network call AFTER this scope.
-        // But we need `embedding_blob` out.
-
-        // Let's move RAG sync AFTER the DB scope.
-        // But we need to pass data out.
-        (embedding_blob, tags_to_send, summary_to_send, title_to_send)
+        // Pass encrypted data to RAG sync
+        // We use the encrypted variables calculated earlier in this block
+        (
+          embedding_blob,
+          tags_to_send,
+          summary_enc,
+          title_enc,
+          created_at_enc,
+          updated_at_enc,
+        )
       } else {
-        (None, Vec::new(), String::new(), String::new())
+        (None, Vec::new(), None, Vec::new(), Vec::new(), Vec::new())
       }
     } else {
       return Err("Database not initialized".to_string());
@@ -284,7 +319,8 @@ pub async fn save_document(
   // But embedding might be missing even if Published.
   // Let's use `req.document_state` check again.
 
-  if req.document_state == 3 {
+  // Perform RAG Sync if we have data and state is Published, AND NOT Private
+  if req.document_state == 3 && req.group_type != 2 {
     // Prepare Payload
     // We need auth token
     let token = {
@@ -298,22 +334,24 @@ pub async fn save_document(
       let embedding_vec = if let Some(blob) = _rag_data.0 {
         bytes_to_embedding(&blob)
       } else {
-        Vec::new() // Server might reject empty? Or we skip?
-                   // If no embedding, we can't really index for RAG properly on server if server expects it.
-                   // But server implementation handles empty check.
+        Vec::new()
       };
 
       // Construct JSON
       let payload = serde_json::json!({
-          "title": _rag_data.3,
-          "summary": _rag_data.2, // Plaintext
+          "title": base64::engine::general_purpose::STANDARD.encode(&_rag_data.3),
+          "summary": _rag_data.2.as_ref().map(|s| base64::engine::general_purpose::STANDARD.encode(s)).unwrap_or_default(),
           "tag_evidences": _rag_data.1.iter().map(|t| {
               serde_json::json!({
                   "tag": t.tag,
                   "evidence": t.evidence.clone().unwrap_or_default()
               })
           }).collect::<Vec<_>>(),
-          "embedding": embedding_vec
+          "embedding": embedding_vec,
+          "group_id": req.group_id,
+          "group_type": req.group_type,
+          "created_at": base64::engine::general_purpose::STANDARD.encode(&_rag_data.4),
+          "updated_at": base64::engine::general_purpose::STANDARD.encode(&_rag_data.5)
       });
 
       // Send Request
@@ -328,13 +366,25 @@ pub async fn save_document(
       match res {
         Ok(r) => {
           if !r.status().is_success() {
-            println!("RAG Sync Failed: Status {}", r.status());
+            let status = r.status();
+            let body = r.text().await.unwrap_or_default();
+            return Err(format!(
+              "Server sync failed (Published): HTTP {} - {}",
+              status, body
+            ));
           } else {
             println!("RAG Sync Success for doc {}", doc_id);
           }
         }
-        Err(e) => println!("RAG Sync Network Error: {}", e),
+        Err(e) => {
+          return Err(format!(
+            "Server sync failed (Published): Network error - {}",
+            e
+          ));
+        }
       }
+    } else {
+      return Err("Cannot publish document: Not authenticated".to_string());
     }
   }
 
@@ -360,7 +410,7 @@ pub async fn save_document(
     tags: req.tags, // Return the tags we just saved
     deleted_at: None,
     media_size: Some(media_size_str),
-    version: req.version.unwrap_or(1),
+    version: req.version.unwrap_or(0),
   })
 }
 

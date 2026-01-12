@@ -251,6 +251,31 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Failed to create document_tags table: {}", e))?;
 
+  // Create document_revisions table (Versioning)
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS document_revisions (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            delta BLOB,
+            snapshot BLOB,
+            title BLOB,
+            creator_name TEXT,
+            created_at BLOB,
+            FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create document_revisions table: {}", e))?;
+
+  conn
+    .execute(
+      "CREATE INDEX IF NOT EXISTS idx_revisions_document ON document_revisions(document_id, version DESC)",
+      [],
+    )
+    .map_err(|e| format!("Failed to create document_revisions index: {}", e))?;
+
   // Cleanup old table if exists
   conn.execute("DROP TABLE IF EXISTS chat_messages", []).ok();
 

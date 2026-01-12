@@ -33,6 +33,10 @@ type IndexDocumentRequest struct {
 	TagEvidences []TagEvidence `json:"tag_evidences"`
 	Summary      string        `json:"summary"`
 	Embedding    []float32     `json:"embedding"`
+	GroupId      string        `json:"group_id"`
+	GroupType    int32         `json:"group_type"`
+	CreatedAt    string        `json:"created_at"`
+	UpdatedAt    string        `json:"updated_at"`
 }
 
 func (h *IndexHandler) IndexDocument(c *gin.Context) {
@@ -75,6 +79,10 @@ func (h *IndexHandler) IndexDocument(c *gin.Context) {
 			OwnerId:      userID.(string),
 			UserSalt:     saltStr, // Proto 필드 사용
 			Embedding:    req.Embedding,
+			GroupId:      req.GroupId,
+			GroupType:    req.GroupType,
+			CreatedAt:    req.CreatedAt,
+			UpdatedAt:    req.UpdatedAt,
 		},
 	})
 	if err != nil {

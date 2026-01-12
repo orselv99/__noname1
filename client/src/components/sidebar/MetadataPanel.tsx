@@ -399,7 +399,7 @@ const DOCUMENT_STATES = [
   { value: DocumentState.Published, label: 'Published', icon: Globe, color: 'bg-green-900/50 text-green-300', hoverColor: 'hover:bg-green-800/50' },
 ];
 
-const DocumentStateDropdown = memo(({ currentState, onStateChange }: { currentState: DocumentState; onStateChange: (state: DocumentState) => void }) => {
+const DocumentStateDropdown = memo(({ currentState, onStateChange, isPrivate }: { currentState: DocumentState; onStateChange: (state: DocumentState) => void; isPrivate?: boolean }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -434,6 +434,10 @@ const DocumentStateDropdown = memo(({ currentState, onStateChange }: { currentSt
   const currentConfig = DOCUMENT_STATES.find(s => s.value === currentState) || DOCUMENT_STATES[0];
   const Icon = currentConfig.icon;
 
+  const availableStates = isPrivate
+    ? DOCUMENT_STATES.filter(s => s.value !== DocumentState.Published)
+    : DOCUMENT_STATES;
+
   return (
     <div className="relative flex-1">
       <button
@@ -453,7 +457,7 @@ const DocumentStateDropdown = memo(({ currentState, onStateChange }: { currentSt
           style={{ position: 'fixed', top: dropdownPosition.top, left: dropdownPosition.left, width: '120px', zIndex: 99999 }}
           className="bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl overflow-hidden"
         >
-          {DOCUMENT_STATES.map((state) => {
+          {availableStates.map((state) => {
             const StateIcon = state.icon;
             const isSelected = currentState === state.value;
             return (
@@ -671,86 +675,90 @@ export const MetadataPanel = () => {
         style={{ scrollbarGutter: 'stable' }}
       >
 
-        {/* Status & Visibility Section - TOP (한 줄) */}
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <h3 className="text-xs text-zinc-500 font-medium mb-1 flex items-center gap-1">
-              <Activity size={12} />
-              Status
-            </h3>
-            <DocumentStateDropdown
-              currentState={activeDoc.document_state}
-              onStateChange={async (state) => {
-                // If changing TO Published
-                if (state === DocumentState.Published && activeDoc.document_state !== DocumentState.Published) {
-                  const nextVersion = (activeDoc.version || 0) + 1;
-                  if (await confirm({
-                    title: '문서 게시',
-                    message: `이 문서를 게시하시겠습니까?\n\n버전이 v${nextVersion}로 올라갑니다.`,
-                    confirmText: '게시',
-                    variant: 'primary'
-                  })) {
-                    saveDocument({ ...activeDoc, document_state: state, version: nextVersion });
+        {/* Status & Visibility Section - TOP (한 줄) - Private 제외 */}
+        {activeDoc.group_type !== GroupType.Private && (
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <h3 className="text-xs text-zinc-500 font-medium mb-1 flex items-center gap-1">
+                <Activity size={12} />
+                Status
+              </h3>
+              <DocumentStateDropdown
+                currentState={activeDoc.document_state}
+                isPrivate={false} // Check handled by parent conditional
+                onStateChange={async (state) => {
+                  // 1. Check if Private document is trying to be Published
+                  if (state === DocumentState.Published && activeDoc.group_type === GroupType.Private) {
+                    await confirm({
+                      title: '게시 불가',
+                      message: '개인(Private) 문서는 게시할 수 없습니다.',
+                      confirmText: '확인',
+                      variant: 'primary'
+                    });
+                    return;
                   }
-                } else if (activeDoc.document_state === DocumentState.Published && state !== DocumentState.Published) {
-                  // User manually reverting to Draft/Feedback
-                  saveDocument({ ...activeDoc, document_state: state });
-                } else {
-                  saveDocument({ ...activeDoc, document_state: state });
-                }
-              }}
-            />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-xs text-zinc-500 font-medium mb-1 flex items-center gap-1">
-              <Eye size={12} />
-              Visibility
-            </h3>
-            <VisibilityDropdown
-              currentLevel={activeDoc.visibility_level}
-              onLevelChange={async (level) => {
-                // Check against group default visibility
-                let defaultVisibility = VisibilityLevel.Hidden;
-                const { departments, projects, user } = useAuthStore.getState();
 
-                if (activeDoc.group_type === GroupType.Department) {
-                  if (activeDoc.group_id && departments[activeDoc.group_id]) {
-                    defaultVisibility = departments[activeDoc.group_id].visibility;
-                  } else if (user?.department && user.department.id === activeDoc.group_id) {
-                    defaultVisibility = user.department.default_visibility_level;
+                  // 2. Changing TO Published from non-Published state
+                  if (state === DocumentState.Published && activeDoc.document_state !== DocumentState.Published) {
+                    const nextVersion = (activeDoc.version || 0) + 1;
+                    if (await confirm({
+                      title: '문서 게시',
+                      message: `이 문서를 게시하시겠습니까?\n\n버전이 v${nextVersion}로 올라갑니다.`,
+                      confirmText: '게시',
+                      variant: 'primary'
+                    })) {
+                      saveDocument({ ...activeDoc, document_state: state, version: nextVersion });
+                    }
+                  }
+                  // 3. All other state changes
+                  else {
+                    saveDocument({ ...activeDoc, document_state: state });
+                  }
+                }}
+              />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xs text-zinc-500 font-medium mb-1 flex items-center gap-1">
+                <Eye size={12} />
+                Visibility
+              </h3>
+              <VisibilityDropdown
+                currentLevel={activeDoc.visibility_level}
+                onLevelChange={async (level) => {
+                  // Check against group default visibility
+                  let defaultVisibility = VisibilityLevel.Hidden;
+                  const { departments, projects, user } = useAuthStore.getState();
+
+                  if (activeDoc.group_type === GroupType.Department) {
+                    if (activeDoc.group_id && departments[activeDoc.group_id]) {
+                      defaultVisibility = departments[activeDoc.group_id].visibility;
+                    } else if (user?.department && user.department.id === activeDoc.group_id) {
+                      defaultVisibility = user.department.default_visibility_level;
+                    }
+                  } else if (activeDoc.group_type === GroupType.Project) {
+                    if (activeDoc.group_id && projects[activeDoc.group_id]) {
+                      defaultVisibility = projects[activeDoc.group_id].visibility;
+                    }
+                  }
+
+                  // User request: "If changing to a visibility DIFFERENT from group default"
+                  if (level !== defaultVisibility) {
+                    if (await confirm({
+                      title: '가시성 변경 확인',
+                      message: `선택한 가시성(${VISIBILITY_LEVELS.find(v => v.value === level)?.label})이 그룹 기본값(${VISIBILITY_LEVELS.find(v => v.value === defaultVisibility)?.label})과 다릅니다.\n\n정말 변경하시겠습니까?`,
+                      confirmText: '변경',
+                      variant: 'primary'
+                    })) {
+                      saveDocument({ ...activeDoc, visibility_level: level });
+                    }
                   } else {
-                    // Fallback or possibly 'My Department' logic if group_id is missing but implicit?
-                    // Assuming data is consistent. If not found, default to Hidden is safe or keeping current might be better,
-                    // but let's stick to strict check or maybe 2 (Metadata) as reasonable default?
-                    // Actually, if we can't find group, maybe we shouldn't warn?
-                    // Let's assume Hidden as base.
-                  }
-                } else if (activeDoc.group_type === GroupType.Project) {
-                  if (activeDoc.group_id && projects[activeDoc.group_id]) {
-                    defaultVisibility = projects[activeDoc.group_id].visibility;
-                  }
-                }
-
-                // If switching TO a non-default visibility, warn.
-                // Or simply if New Level != Default Level?
-                // User request: "If changing to a visibility DIFFERENT from group default"
-                // User request: "If changing to a visibility DIFFERENT from group default"
-                if (level !== defaultVisibility) {
-                  if (await confirm({
-                    title: '가시성 변경 확인',
-                    message: `선택한 가시성(${VISIBILITY_LEVELS.find(v => v.value === level)?.label})이 그룹 기본값(${VISIBILITY_LEVELS.find(v => v.value === defaultVisibility)?.label})과 다릅니다.\n\n정말 변경하시겠습니까?`,
-                    confirmText: '변경',
-                    variant: 'primary'
-                  })) {
                     saveDocument({ ...activeDoc, visibility_level: level });
                   }
-                } else {
-                  saveDocument({ ...activeDoc, visibility_level: level });
-                }
-              }}
-            />
+                }}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Summary Section */}
         <div className="mb-6">
@@ -856,68 +864,80 @@ export const MetadataPanel = () => {
         <ResourceList content={activeDoc.content} liveContent={liveEditorContent} forceExpanded={isResourcesExpanded} />
       </div>
 
-      {/* Revision Section - 독립적인 접기/펼치기 */}
-      <div className="border-t border-zinc-800 shrink-0 bg-zinc-950">
-        <div
-          className="flex items-center gap-2 px-4 py-3 text-zinc-500 cursor-pointer hover:text-zinc-300 select-none"
-          onClick={() => setIsRevisionExpanded(!isRevisionExpanded)}
-        >
-          <History size={12} />
-          <h3 className="text-xs font-medium flex-1">Revisions</h3>
-          {isRevisionExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </div>
-        <div
-          className={`transition-all duration-300 ease-in-out overflow-hidden ${isRevisionExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
-            }`}
-        >
-          <div className="px-4 pb-3 overflow-y-auto custom-scrollbar max-h-48">
-            {/* Git Graph Style Revisions */}
-            <div className="relative pl-5">
-              {/* Vertical Line - only show if version > 1 */}
-              {activeDoc.version > 1 && (
-                <div className="absolute left-[7px] top-3 bottom-3 w-px bg-zinc-700" />
-              )}
+      {/* Revision Section - 독립적인 접기/펼치기 (Private 그룹 제외) */}
+      {activeDoc.group_type !== GroupType.Private && (
+        <div className="border-t border-zinc-800 shrink-0 bg-zinc-950">
+          <div
+            className="flex items-center gap-2 px-4 py-3 text-zinc-500 cursor-pointer hover:text-zinc-300 select-none"
+            onClick={() => setIsRevisionExpanded(!isRevisionExpanded)}
+          >
+            <History size={12} />
+            <h3 className="text-xs font-medium flex-1">Revisions</h3>
+            {isRevisionExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </div>
+          <div
+            className={`transition-all duration-300 ease-in-out overflow-hidden ${isRevisionExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+              }`}
+          >
+            <div className="px-4 pb-3 overflow-y-auto custom-scrollbar max-h-48">
+              {/* Git Graph Style Revisions */}
+              <div className="relative pl-5">
+                {/* Vertical Line - only show if version > 1 */}
+                {activeDoc.version > 1 && (
+                  <div className="absolute left-[7px] top-3 bottom-3 w-px bg-zinc-700" />
+                )}
 
-              {/* Revision Items */}
-              <div className="space-y-2">
-                {/* Current Version - 파란색 큰 점 */}
-                <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1.5 rounded">
-                  <div className="absolute left-[3px] top-2.5 w-2.5 h-2.5 rounded-full bg-blue-500 ring-2 ring-zinc-950" />
-                  <div className="flex-1 min-w-0 ml-1">
-                    <div className="text-xs text-zinc-200 truncate">
-                      v{activeDoc.version}. <span className="text-zinc-400">{activeDoc.title}</span> <span className="text-zinc-500">· {activeDoc.creator_name || 'Unknown'}</span>
+                {/* Revision Items */}
+                <div className="space-y-2">
+                  {/* Current Version - 파란색 큰 점 (Version 0일 때는 숨김) */}
+                  {activeDoc.version > 0 && (
+                    <div className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1.5 rounded">
+                      <div className="absolute left-[3px] top-2.5 w-2.5 h-2.5 rounded-full bg-blue-500 ring-2 ring-zinc-950" />
+                      <div className="flex-1 min-w-0 ml-1">
+                        <div className="text-xs text-zinc-200 truncate">
+                          v{activeDoc.version}. <span className="text-zinc-400">{activeDoc.title}</span> <span className="text-zinc-500">· {activeDoc.creator_name || 'Unknown'}</span>
+                        </div>
+                        <div className="text-[10px] text-zinc-600">{formatDate(activeDoc.updated_at)}</div>
+                      </div>
                     </div>
-                    <div className="text-[10px] text-zinc-600">{formatDate(activeDoc.updated_at)}</div>
-                  </div>
-                </div>
+                  )}
 
-                {/* Previous Versions Placeholder - show message if version is 1 */}
-                {activeDoc.version === 1 ? (
-                  <div className="text-xs text-zinc-600 italic pl-4">
-                    No previous versions. Publish to create a new version.
-                  </div>
-                ) : (
-                  // Show placeholder for version history (to be implemented with revision table)
-                  Array.from({ length: Math.min(activeDoc.version - 1, 4) }, (_, idx) => {
-                    const v = activeDoc.version - 1 - idx;
-                    return (
-                      <div key={v} className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
-                        <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
-                        <div className="flex-1 min-w-0 ml-1">
-                          <div className="text-xs text-zinc-500 truncate">
-                            v{v}. <span className="text-zinc-600">{activeDoc.title}</span> <span className="text-zinc-600">· {activeDoc.creator_name || 'Unknown'}</span>
-                          </div>
-                          <div className="text-[10px] text-zinc-700">(History data not available)</div>
+                  {/* Previous Versions Placeholder - show message if version is 0 */}
+                  {activeDoc.version === 0 ? (
+                    <div className="relative flex items-start gap-3 -ml-5 pl-5 pr-2 py-1.5 rounded select-none cursor-default">
+                      <div className="absolute left-[3px] top-2.5 w-2.5 h-2.5 rounded-full invisible" />
+                      <div className="flex-1 min-w-0 ml-1">
+                        <div className="text-xs text-zinc-600 italic">
+                          No previous versions.
+                        </div>
+                        <div className="text-[10px] text-zinc-600 italic">
+                          Publish to create a new version.
                         </div>
                       </div>
-                    );
-                  })
-                )}
+                    </div>
+                  ) : (
+                    // Show placeholder for version history (to be implemented with revision table)
+                    Array.from({ length: Math.min(activeDoc.version - 1, 4) }, (_, idx) => {
+                      const v = activeDoc.version - 1 - idx;
+                      return (
+                        <div key={v} className="relative flex items-start gap-3 cursor-pointer hover:bg-zinc-900/50 -ml-5 pl-5 pr-2 py-1 rounded opacity-70 hover:opacity-100 transition-opacity">
+                          <div className="absolute left-[5px] top-2.5 w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                          <div className="flex-1 min-w-0 ml-1">
+                            <div className="text-xs text-zinc-500 truncate">
+                              v{v}. <span className="text-zinc-600">{activeDoc.title}</span> <span className="text-zinc-600">· {activeDoc.creator_name || 'Unknown'}</span>
+                            </div>
+                            <div className="text-[10px] text-zinc-700">(History data not available)</div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Info - Pinned to Bottom */}
       <div className="p-4 border-t border-zinc-800 space-y-2 text-xs text-zinc-500 shrink-0 bg-zinc-950">

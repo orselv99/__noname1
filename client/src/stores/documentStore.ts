@@ -185,6 +185,12 @@ export const useDocumentStore = create<DocumentStore>()(
         get().updateDocument(doc);
 
         try {
+          // Version Handling: Start at 1 when first published
+          let newVersion = doc.version || 0;
+          if (doc.document_state === DocumentState.Published && newVersion === 0) {
+            newVersion = 1;
+          }
+
           const req: SaveDocumentRequest = {
             id: doc.id,
             title: doc.title,
@@ -197,7 +203,7 @@ export const useDocumentStore = create<DocumentStore>()(
             visibility_level: doc.visibility_level,
             is_favorite: doc.is_favorite,
             tags: doc.tags,
-            version: doc.version,
+            version: newVersion,
             creator_name: doc.creator_name
           };
           const savedDoc = await invoke<Document>('save_document', { req });

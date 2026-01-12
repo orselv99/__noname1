@@ -30,9 +30,12 @@ message Document {
   string summary = 3;   // 원문 전체 요약
   repeated TagEvidence tag_evidences = 4; // 태그와 증거 목록
   string owner_id = 5;  // 문서 소유자 ID (필수)
-  int64 updated_at = 6; // 수정 시간
+  string updated_at = 6; // 수정 시간 (암호화된 문자열)
   string user_salt = 7; // 암호화용 사용자 Salt
   repeated float embedding = 8; // 문서 임베딩 벡터
+  string group_id = 9;  // 소속 그룹 ID (Department/Project)
+  int32 group_type = 10; // 그룹 타입 (0: Dept, 1: Project)
+  string created_at = 11; // 생성 시간 (암호화된 문자열)
 }
 
 // 인덱싱 요청
