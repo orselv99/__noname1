@@ -54,9 +54,12 @@ services:
       - "50052:50052"
     environment:
       - DB_DSN=host=postgres user=postgres password=postgres dbname=fiery_index port=5432 sslmode=disable
+      - LLAMA_SERVER_ADDR=http://llama-server:8080
     depends_on:
       postgres:
         condition: service_healthy
+      llama-server:
+        condition: service_started
     networks:
       - fiery-net
 
@@ -108,6 +111,33 @@ services:
       - "6379:6379"
     networks:
       - fiery-net
+
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    ports:
+      - "8081:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    volumes:
+      - ./client-ai-service/model:/models
+    command: -m /models/google_gemma-3-4b-it-IQ3_M.gguf -c 4096 --host 0.0.0.0 --port 8080 -ngl 99
+    networks:
+      - fiery-net
+  # CPU Only Configuration (For non-GPU environments)
+  # llama-server:
+  #   image: ghcr.io/ggml-org/llama.cpp:server
+  #   ports:
+  #     - "8081:8080"
+  #   volumes:
+  #     - ./client-ai-service/model:/models
+  #   command: -m /models/google_gemma-3-4b-it-IQ3_M.gguf -c 4096 --host 0.0.0.0 --port 8080
+  #   networks:
+  #     - fiery-net
 
 volumes:
   pgdata:
