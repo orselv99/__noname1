@@ -107,7 +107,7 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
             deleted_at DATETIME,
             last_synced_at INTEGER DEFAULT 0,
             accessed_at BLOB,
-            version INTEGER DEFAULT 1,
+            version INTEGER DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )",
       [],
@@ -145,7 +145,7 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     println!("Debug: Migrating database - adding version column to documents");
     conn
       .execute(
-        "ALTER TABLE documents ADD COLUMN version INTEGER DEFAULT 1",
+        "ALTER TABLE documents ADD COLUMN version INTEGER DEFAULT 0",
         [],
       )
       .map_err(|e| format!("Failed to add version column: {}", e))?;
@@ -269,12 +269,21 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Failed to create document_revisions table: {}", e))?;
 
-  conn
+    // Migration: Update index to be UNIQUE for ON CONFLICT support
+    // First, check if the old non-unique index exists and drop it if necessary
+    // or we can just try to create the UNIQUE index.
+    // Ideally, we want a UNIQUE index on (document_id, version).
+    
+    // Let's drop the old index if it exists (not unique)
+    conn.execute("DROP INDEX IF EXISTS idx_revisions_document", []).ok();
+
+    // Create UNIQUE index
+    conn
     .execute(
-      "CREATE INDEX IF NOT EXISTS idx_revisions_document ON document_revisions(document_id, version DESC)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_document_unique ON document_revisions(document_id, version)",
       [],
     )
-    .map_err(|e| format!("Failed to create document_revisions index: {}", e))?;
+    .map_err(|e| format!("Failed to create document_revisions unique index: {}", e))?;
 
   // Cleanup old table if exists
   conn.execute("DROP TABLE IF EXISTS chat_messages", []).ok();
@@ -331,6 +340,14 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
       [],
     )
     .map_err(|e| format!("Failed to create document_tags index: {}", e))?;
+
+
+  // Migration: Fix version 1 for non-published documents (should be 0)
+  // This handles documents created before the default was changed to 0.
+  conn.execute(
+    "UPDATE documents SET version = 0 WHERE document_state != 3 AND version = 1",
+    [],
+  ).ok();
 
   println!("Debug: Database initialized successfully");
   Ok(conn)

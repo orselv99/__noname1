@@ -6,6 +6,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { DocumentState, VisibilityLevel, GroupType, Document } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
 import { useConfirm } from '../ConfirmProvider';
+import { useToast } from '../Toast';
 
 
 // VISIBILITY_LEVELS constant needs to be available at module level for memo components
@@ -64,7 +65,7 @@ const FootnoteList = memo(({ content, liveContent, forceExpanded }: { content: s
 
       {isExpanded && (
         <div className="space-y-2 pl-1">
-          {footnotes.map((fn, i) => (
+          {footnotes.map((fn) => (
             <div
               key={fn.id}
               className="group flex flex-col gap-1 text-xs bg-zinc-900/50 p-2 rounded border border-zinc-800 hover:border-zinc-700 transition-colors"
@@ -564,6 +565,7 @@ export const MetadataPanel = () => {
   const liveEditorContent = useDocumentStore(state => state.liveEditorContent);
   const saveDocument = useDocumentStore(state => state.saveDocument);
   const { confirm } = useConfirm();
+  const { showToast } = useToast();
 
   // Calculate total media size from content
   const { binary: totalMediaSize, encoded: totalEncodedMediaSize } = useMemo(() => {
@@ -687,32 +689,37 @@ export const MetadataPanel = () => {
                 currentState={activeDoc.document_state}
                 isPrivate={false} // Check handled by parent conditional
                 onStateChange={async (state) => {
-                  // 1. Check if Private document is trying to be Published
-                  if (state === DocumentState.Published && activeDoc.group_type === GroupType.Private) {
-                    await confirm({
-                      title: '게시 불가',
-                      message: '개인(Private) 문서는 게시할 수 없습니다.',
-                      confirmText: '확인',
-                      variant: 'primary'
-                    });
-                    return;
-                  }
-
-                  // 2. Changing TO Published from non-Published state
-                  if (state === DocumentState.Published && activeDoc.document_state !== DocumentState.Published) {
-                    const nextVersion = (activeDoc.version || 0) + 1;
-                    if (await confirm({
-                      title: '문서 게시',
-                      message: `이 문서를 게시하시겠습니까?\n\n버전이 v${nextVersion}로 올라갑니다.`,
-                      confirmText: '게시',
-                      variant: 'primary'
-                    })) {
-                      saveDocument({ ...activeDoc, document_state: state, version: nextVersion });
+                  try {
+                    // 1. Check if Private document is trying to be Published
+                    if (state === DocumentState.Published && activeDoc.group_type === GroupType.Private) {
+                      await confirm({
+                        title: '게시 불가',
+                        message: '개인(Private) 문서는 게시할 수 없습니다.',
+                        confirmText: '확인',
+                        variant: 'primary'
+                      });
+                      return;
                     }
-                  }
-                  // 3. All other state changes
-                  else {
-                    saveDocument({ ...activeDoc, document_state: state });
+
+                    // 2. Changing TO Published from non-Published state
+                    if (state === DocumentState.Published && activeDoc.document_state !== DocumentState.Published) {
+                      const nextVersion = (activeDoc.version || 0) + 1;
+                      if (await confirm({
+                        title: '문서 게시',
+                        message: `이 문서를 게시하시겠습니까?\n\n버전이 v${nextVersion}로 올라갑니다.`,
+                        confirmText: '게시',
+                        variant: 'primary'
+                      })) {
+                        await saveDocument({ ...activeDoc, document_state: state });
+                      }
+                    }
+                    // 3. All other state changes
+                    else {
+                      await saveDocument({ ...activeDoc, document_state: state });
+                    }
+                  } catch (error) {
+                    console.error('State change error:', error);
+                    showToast('서버 동기화 문제로 인해 게시가 취소되었습니다. (잠시 후 다시 시도해주세요)', 'error');
                   }
                 }}
               />
@@ -725,34 +732,39 @@ export const MetadataPanel = () => {
               <VisibilityDropdown
                 currentLevel={activeDoc.visibility_level}
                 onLevelChange={async (level) => {
-                  // Check against group default visibility
-                  let defaultVisibility = VisibilityLevel.Hidden;
-                  const { departments, projects, user } = useAuthStore.getState();
+                  try {
+                    // Check against group default visibility
+                    let defaultVisibility = VisibilityLevel.Hidden;
+                    const { departments, projects, user } = useAuthStore.getState();
 
-                  if (activeDoc.group_type === GroupType.Department) {
-                    if (activeDoc.group_id && departments[activeDoc.group_id]) {
-                      defaultVisibility = departments[activeDoc.group_id].visibility;
-                    } else if (user?.department && user.department.id === activeDoc.group_id) {
-                      defaultVisibility = user.department.default_visibility_level;
+                    if (activeDoc.group_type === GroupType.Department) {
+                      if (activeDoc.group_id && departments[activeDoc.group_id]) {
+                        defaultVisibility = departments[activeDoc.group_id].visibility;
+                      } else if (user?.department && user.department.id === activeDoc.group_id) {
+                        defaultVisibility = user.department.default_visibility_level;
+                      }
+                    } else if (activeDoc.group_type === GroupType.Project) {
+                      if (activeDoc.group_id && projects[activeDoc.group_id]) {
+                        defaultVisibility = projects[activeDoc.group_id].visibility;
+                      }
                     }
-                  } else if (activeDoc.group_type === GroupType.Project) {
-                    if (activeDoc.group_id && projects[activeDoc.group_id]) {
-                      defaultVisibility = projects[activeDoc.group_id].visibility;
-                    }
-                  }
 
-                  // User request: "If changing to a visibility DIFFERENT from group default"
-                  if (level !== defaultVisibility) {
-                    if (await confirm({
-                      title: '가시성 변경 확인',
-                      message: `선택한 가시성(${VISIBILITY_LEVELS.find(v => v.value === level)?.label})이 그룹 기본값(${VISIBILITY_LEVELS.find(v => v.value === defaultVisibility)?.label})과 다릅니다.\n\n정말 변경하시겠습니까?`,
-                      confirmText: '변경',
-                      variant: 'primary'
-                    })) {
-                      saveDocument({ ...activeDoc, visibility_level: level });
+                    // User request: "If changing to a visibility DIFFERENT from group default"
+                    if (level !== defaultVisibility) {
+                      if (await confirm({
+                        title: '가시성 변경 확인',
+                        message: `선택한 가시성(${VISIBILITY_LEVELS.find(v => v.value === level)?.label})이 그룹 기본값(${VISIBILITY_LEVELS.find(v => v.value === defaultVisibility)?.label})과 다릅니다.\n\n정말 변경하시겠습니까?`,
+                        confirmText: '변경',
+                        variant: 'primary'
+                      })) {
+                        await saveDocument({ ...activeDoc, visibility_level: level });
+                      }
+                    } else {
+                      await saveDocument({ ...activeDoc, visibility_level: level });
                     }
-                  } else {
-                    saveDocument({ ...activeDoc, visibility_level: level });
+                  } catch (error) {
+                    console.error('Visibility change error:', error);
+                    showToast('가시성 설정을 변경할 수 없습니다.', 'error');
                   }
                 }}
               />

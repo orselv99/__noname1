@@ -874,11 +874,14 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
         const from = getDocPos(matchIndex);
         const to = getDocPos(matchEnd);
 
+        console.log(`[Highlight Debug] from=${from}, to=${to}, matchIndex=${matchIndex}, matchEnd=${matchEnd}`);
+
         if (from !== to) {
           const decoration = Decoration.inline(from, to, {
             class: 'bg-yellow-500/30 border-b-2 border-yellow-500/50 rounded-sm'
           });
 
+          console.log('[Highlight Debug] Dispatching decoration');
           editor.view.dispatch(
             editor.view.state.tr.setMeta(evidencePluginKey, {
               action: 'set',
@@ -887,26 +890,19 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
           );
 
           setTimeout(() => {
-            const view = editor.view;
-            if (!view) return;
-
-            const coords = view.coordsAtPos(from);
-            const scrollContainer = document.getElementById('editor-scroll-container');
-
-            if (scrollContainer && coords) {
-              const containerRect = scrollContainer.getBoundingClientRect();
-              const relativeTop = coords.top - containerRect.top;
-              const currentScroll = scrollContainer.scrollTop;
-              const targetScroll = currentScroll + relativeTop - (containerRect.height / 2);
-
-              scrollContainer.scrollTo({
-                top: targetScroll,
-                behavior: 'smooth'
-              });
+            // Find the highlighted element by its class and scroll to it
+            const highlightedEl = document.querySelector('.bg-yellow-500\\/30');
+            if (highlightedEl) {
+              console.log('[Highlight Debug] Found highlighted element, scrolling');
+              highlightedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else {
-              editor.chain().scrollIntoView().run();
+              // Fallback: use editor's built-in scroll
+              console.log('[Highlight Debug] No highlighted element found, using editor scroll');
+              editor.chain().focus().setTextSelection(from).scrollIntoView().run();
             }
-          }, 50);
+          }, 100);
+        } else {
+          console.log('[Highlight Debug] from === to, skipping');
         }
       } else {
         editor.view.dispatch(
@@ -999,7 +995,7 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
         document_state: doc.document_state || 1,
         visibility_level: doc.visibility_level || 1,
         is_favorite: doc.is_favorite || false,
-        version: doc.version || 1,
+        version: doc.version || 0,
         summary: doc.summary,
       };
       const savedDoc = await invoke<Document>('save_document', { req });

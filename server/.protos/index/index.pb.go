@@ -82,9 +82,12 @@ type Document struct {
 	Summary       string                 `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`                               // 원문 전체 요약
 	TagEvidences  []*TagEvidence         `protobuf:"bytes,4,rep,name=tag_evidences,json=tagEvidences,proto3" json:"tag_evidences,omitempty"` // 태그와 증거 목록
 	OwnerId       string                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`                // 문서 소유자 ID (필수)
-	UpdatedAt     int64                  `protobuf:"varint,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`         // 수정 시간
+	UpdatedAt     string                 `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`          // 수정 시간 (암호화된 문자열)
 	UserSalt      string                 `protobuf:"bytes,7,opt,name=user_salt,json=userSalt,proto3" json:"user_salt,omitempty"`             // 암호화용 사용자 Salt
 	Embedding     []float32              `protobuf:"fixed32,8,rep,packed,name=embedding,proto3" json:"embedding,omitempty"`                  // 문서 임베딩 벡터
+	GroupId       string                 `protobuf:"bytes,9,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`                // 소속 그룹 ID (Department/Project)
+	GroupType     int32                  `protobuf:"varint,10,opt,name=group_type,json=groupType,proto3" json:"group_type,omitempty"`        // 그룹 타입 (0: Dept, 1: Project)
+	CreatedAt     string                 `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`         // 생성 시간 (암호화된 문자열)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -154,11 +157,11 @@ func (x *Document) GetOwnerId() string {
 	return ""
 }
 
-func (x *Document) GetUpdatedAt() int64 {
+func (x *Document) GetUpdatedAt() string {
 	if x != nil {
 		return x.UpdatedAt
 	}
-	return 0
+	return ""
 }
 
 func (x *Document) GetUserSalt() string {
@@ -173,6 +176,27 @@ func (x *Document) GetEmbedding() []float32 {
 		return x.Embedding
 	}
 	return nil
+}
+
+func (x *Document) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *Document) GetGroupType() int32 {
+	if x != nil {
+		return x.GroupType
+	}
+	return 0
+}
+
+func (x *Document) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
 }
 
 // 인덱싱 요청
@@ -561,7 +585,7 @@ const file_index_index_proto_rawDesc = "" +
 	"\x11index/index.proto\x12\x05index\";\n" +
 	"\vTagEvidence\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x1a\n" +
-	"\bevidence\x18\x02 \x01(\tR\bevidence\"\xf8\x01\n" +
+	"\bevidence\x18\x02 \x01(\tR\bevidence\"\xd1\x02\n" +
 	"\bDocument\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x18\n" +
@@ -569,9 +593,15 @@ const file_index_index_proto_rawDesc = "" +
 	"\rtag_evidences\x18\x04 \x03(\v2\x12.index.TagEvidenceR\ftagEvidences\x12\x19\n" +
 	"\bowner_id\x18\x05 \x01(\tR\aownerId\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\x03R\tupdatedAt\x12\x1b\n" +
+	"updated_at\x18\x06 \x01(\tR\tupdatedAt\x12\x1b\n" +
 	"\tuser_salt\x18\a \x01(\tR\buserSalt\x12\x1c\n" +
-	"\tembedding\x18\b \x03(\x02R\tembedding\"C\n" +
+	"\tembedding\x18\b \x03(\x02R\tembedding\x12\x19\n" +
+	"\bgroup_id\x18\t \x01(\tR\agroupId\x12\x1d\n" +
+	"\n" +
+	"group_type\x18\n" +
+	" \x01(\x05R\tgroupType\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\v \x01(\tR\tcreatedAt\"C\n" +
 	"\x14IndexDocumentRequest\x12+\n" +
 	"\bdocument\x18\x01 \x01(\v2\x0f.index.DocumentR\bdocument\"l\n" +
 	"\x15IndexDocumentResponse\x12\x18\n" +

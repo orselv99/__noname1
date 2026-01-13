@@ -9,6 +9,7 @@ use crate::crypto::{self, decrypt_content, encrypt_content}; // Import from cryp
 use crate::database::DatabaseState;
 use regex::Regex;
 use sha2::{Digest, Sha256}; // Re-add for hashing content
+use crate::config;
 
 // ============================================================================
 // Types and Responses
@@ -246,6 +247,12 @@ fn clean_input_text(input: &str) -> String {
   // 3. [편집], [1], [주석] 등 이런거 제거
   if let Ok(re_noise) = Regex::new(r"\[.*?\]") {
     s = re_noise.replace_all(&s, "").to_string();
+  }
+
+  // 4. Base64 Image Pattern 제거 (data:image/...;base64,...)
+  // OCR을 원치 않으므로 이미지 데이터가 텍스트로 유입될 경우 제거
+  if let Ok(re_base64) = Regex::new(r"data:image\/[a-zA-Z]+\;base64,[a-zA-Z0-9+\/=]+") {
+      s = re_base64.replace_all(&s, "").to_string();
   }
 
   // Markdown 기호제거
@@ -504,6 +511,17 @@ pub async fn extract_info(
     auth.user_id.clone().ok_or("Not authenticated")?
   };
 
+  // Prepend Title to text for better context in Embedding and Summary
+  let text = if let Some(ref t) = title {
+    if !t.trim().is_empty() {
+      format!("{}\n\n{}", t, text)
+    } else {
+      text
+    }
+  } else {
+    text
+  };
+
   // Calculate content hash
   let content_hash = calculate_content_hash(&text);
 
@@ -540,7 +558,7 @@ pub async fn extract_info(
 
   for (i, chunk) in chunks.iter().enumerate() {
     let response = client
-      .post("http://localhost:8081/embedding")
+      .post(&format!("{}/embedding", config::get_embedding_url()))
       .json(&serde_json::json!({ "content": chunk }))
       .send()
       .await
@@ -600,8 +618,9 @@ pub async fn extract_info(
   // {{"tag":"semantic_tag_3","evidence":"verbatim_sentence_3"}}]
   // }}
 
+  // Gemma 2 prompt format (no system turn - embed instructions in user message)
   let prompt = format!(
-    r#"<start_of_turn>system
+    r#"<start_of_turn>user
 You are a professional document analyzer specializing in high-density information extraction.
 Your task is to identify the core identity of the provided text and summarize it precisely in Korean.
 Follow these instructions strictly:
@@ -614,10 +633,10 @@ Follow these instructions strictly:
 3. Evidences (Contextual Justification): For each tag, extract the most "definition-heavy" verbatim sentence.
    - The sentence must clearly explain the significance or the reason why the tag was chosen.
    - Do not truncate or modify the sentence; it must be 100% verbatim.
-JSON format:{{"summary":"...", "analysis":[{{"tag":"...", "evidence":"..."}}, ...]}}<end_of_turn>
-<start_of_turn>user
-   Document:{}
-<end_of_turn>
+JSON format:{{"summary":"...", "analysis":[{{"tag":"...", "evidence":"..."}}, ...]}}
+
+Document:
+{}<end_of_turn>
 <start_of_turn>model
 "#,
     cleaned_text.chars().take(3000).collect::<String>()
@@ -649,7 +668,7 @@ JSON format:{{"summary":"...", "analysis":[{{"tag":"...", "evidence":"..."}}, ..
 
   println!("[AI] Sending completion request...");
   let gen_res = client
-    .post("http://localhost:8082/completion")
+    .post(&format!("{}/completion", config::get_completion_url()))
     .json(&serde_json::json!({
         "prompt": prompt,
         "n_predict": 1024,

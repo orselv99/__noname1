@@ -1,4 +1,5 @@
 use crate::commands::auth::AuthState;
+use crate::config;
 use crate::crypto::{self, decrypt_content, encrypt_content};
 use crate::database::DatabaseState;
 use base64::engine::Engine;
@@ -357,7 +358,7 @@ pub async fn save_document(
       // Send Request
       let client = reqwest::Client::new();
       let res = client
-        .post("http://localhost:8080/api/v1/docs")
+        .post(&format!("{}/api/v1/docs", config::get_api_url()))
         .header("Authorization", format!("Bearer {}", token))
         .json(&payload)
         .send()
@@ -368,6 +369,18 @@ pub async fn save_document(
           if !r.status().is_success() {
             let status = r.status();
             let body = r.text().await.unwrap_or_default();
+            
+            // Rollback state to Draft AND revert version
+            {
+               let db = db_state.lock().unwrap();
+               if let Some(ref conn) = db.conn {
+                 let _ = conn.execute(
+                   "UPDATE documents SET document_state = 1, version = version - 1 WHERE id = ?1 AND user_id = ?2",
+                   [&doc_id, &user_id],
+                 );
+               }
+            }
+            
             return Err(format!(
               "Server sync failed (Published): HTTP {} - {}",
               status, body
@@ -377,6 +390,17 @@ pub async fn save_document(
           }
         }
         Err(e) => {
+          // Rollback state to Draft AND revert version
+          {
+             let db = db_state.lock().unwrap();
+             if let Some(ref conn) = db.conn {
+               let _ = conn.execute(
+                 "UPDATE documents SET document_state = 1, version = version - 1 WHERE id = ?1 AND user_id = ?2",
+                 [&doc_id, &user_id],
+               );
+             }
+          }
+
           return Err(format!(
             "Server sync failed (Published): Network error - {}",
             e
@@ -384,6 +408,16 @@ pub async fn save_document(
         }
       }
     } else {
+      // Rollback state to Draft AND revert version
+      {
+         let db = db_state.lock().unwrap();
+         if let Some(ref conn) = db.conn {
+           let _ = conn.execute(
+             "UPDATE documents SET document_state = 1, version = version - 1 WHERE id = ?1 AND user_id = ?2",
+             [&doc_id, &user_id],
+           );
+         }
+      }
       return Err("Cannot publish document: Not authenticated".to_string());
     }
   }
@@ -488,7 +522,7 @@ pub async fn list_documents(
         // Index 15 is last_synced_at
         let last_synced_at: Option<i64> = row.get(15).ok();
         let parent_id: Option<String> = row.get(16).ok();
-        let version: i32 = row.get(17).unwrap_or(1);
+        let version: i32 = row.get(17).unwrap_or(0);
         let deleted_at_blob: Option<Vec<u8>> = row.get(18).ok();
         let media_size_blob: Option<Vec<u8>> = row.get(19).ok();
 
@@ -671,7 +705,7 @@ pub async fn get_document(
         let username: Option<String> = row.get(14).ok();
         let last_synced_at: Option<i64> = row.get(15).ok();
         let parent_id: Option<String> = row.get(16).ok();
-        let version: i32 = row.get(17).unwrap_or(1);
+        let version: i32 = row.get(17).unwrap_or(0);
         let deleted_at_blob: Option<Vec<u8>> = row.get(18).ok();
         let media_size_blob: Option<Vec<u8>> = row.get(19).ok();
 
@@ -864,6 +898,14 @@ pub async fn delete_document(
           "DELETE FROM document_ai_queue WHERE document_id = ?1",
           [target_id],
         );
+        let _ = conn.execute(
+          "DELETE FROM document_revisions WHERE document_id = ?1",
+          [target_id],
+        );
+        let _ = conn.execute(
+          "DELETE FROM document_ai_data WHERE document_id = ?1",
+          [target_id],
+        );
 
         conn
           .execute(
@@ -1010,6 +1052,12 @@ pub async fn empty_recycle_bin(
       let mut delete_ai_stmt = tx
         .prepare("DELETE FROM document_ai_queue WHERE document_id = ?1")
         .map_err(|e| e.to_string())?;
+      let mut delete_revisions_stmt = tx
+        .prepare("DELETE FROM document_revisions WHERE document_id = ?1")
+        .map_err(|e| e.to_string())?;
+      let mut delete_ai_data_stmt = tx
+        .prepare("DELETE FROM document_ai_data WHERE document_id = ?1")
+        .map_err(|e| e.to_string())?;
       let mut delete_doc_stmt = tx
         .prepare("DELETE FROM documents WHERE id = ?1 AND user_id = ?2")
         .map_err(|e| e.to_string())?;
@@ -1023,6 +1071,8 @@ pub async fn empty_recycle_bin(
           .execute([&id])
           .map_err(|e| e.to_string())?;
         delete_ai_stmt.execute([&id]).map_err(|e| e.to_string())?;
+        delete_revisions_stmt.execute([&id]).map_err(|e| e.to_string())?;
+        delete_ai_data_stmt.execute([&id]).map_err(|e| e.to_string())?;
         // Finally delete the doc
         delete_doc_stmt
           .execute([&id, &user_id])

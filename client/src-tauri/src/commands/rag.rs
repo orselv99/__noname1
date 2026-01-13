@@ -7,6 +7,7 @@ use tauri::State;
 use serde_json::json;
 use uuid::Uuid;
 use chrono;
+use crate::config;
 
 // Re-defining embedding struct to match ai.rs
 #[derive(serde::Deserialize, Debug)]
@@ -74,7 +75,7 @@ fn clean_input_text(input: &str) -> String {
 async fn generate_embedding(text: &str) -> Result<Vec<f32>, String> {
     let client = reqwest::Client::new();
     let response = client
-        .post("http://localhost:8081/embedding")
+        .post(&format!("{}/embedding", config::get_embedding_url()))
         .json(&json!({ "content": text }))
         .send()
         .await
@@ -453,22 +454,36 @@ pub async fn ask_ai(
 
     let mut context_text = String::new();
     for (i, res) in results.iter().enumerate() {
-        let safe_content: String = res.content.chars().take(1000).collect();
-        let summary_text = res.summary.as_deref().unwrap_or("No summary");
-        let tags_text = if res.tags.is_empty() { "None".to_string() } else { res.tags.join(", ") };
+        // Clean HTML content before passing to LLM
+        let cleaned_content = clean_input_text(&res.content);
+        let safe_content: String = cleaned_content.chars().take(2000).collect();
+        let summary_text = res.summary.as_deref().unwrap_or("요약 없음");
+        let tags_text = if res.tags.is_empty() { "없음".to_string() } else { res.tags.join(", ") };
 
         context_text.push_str(&format!(
-            "Document {}:\nSummary: {}\nTags: {}\nContent:\n{}\n\n", 
+            "[문서 {}]\n요약: {}\n키워드: {}\n본문:\n{}\n\n---\n\n", 
             i + 1, summary_text, tags_text, safe_content
         ));
     }
 
     if context_text.is_empty() {
-        context_text = "No relevant documents found.".to_string();
+        context_text = "관련 문서를 찾을 수 없습니다.".to_string();
     }
 
+    // Gemma 2 prompt format (no system turn - embed instructions in user message)
     let prompt = format!(
-        "<|im_start|>system\nYou are a helpful AI assistant. Answer the user's question based ONLY on the following provided documents. Use the provided Summary and Tags to understand the context better. If the answer is not in the documents, say 'I cannot find the answer in the provided documents'. Answer in Korean.\n\nDocuments:\n{}\n<|im_end|><|im_start|>user\n{}\n<|im_end|><|im_start|>assistant\n",
+        r#"<start_of_turn>user
+당신은 사용자의 질문에 답변하는 AI 비서입니다.
+아래 제공된 문서들의 내용만을 근거로 답변하세요.
+문서에서 답을 찾을 수 없다면 "제공된 문서에서 답을 찾을 수 없습니다"라고 말하세요.
+답변은 한국어로 작성하세요.
+
+## 참고 문서
+{}
+## 질문
+{}<end_of_turn>
+<start_of_turn>model
+"#,
         context_text,
         cleaned_question
     );
@@ -476,11 +491,14 @@ pub async fn ask_ai(
     // 4. Generate Answer
     let client = reqwest::Client::new();
     let gen_res = client
-        .post("http://localhost:8082/completion")
+        .post(&format!("{}/completion", config::get_completion_url()))
         .json(&json!({
             "prompt": prompt,
             "n_predict": 512,
-            "stop": ["<|im_end|>"]
+            "temperature": 0.3,
+            "top_k": 40,
+            "top_p": 0.9,
+            "stop": ["<end_of_turn>", "\n\n\n"]
         }))
         .send()
         .await

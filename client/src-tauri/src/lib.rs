@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 pub mod commands;
+pub mod config;
 pub mod crypto;
 pub mod database;
 pub mod sidecar;

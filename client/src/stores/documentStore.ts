@@ -185,10 +185,12 @@ export const useDocumentStore = create<DocumentStore>()(
         get().updateDocument(doc);
 
         try {
-          // Version Handling: Start at 1 when first published
+          // Version Handling:
+          // 1. If not published, keep current version (don't increment).
+          // 2. If published, increment version (start at 1 if 0).
           let newVersion = doc.version || 0;
-          if (doc.document_state === DocumentState.Published && newVersion === 0) {
-            newVersion = 1;
+          if (doc.document_state === DocumentState.Published) {
+            newVersion += 1;
           }
 
           const req: SaveDocumentRequest = {
@@ -222,7 +224,9 @@ export const useDocumentStore = create<DocumentStore>()(
           get().updateDocument(mergedDoc);
         } catch (error) {
           console.error("Failed to save document:", error);
-          // Revert? For now just log. 
+          // Revert optimistic update by fetching latest state from DB (which might have been rolled back)
+          get().fetchDocuments();
+          throw error; // Re-throw so caller knows it failed
         }
       },
 
@@ -379,6 +383,7 @@ export const useDocumentStore = create<DocumentStore>()(
             summary: updatedDoc.summary,
             group_type: updatedDoc.group_type,
             group_id: updatedDoc.group_id,
+            parent_id: updatedDoc.parent_id,
             document_state: updatedDoc.document_state,
             visibility_level: updatedDoc.visibility_level,
             is_favorite: updatedDoc.is_favorite,

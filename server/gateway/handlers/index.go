@@ -90,6 +90,11 @@ func (h *IndexHandler) IndexDocument(c *gin.Context) {
 		return
 	}
 
+	if !resp.Success {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": resp.Message})
+		return
+	}
+
 	c.JSON(http.StatusOK, resp)
 }
 

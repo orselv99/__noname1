@@ -2,6 +2,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 use serde::{Deserialize, Serialize};
 use crate::sidecar;
+use crate::config;
 use crate::database::{self, DatabaseState, CachedUser};
 
 #[derive(Default)]
@@ -101,7 +102,7 @@ pub async fn login(
     let client = reqwest::Client::new();
     
     // Build login request with tenant_id header if provided
-    let mut request = client.post("http://localhost:8080/api/v1/auth/login")
+    let mut request = client.post(&format!("{}/api/v1/auth/login", config::get_api_url()))
         .json(&LoginRequest { email: email.clone(), password: password.clone() });
     
     if let Some(ref tid) = tenant_id {
@@ -277,7 +278,7 @@ pub async fn change_password(
     };
 
     let client = reqwest::Client::new();
-    let mut request = client.post("http://localhost:8080/api/v1/auth/change-password")
+    let mut request = client.post(&format!("{}/api/v1/auth/change-password", config::get_api_url()))
         .header("Authorization", format!("Bearer {}", token));
     
     if let Some(tid) = &tenant_id {
@@ -318,7 +319,7 @@ pub async fn logout(app: AppHandle, state: State<'_, Mutex<AuthState>>) -> Resul
     if let Some(t) = token {
         let client = reqwest::Client::new();
         // Fire and forget logout request
-        let _ = client.post("http://localhost:8080/api/v1/auth/logout")
+        let _ = client.post(&format!("{}/api/v1/auth/logout", config::get_api_url()))
             .header("Authorization", format!("Bearer {}", t))
             .send()
             .await;
@@ -341,7 +342,8 @@ pub async fn logout(app: AppHandle, state: State<'_, Mutex<AuthState>>) -> Resul
 pub async fn lookup_tenants(email: String) -> Result<Vec<TenantInfo>, String> {
     let client = reqwest::Client::new();
     
-    let url = format!("http://localhost:8080/api/v1/auth/lookup-tenant?email={}", 
+    let url = format!("{}/api/v1/auth/lookup-tenant?email={}", 
+        config::get_api_url(),
         urlencoding::encode(&email));
     
     let res = client.get(&url)
