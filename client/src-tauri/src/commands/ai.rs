@@ -5,11 +5,11 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::commands::auth::AuthState;
+use crate::config;
 use crate::crypto::{self, decrypt_content, encrypt_content}; // Import from crypto
 use crate::database::DatabaseState;
 use regex::Regex;
 use sha2::{Digest, Sha256}; // Re-add for hashing content
-use crate::config;
 
 // ============================================================================
 // Types and Responses
@@ -252,7 +252,7 @@ fn clean_input_text(input: &str) -> String {
   // 4. Base64 Image Pattern 제거 (data:image/...;base64,...)
   // OCR을 원치 않으므로 이미지 데이터가 텍스트로 유입될 경우 제거
   if let Ok(re_base64) = Regex::new(r"data:image\/[a-zA-Z]+\;base64,[a-zA-Z0-9+\/=]+") {
-      s = re_base64.replace_all(&s, "").to_string();
+    s = re_base64.replace_all(&s, "").to_string();
   }
 
   // Markdown 기호제거
@@ -495,306 +495,49 @@ fn chrono_now() -> String {
 // ============================================================================
 // Main Command
 // ============================================================================
-
+// [DISABLED FOR TRANSFORMER.JS MIGRATION]
+// extract_info function has been disabled - AI processing will be handled by transformer.js in frontend
 #[tauri::command]
 pub async fn extract_info(
-  auth_state: State<'_, Mutex<AuthState>>,
-  db_state: State<'_, Mutex<DatabaseState>>,
-  text: String,            // Plain text used for AI analysis
-  content: Option<String>, // HTML content used for saving (to preserve formatting)
-  title: Option<String>,
-  id: Option<String>,
+  _auth_state: State<'_, Mutex<AuthState>>,
+  _db_state: State<'_, Mutex<DatabaseState>>,
+  _text: String,
+  _content: Option<String>,
+  _title: Option<String>,
+  _id: Option<String>,
 ) -> Result<ExtractInfoResult, String> {
-  // Get user_id from auth state
-  let user_id = {
-    let auth = auth_state.lock().unwrap();
-    auth.user_id.clone().ok_or("Not authenticated")?
-  };
-
-  // Prepend Title to text for better context in Embedding and Summary
-  let text = if let Some(ref t) = title {
-    if !t.trim().is_empty() {
-      format!("{}\n\n{}", t, text)
-    } else {
-      text
-    }
-  } else {
-    text
-  };
-
-  // Calculate content hash
-  let content_hash = calculate_content_hash(&text);
-
-  // Check for existing AI data (Optimization)
-  // Use provided ID or generate a new one
-  let doc_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
-
-  // NOTE: In a 'save' flow, we usually know the ID.
-  // If this is just 'extract_info', we are generating a draft.
-  // However, if we want to check PREVIOUSLY generated data for the SAME content, we need to query by content_hash OR doc_id?
-  // Since this is a specialized extract command, let's check the DB.
-
-  {
-    let db = db_state.lock().unwrap();
-    if let Some(ref conn) = db.conn {
-      // We can check if ANY document (or maybe specifically THIS document if ID was passed) has this hash.
-      // For now, let's assume we are creating a new doc or updating one.
-      // If the user wants to "extract", we check if we already have it.
-    }
-  }
-
-  // 1. Generate embedding
-  let chunk_size = 2000;
-  let chunks: Vec<_> = text
-    .chars()
-    .collect::<Vec<_>>()
-    .chunks(chunk_size)
-    .map(|c| c.iter().collect::<String>())
-    .collect();
-
-  println!("[AI] Starting embedding: {} chunks", chunks.len());
-  let mut all_vectors = Vec::new();
-  let client = reqwest::Client::new();
-
-  for (i, chunk) in chunks.iter().enumerate() {
-    let response = client
-      .post(&format!("{}/embedding", config::get_embedding_url()))
-      .json(&serde_json::json!({ "content": chunk }))
-      .send()
-      .await
-      .map_err(|e| format!("Embedding request failed: {}", e))?
-      .json::<LlamaEmbeddingResponse>()
-      .await
-      .map_err(|e| format!("Failed to parse embedding response: {}", e))?;
-
-    // Extract the first embedding from the 2D array
-    // Response: [{"index": 0, "embedding": [[...floats...]]}]
-    if let Some(item) = response.first() {
-      if let Some(embedding) = item.embedding.first() {
-        all_vectors.push(embedding.clone());
-      }
-    }
-    if chunks.len() > 1 {
-      println!("[AI] Embedded chunk {}/{}", i + 1, chunks.len());
-    }
-  }
-  println!("[AI] Embedding complete: {} vectors", all_vectors.len());
-
-  if all_vectors.is_empty() {
-    return Err("No embeddings generated".to_string());
-  }
-
-  // Mean pooling
-  let vector_dim = all_vectors[0].len();
-  let num_chunks = all_vectors.len() as f32;
-  let mut mean_vector = vec![0.0; vector_dim];
-
-  for vec in &all_vectors {
-    for i in 0..vector_dim {
-      mean_vector[i] += vec[i];
-    }
-  }
-  for i in 0..vector_dim {
-    mean_vector[i] /= num_chunks;
-  }
-
-  // L2 normalize
-  let norm = mean_vector.iter().map(|x| x * x).sum::<f32>().sqrt();
-  let normalized_vector: Vec<f32> = mean_vector.iter().map(|&x| x / norm).collect();
-
-  // 2. Generate summary and tags
-  println!("[AI] Starting document analysis...");
-  let cleaned_text = clean_input_text(&text);
-  let text_len = cleaned_text.len();
-  println!("[AI] Preprocessed text: {} chars", text_len);
-
-  //         "<|im_start|>system\nYou are a professional document analyzer. Your task is to extract key information from the user's text and provide the results in Korean.\nFollow these instructions strictly:\n1. Summary: Write a concise one-sentence summary of the text.\n2. Tags: Identify exactly 3 essential keywords.\n3. Evidence: For each keyword, extract the exact sentence from the source text that serves as the basis for that keyword.\nOutput the results strictly in the following JSON format:\n{{\n\"summary\":\"one-sentence summary in Korean\",\n\"analysis\": [\n{{\"tag\":\"Actual Keyword 1\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"Actual Keyword 2\",\"evidence\":\"verbatim sentence from the text\"}},\n{{\"tag\":\"Actual Keyword 3\",\"evidence\":\"verbatim sentence from the text\"}}\n]}}<|im_end|><|im_start|>user\n{}\n<|im_end|><|im_start|>assistant\n",
-
-  //   JSON format:
-  // {{
-  // "summary":"summary",
-  // "analysis": [{{"tag":"semantic_tag_1","evidence":"verbatim_sentence_1"}},
-  // {{"tag":"semantic_tag_2","evidence":"verbatim_sentence_2"}},
-  // {{"tag":"semantic_tag_3","evidence":"verbatim_sentence_3"}}]
-  // }}
-
-  // Gemma 2 prompt format (no system turn - embed instructions in user message)
-  let prompt = format!(
-    r#"<start_of_turn>user
-You are a professional document analyzer specializing in high-density information extraction.
-Your task is to identify the core identity of the provided text and summarize it precisely in Korean.
-Follow these instructions strictly:
-1. Summary: Write a concise one-sentence summary that captures the "core intent" or "main conclusion" of the text. 
-   - Format: "이 문서는 [subject]에 대해 설명합니다."
-2. Tags (Semantic Keywords): Identify exactly 3 essential keywords.
-   - Do NOT use generic category names (e.g., 개요, 특징, 결론).
-   - DO select keywords that represent the "Unique Value Proposition" or "Core Concept" that distinguishes this document from others.
-   - Each tag should be a high-density noun or a short phrase (e.g., "자연선택적 진화" instead of "진화").
-3. Evidences (Contextual Justification): For each tag, extract the most "definition-heavy" verbatim sentence.
-   - The sentence must clearly explain the significance or the reason why the tag was chosen.
-   - Do not truncate or modify the sentence; it must be 100% verbatim.
-JSON format:{{"summary":"...", "analysis":[{{"tag":"...", "evidence":"..."}}, ...]}}
-
-Document:
-{}<end_of_turn>
-<start_of_turn>model
-"#,
-    cleaned_text.chars().take(3000).collect::<String>()
-  );
-
-  println!("[AI] Prompt: {}", prompt);
-
-  // Gemma 3 prompt format: <bos><start_of_turn>user ... <end_of_turn><start_of_turn>model
-  //   let prompt = format!(
-  //     r#"<start_of_turn>user
-  // You are a document analyzer. Output ONLY valid JSON.
-
-  // TASK:
-  // 1. SUMMARY: Write in Korean. Start with "이 문서는 [주제]에 대해 설명합니다."
-  // 2. TAGS: Extract 3 named entities (main topic, creator/origin, related term).
-  //    GOOD: "랙돌", "앤 베이커", "TICA" / BAD: "고양이", "특징", "성격"
-  // 3. EVIDENCE: Short phrase (max 15 chars) from text containing each tag.
-
-  // JSON format:
-  // {{"summary":"Korean summary","analysis":[{{"tag":"name1","evidence":"phrase"}},{{"tag":"name2","evidence":"phrase"}},{{"tag":"name3","evidence":"phrase"}}]}}
-
-  // Document:
-  // {}
-  // <end_of_turn>
-  // <start_of_turn>model
-  // "#,
-  //     cleaned_text.chars().take(3000).collect::<String>()
-  //   );
-
-  println!("[AI] Sending completion request...");
-  let gen_res = client
-    .post(&format!("{}/completion", config::get_completion_url()))
-    .json(&serde_json::json!({
-        "prompt": prompt,
-        "n_predict": 1024,
-        "temperature": 0.1,
-        "top_k": 40,
-        "top_p": 0.9,
-        "stop": ["<end_of_turn>", "\n\n\n"],
-        "json_schema":{
-            "type": "object",
-            "properties":{
-                "summary": { "type": "string" },
-                "analysis": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "tag": { "type": "string" },
-                            "evidence": { "type": "string" }
-                        },
-                        "required": ["tag", "evidence"]
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
-                }
-            },
-            "required": ["summary", "analysis"]
-        }
-    }))
-    .send()
-    .await
-    .map_err(|e| format!("Generation request failed: {}", e))?
-    .json::<serde_json::Value>()
-    .await
-    .map_err(|e| format!("Failed to parse generation response: {}", e))?;
-
-  let ai_content = gen_res["content"].as_str().unwrap_or("").to_string();
-  println!(
-    "[AI] Received response ({} chars): {}",
-    ai_content.len(),
-    ai_content
-  );
-
-  // Handle empty AI response gracefully
-  let (summary, tags) = if ai_content.trim().is_empty() {
-    println!("[AI] Warning: Empty response");
-    (String::new(), Vec::new())
-  } else {
-    let result = parse_ai_response(&ai_content, &text);
-    println!(
-      "[AI] Parsed: summary={} chars, tags={}",
-      result.0.len(),
-      result.1.len()
-    );
-    result
-  };
-
-  // 3. Encrypt content, title, summary, size, and created_at
-  let content_enc = encrypt_content(&user_id, content.as_deref().unwrap_or(&text))?;
-  let title_enc = title
-    .as_ref()
-    .map(|t| encrypt_content(&user_id, t))
-    .transpose()?;
-  let summary_enc = if !summary.is_empty() {
-    Some(encrypt_content(&user_id, &summary)?)
-  } else {
-    None
-  };
-
-  // Encrypt size and created_at
-  let size_str = text.len().to_string();
-  let size_enc = encrypt_content(&user_id, &size_str)?;
-  let now = chrono_now();
-  let created_at_enc = encrypt_content(&user_id, &now)?;
-
-  // 4. Save to database
-  let embedding_bytes = embedding_to_bytes(&normalized_vector);
-
-  {
-    let db = db_state.lock().unwrap();
-    if let Some(ref conn) = db.conn {
-      // Check optimization again inside lock or just proceed (locking scope is small)
-
-      // A. Save Active Document (User Visible / Parent)
-      // MUST be saved first to satisfy Foreign Key in document_ai_data
-      save_document(
-        conn,
-        &user_id,
-        &doc_id,
-        GroupType::Private,
-        None, // group_id
-        title_enc.as_deref(),
-        &content_enc,
-        summary_enc.as_deref(), // Copy AI summary to Active User Summary
-        &size_enc,
-        &created_at_enc,
-        &created_at_enc, // updated_at (same as created/now for this action)
-        DocumentState::Draft,
-        VisibilityLevel::Hidden,
-      )?;
-
-      // B. Save Draft/AI Data (Child)
-      save_ai_data(
-        conn,
-        &doc_id,
-        &content_hash,
-        &user_id,
-        &embedding_bytes,
-        Some(&summary),
-        &tags,
-        &created_at_enc,
-      )?;
-
-      // C. Save Active Tags (User Visible)
-      save_document_tags(conn, &doc_id, &user_id, &tags)?;
-    } else {
-      return Err("Database not initialized".to_string());
-    }
-  }
-
-  println!("Debug: Saved document {} with {} tags", doc_id, tags.len());
-
-  Ok(ExtractInfoResult {
-    document_id: doc_id,
-    summary,
-    tags,
-  })
+  // Return error indicating this feature is disabled
+  // Frontend should use transformer.js instead
+  Err("[DISABLED] AI extraction is now handled by transformer.js in the frontend. This Rust command is deprecated.".to_string())
 }
+
+/*
+// ============================================================================
+// ORIGINAL EXTRACT_INFO FUNCTION (COMMENTED OUT FOR TRANSFORMER.JS MIGRATION)
+// ============================================================================
+// This function used to call llama-server for:
+// 1. Embedding generation (port 8081)
+// 2. Text completion/summary generation (port 8082)
+//
+// Now replaced by transformer.js in the frontend for better performance and flexibility.
+//
+// Original function signature:
+// pub async fn extract_info(
+//   auth_state: State<'_, Mutex<AuthState>>,
+//   db_state: State<'_, Mutex<DatabaseState>>,
+//   text: String,            // Plain text used for AI analysis
+//   content: Option<String>, // HTML content used for saving (to preserve formatting)
+//   title: Option<String>,
+//   id: Option<String>,
+// ) -> Result<ExtractInfoResult, String>
+//
+// Key operations performed:
+// 1. Chunk text and generate embeddings via llama-server/embedding
+// 2. Mean pooling and L2 normalization of embeddings
+// 3. Generate summary and tags via llama-server/completion
+// 4. Save to database (document, AI data, tags)
+//
+// Full implementation removed for brevity - see git history for original code.
+*/
 
 // rand module removed
