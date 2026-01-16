@@ -27,6 +27,8 @@ interface DocumentStore {
 
   // AI 분석 상태
   aiAnalysisStatus: string | null;
+  // AI 진행률 (download: 모델 다운로드, task: 임베딩/추출 작업)
+  aiProgress: { model: string; progress: number; type: 'download' | 'task' } | null;
   // 자동저장 상태
   autoSaveStatus: string | null;
   newDocTrigger: number;
@@ -60,6 +62,7 @@ interface DocumentStore {
   addTagToDocument: (docId: string, tag: string, evidence?: string) => Promise<void>;
   removeTagFromDocument: (docId: string, tagIndex: number) => Promise<void>;
   setAiAnalysisStatus: (status: string | null) => void;
+  setAiProgress: (progress: { model: string; progress: number; type: 'download' | 'task' } | null) => void;
   setAutoSaveStatus: (status: string | null) => void;
   setLiveEditorContent: (content: string | null) => void;
   markTabDirty: (tabId: string, isDirty: boolean) => void;
@@ -79,6 +82,7 @@ export const useDocumentStore = create<DocumentStore>()(
       highlightedEvidence: null,
       liveEditorContent: null,
       aiAnalysisStatus: null,
+      aiProgress: null,
       autoSaveStatus: null,
       newDocTrigger: 0,
       triggerNewDocument: () => set((state) => ({ newDocTrigger: state.newDocTrigger + 1 })),
@@ -322,6 +326,10 @@ export const useDocumentStore = create<DocumentStore>()(
 
       setAiAnalysisStatus: (status) => {
         set({ aiAnalysisStatus: status });
+      },
+
+      setAiProgress: (progress) => {
+        set({ aiProgress: progress });
       },
 
       setAutoSaveStatus: (status) => {

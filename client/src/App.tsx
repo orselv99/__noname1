@@ -36,6 +36,7 @@ import { EditorTabs } from './components/editor/EditorTabs';
 import { ToastProvider, useToast } from './components/Toast';
 import { StatusBar } from './components/StatusBar';
 import { RagPanel } from './components/sidebar/RagPanel';
+import { aiService } from './utils/aiService';
 
 // LoginResponse imported from types
 
@@ -154,6 +155,11 @@ function AppContent() {
     } else {
       showToast('Login successful', 'success');
       setView('main');
+
+      // Preload AI models in background after login
+      aiService.preloadModels().catch(err => {
+        console.warn('[App] AI model preloading failed:', err);
+      });
     }
   };
 

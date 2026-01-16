@@ -24,6 +24,8 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       greet,
       commands::ai::extract_info,
+      commands::ai::save_embedding,
+      commands::ai::save_tags,
       commands::auth::login,
       commands::auth::lookup_tenants,
       commands::auth::get_saved_tenant,

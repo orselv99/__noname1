@@ -1,8 +1,8 @@
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Download, Loader2, Cpu } from 'lucide-react';
 import { useDocumentStore } from '../stores/documentStore';
 
 export const StatusBar = () => {
-  const { aiAnalysisStatus, autoSaveStatus } = useDocumentStore();
+  const { aiAnalysisStatus, aiProgress, autoSaveStatus } = useDocumentStore();
 
   return (
     <div className="h-6 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between px-3 text-[10px] text-zinc-500 select-none">
@@ -13,14 +13,36 @@ export const StatusBar = () => {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* AI 진행률 - 다운로드 */}
+        {aiProgress?.type === 'download' && (
+          <div className="flex items-center gap-1.5 text-purple-400">
+            <Download size={10} className="animate-pulse" />
+            <span className="capitalize">{aiProgress.model}</span>
+            <div className="w-20 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-purple-500 transition-all duration-300"
+                style={{ width: `${aiProgress.progress}%` }}
+              />
+            </div>
+            <span>{aiProgress.progress.toFixed(0)}%</span>
+          </div>
+        )}
+        {/* AI 진행률 - 작업(임베딩/추출) */}
+        {aiProgress?.type === 'task' && (
+          <div className="flex items-center gap-1.5 text-blue-400">
+            <Cpu size={10} className="animate-pulse" />
+            <span className="capitalize">{aiProgress.model}</span>
+            <Loader2 size={10} className="animate-spin" />
+          </div>
+        )}
         {/* 자동저장 상태 */}
-        {autoSaveStatus && (
+        {autoSaveStatus && !aiProgress && (
           <div className="flex items-center gap-1.5 text-emerald-400">
             <span>{autoSaveStatus}</span>
           </div>
         )}
         {/* AI 분석 상태 */}
-        {aiAnalysisStatus && !autoSaveStatus && (
+        {aiAnalysisStatus && !autoSaveStatus && !aiProgress && (
           <div className="flex items-center gap-1.5 text-blue-400">
             <Loader2 size={10} className="animate-spin" />
             <span>{aiAnalysisStatus}</span>

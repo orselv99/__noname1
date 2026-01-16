@@ -25,6 +25,7 @@ import { useToast } from '../Toast';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { invoke } from '@tauri-apps/api/core';
+import { aiService } from '../../utils/aiService';
 
 // --- Custom Plugin for Transient Highlighting ---
 const evidencePluginKey = new PluginKey('evidence-highlight');
@@ -432,7 +433,7 @@ TitleInput.displayName = 'TitleInput';
  */
 export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) => {
   const { showToast } = useToast();
-  const { fetchDocuments, highlightedEvidence, toggleFavorite, updateDocument, aiAnalysisStatus, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, markTabDirty, addTab } = useDocumentStore();
+  const { fetchDocuments, highlightedEvidence, toggleFavorite, updateDocument, aiAnalysisStatus, setAiAnalysisStatus, setAiProgress, setLiveEditorContent, setAutoSaveStatus, markTabDirty, addTab } = useDocumentStore();
 
   // Get document data for this specific editor
   const doc = useDocumentStore(
@@ -925,22 +926,68 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
     const text = editor.getText();
     if (!text.trim()) return;
 
-    setAiAnalysisStatus('AI 분석중...');
+    console.log('[AI Analysis] Starting analysis for document:', docId);
+    console.log('[AI Analysis] Text length:', text.length);
+    setAiAnalysisStatus('AI 분석 시작...');
     setAiResult(null);
 
     try {
-      const res = await invoke('extract_info', {
-        text,
-        content: editor.getHTML(),
-        title: title || undefined,
-        id: docId || undefined
-      });
-      console.log("AI Analysis Result:", res);
+      // Set up progress callbacks for console logging AND status bar
+      aiService.setCallbacks(
+        (progress, model) => {
+          console.log(`[AI Analysis] ${model} progress: ${progress.toFixed(1)}%`);
+          // Determine if this is download or task progress based on status
+          setAiProgress({ model, progress, type: 'download' });
+        },
+        (status, message) => {
+          console.log(`[AI Analysis] Status: ${status} - ${message}`);
+          // Clear progress when model is ready (not downloading anymore)
+          if (status === 'model_ready' || status === 'complete') {
+            setAiProgress(null);
+          } else if (status === 'embedding' || status === 'extracting') {
+            // Show task progress for actual inference
+            setAiProgress({ model: status === 'embedding' ? 'embedding' : 'generation', progress: 0, type: 'task' });
+          }
+          setAiAnalysisStatus(message);
+        }
+      );
+
+      console.log('[AI Analysis] Step 1: Generating embedding...');
+      setAiAnalysisStatus('임베딩 생성 중...');
+      const embedding = await aiService.generateEmbedding(text);
+      console.log('[AI Analysis] Embedding generated, dimensions:', embedding.length);
+      setAiProgress(null);
+
+      console.log('[AI Analysis] Step 2: Saving embedding to database...');
+      await invoke('save_embedding', { documentId: docId, embedding });
+      console.log('[AI Analysis] Embedding saved successfully');
+
+      console.log('[AI Analysis] Step 3: Extracting tags and summary...');
+      setAiAnalysisStatus('태그 추출 중...');
+      const { summary, tags } = await aiService.extractTags(text);
+      console.log('[AI Analysis] Extraction result:', { summary, tags });
+      setAiProgress(null);
+
+      if (tags.length > 0 || summary) {
+        console.log('[AI Analysis] Step 4: Saving tags to database...');
+        await invoke('save_tags', {
+          documentId: docId,
+          summary: summary || null,
+          tags
+        });
+        console.log('[AI Analysis] Tags saved successfully');
+      }
+
+      console.log('[AI Analysis] Complete! Refreshing documents...');
       await fetchDocuments();
       setAiResult(null);
-      setAiAnalysisStatus(null);
+      setAiProgress(null);
+      setAiAnalysisStatus('분석 완료!');
+      setTimeout(() => setAiAnalysisStatus(null), 2000);
+
     } catch (error) {
-      console.error('AI Extraction Failed:', error);
+      console.error('[AI Analysis] FAILED:', error);
+      setAiProgress(null);
       setAiAnalysisStatus('AI 분석 실패');
       setTimeout(() => setAiAnalysisStatus(null), 3000);
     }
