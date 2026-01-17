@@ -99,10 +99,12 @@ func (h *IndexHandler) IndexDocument(c *gin.Context) {
 
 	// 응답에 document_id와 embedding 포함
 	c.JSON(http.StatusOK, gin.H{
-		"success":     resp.Success,
-		"message":     resp.Message,
-		"document_id": resp.DocumentId,
-		"embedding":   resp.Embedding,
+		"success":       resp.Success,
+		"message":       resp.Message,
+		"document_id":   resp.DocumentId,
+		"embedding":     resp.Embedding,
+		"summary":       resp.Summary,
+		"tag_evidences": resp.TagEvidences,
 	})
 }
 

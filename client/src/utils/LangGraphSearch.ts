@@ -154,11 +154,26 @@ export const executeSearch = async (
         }
       }));
 
+      // Report findings
+      if (results.length > 0) {
+        logs.push({
+          message: `${results.length} 개의 관련 문서를 서버에서 발견했습니다`,
+          subItems: results.map(r => r.metadata.title)
+        });
+      } else {
+        logs.push({ message: "관련된 문서를 서버에서 찾지 못했습니다" });
+      }
+
       report({ server: { status: 'done', logs: [...logs] } });
       return { results };
     } catch (e) {
       console.error("Server search failed:", e);
-      report({ server: { status: 'done', logs: [...logs] } }); // Don't show error to user in thinking log primarily?
+      report({
+        server: {
+          status: 'done',
+          logs: [...logs, { message: "서버 검색 중 오류가 발생했습니다" }]
+        }
+      });
       return { results: [] };
     }
   };

@@ -258,7 +258,9 @@ type IndexDocumentResponse struct {
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	DocumentId    string                 `protobuf:"bytes,3,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	Embedding     []float32              `protobuf:"fixed32,4,rep,packed,name=embedding,proto3" json:"embedding,omitempty"` // 생성된 임베딩 벡터 반환
+	Embedding     []float32              `protobuf:"fixed32,4,rep,packed,name=embedding,proto3" json:"embedding,omitempty"`                  // 생성된 임베딩 벡터 반환
+	Summary       string                 `protobuf:"bytes,5,opt,name=summary,proto3" json:"summary,omitempty"`                               // AI 생성 요약
+	TagEvidences  []*TagEvidence         `protobuf:"bytes,6,rep,name=tag_evidences,json=tagEvidences,proto3" json:"tag_evidences,omitempty"` // AI 생성 태그+근거
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -317,6 +319,20 @@ func (x *IndexDocumentResponse) GetDocumentId() string {
 func (x *IndexDocumentResponse) GetEmbedding() []float32 {
 	if x != nil {
 		return x.Embedding
+	}
+	return nil
+}
+
+func (x *IndexDocumentResponse) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *IndexDocumentResponse) GetTagEvidences() []*TagEvidence {
+	if x != nil {
+		return x.TagEvidences
 	}
 	return nil
 }
@@ -708,13 +724,15 @@ const file_index_index_proto_rawDesc = "" +
 	"created_at\x18\v \x01(\tR\tcreatedAt\x12\x18\n" +
 	"\acontent\x18\f \x01(\tR\acontent\"C\n" +
 	"\x14IndexDocumentRequest\x12+\n" +
-	"\bdocument\x18\x01 \x01(\v2\x0f.index.DocumentR\bdocument\"\x8a\x01\n" +
+	"\bdocument\x18\x01 \x01(\v2\x0f.index.DocumentR\bdocument\"\xdd\x01\n" +
 	"\x15IndexDocumentResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1f\n" +
 	"\vdocument_id\x18\x03 \x01(\tR\n" +
 	"documentId\x12\x1c\n" +
-	"\tembedding\x18\x04 \x03(\x02R\tembedding\"u\n" +
+	"\tembedding\x18\x04 \x03(\x02R\tembedding\x12\x18\n" +
+	"\asummary\x18\x05 \x01(\tR\asummary\x127\n" +
+	"\rtag_evidences\x18\x06 \x03(\v2\x12.index.TagEvidenceR\ftagEvidences\"u\n" +
 	"\x16SearchDocumentsRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x12\n" +
@@ -770,23 +788,24 @@ var file_index_index_proto_goTypes = []any{
 var file_index_index_proto_depIdxs = []int32{
 	0,  // 0: index.Document.tag_evidences:type_name -> index.TagEvidence
 	1,  // 1: index.IndexDocumentRequest.document:type_name -> index.Document
-	1,  // 2: index.SearchResult.document:type_name -> index.Document
-	5,  // 3: index.SearchDocumentsResponse.results:type_name -> index.SearchResult
-	1,  // 4: index.SyncRequest.changes:type_name -> index.Document
-	1,  // 5: index.SyncResponse.updates:type_name -> index.Document
-	2,  // 6: index.IndexService.IndexDocument:input_type -> index.IndexDocumentRequest
-	4,  // 7: index.IndexService.SearchDocuments:input_type -> index.SearchDocumentsRequest
-	7,  // 8: index.IndexService.SyncDocuments:input_type -> index.SyncRequest
-	9,  // 9: index.IndexService.GenerateEmbedding:input_type -> index.GenerateEmbeddingRequest
-	3,  // 10: index.IndexService.IndexDocument:output_type -> index.IndexDocumentResponse
-	6,  // 11: index.IndexService.SearchDocuments:output_type -> index.SearchDocumentsResponse
-	8,  // 12: index.IndexService.SyncDocuments:output_type -> index.SyncResponse
-	10, // 13: index.IndexService.GenerateEmbedding:output_type -> index.GenerateEmbeddingResponse
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	0,  // 2: index.IndexDocumentResponse.tag_evidences:type_name -> index.TagEvidence
+	1,  // 3: index.SearchResult.document:type_name -> index.Document
+	5,  // 4: index.SearchDocumentsResponse.results:type_name -> index.SearchResult
+	1,  // 5: index.SyncRequest.changes:type_name -> index.Document
+	1,  // 6: index.SyncResponse.updates:type_name -> index.Document
+	2,  // 7: index.IndexService.IndexDocument:input_type -> index.IndexDocumentRequest
+	4,  // 8: index.IndexService.SearchDocuments:input_type -> index.SearchDocumentsRequest
+	7,  // 9: index.IndexService.SyncDocuments:input_type -> index.SyncRequest
+	9,  // 10: index.IndexService.GenerateEmbedding:input_type -> index.GenerateEmbeddingRequest
+	3,  // 11: index.IndexService.IndexDocument:output_type -> index.IndexDocumentResponse
+	6,  // 12: index.IndexService.SearchDocuments:output_type -> index.SearchDocumentsResponse
+	8,  // 13: index.IndexService.SyncDocuments:output_type -> index.SyncResponse
+	10, // 14: index.IndexService.GenerateEmbedding:output_type -> index.GenerateEmbeddingResponse
+	11, // [11:15] is the sub-list for method output_type
+	7,  // [7:11] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_index_index_proto_init() }

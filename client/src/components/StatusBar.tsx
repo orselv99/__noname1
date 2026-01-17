@@ -16,6 +16,7 @@ export const StatusBar = () => {
         {/* 자동저장 상태 */}
         {autoSaveStatus && (
           <div className="flex items-center gap-1.5 text-emerald-400">
+            <Loader2 size={10} className="animate-spin" />
             <span>{autoSaveStatus}</span>
           </div>
         )}

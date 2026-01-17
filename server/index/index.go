@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt" // Added missing import
+	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 
 	pb "server/.protos/index"
 
@@ -28,54 +29,283 @@ type TagEvidence struct {
 	Evidence string `json:"evidence"`
 }
 
-func (s *server) IndexDocument(ctx context.Context, req *pb.IndexDocumentRequest) (*pb.IndexDocumentResponse, error) {
-	// Use provided embedding or generate it
-	vectorData := req.Document.Embedding
+// AI Completion 응답 구조체
+type AiAnalysisItem struct {
+	Tag      string `json:"tag"`
+	Evidence string `json:"evidence"`
+}
 
-	if len(vectorData) == 0 {
-		// Embedding이 없으면 Content를 기반으로 생성
-		if req.Document.Content == "" {
-			return &pb.IndexDocumentResponse{Success: false, Message: "Content is required for embedding generation"}, nil
+type AiJsonResult struct {
+	Summary  string           `json:"summary"`
+	Analysis []AiAnalysisItem `json:"analysis"`
+}
+
+type CompletionResponse struct {
+	Content string `json:"content"`
+}
+
+// generateCompletion calls llama-server /completion to generate summary and tags
+func generateCompletion(content string) (string, []TagEvidence, error) {
+	llamaAddr := os.Getenv("LLAMA_SERVER_ADDR")
+	if llamaAddr == "" {
+		llamaAddr = "http://llama-server:8080"
+	}
+
+	// Clean input text (remove markdown, HTML, etc.)
+	cleanedText := cleanInputText(content)
+
+	// Limit text length
+	if len([]rune(cleanedText)) > 3000 {
+		cleanedText = string([]rune(cleanedText)[:3000])
+	}
+
+	// Gemma 2 prompt format
+	prompt := fmt.Sprintf(`<start_of_turn>user
+You are a professional document analyzer specializing in high-density information extraction.
+Your task is to identify the core identity of the provided text and summarize it precisely in Korean.
+Follow these instructions strictly:
+1. Summary: Write a concise one-sentence summary that captures the "core intent" or "main conclusion" of the text. 
+   - Format: "이 문서는 [subject]에 대해 설명합니다."
+2. Tags (Semantic Keywords): Identify exactly 3 essential keywords.
+   - Do NOT use generic category names (e.g., 개요, 특징, 결론).
+   - DO select keywords that represent the "Unique Value Proposition" or "Core Concept" that distinguishes this document from others.
+   - Each tag should be a high-density noun or a short phrase (e.g., "자연선택적 진화" instead of "진화").
+3. Evidences (Contextual Justification): For each tag, extract the most "definition-heavy" verbatim sentence.
+   - The sentence must clearly explain the significance or the reason why the tag was chosen.
+   - Do not truncate or modify the sentence; it must be 100%% verbatim.
+JSON format:{"summary":"...", "analysis":[{"tag":"...", "evidence":"..."}, ...]}
+
+Document:
+%s<end_of_turn>
+<start_of_turn>model
+`, cleanedText)
+
+	// Prepare request body with JSON schema
+	reqBody := map[string]interface{}{
+		"prompt":      prompt,
+		"n_predict":   1024,
+		"temperature": 0.1,
+		"top_k":       40,
+		"top_p":       0.9,
+		"stop":        []string{"<end_of_turn>", "\n\n\n"},
+		"json_schema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"summary": map[string]string{"type": "string"},
+				"analysis": map[string]interface{}{
+					"type": "array",
+					"items": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"tag":      map[string]string{"type": "string"},
+							"evidence": map[string]string{"type": "string"},
+						},
+						"required": []string{"tag", "evidence"},
+					},
+					"minItems": 3,
+					"maxItems": 3,
+				},
+			},
+			"required": []string{"summary", "analysis"},
+		},
+	}
+
+	jsonPayload, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to marshal completion request: %w", err)
+	}
+
+	fmt.Println("DEBUG: Sending completion request to", llamaAddr)
+
+	resp, err := http.Post(llamaAddr+"/completion", "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return "", nil, fmt.Errorf("completion request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to read completion response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", nil, fmt.Errorf("llama server error: %s - %s", resp.Status, string(bodyBytes))
+	}
+
+	// Parse response
+	var completionResp CompletionResponse
+	if err := json.Unmarshal(bodyBytes, &completionResp); err != nil {
+		return "", nil, fmt.Errorf("failed to parse completion response: %w", err)
+	}
+
+	fmt.Printf("DEBUG: Completion response (%d chars): %s\n", len(completionResp.Content), completionResp.Content)
+
+	// Parse AI JSON result
+	summary, tags := parseAiResponse(completionResp.Content)
+
+	return summary, tags, nil
+}
+
+// cleanInputText removes HTML, markdown syntax for cleaner AI input
+func cleanInputText(input string) string {
+	// 1. Remove HTML tags
+	re := regexp.MustCompile(`<[^>]*>`)
+	s := re.ReplaceAllString(input, "")
+
+	// 2. Remove markdown code blocks
+	s = strings.ReplaceAll(s, "```", " ")
+
+	// 3. Remove markdown symbols
+	s = strings.ReplaceAll(s, "**", "")
+	s = strings.ReplaceAll(s, "__", "")
+	s = strings.ReplaceAll(s, "~~", "")
+	s = strings.ReplaceAll(s, "==", "")
+
+	// 4. Remove * # ` characters
+	var result strings.Builder
+	for _, c := range s {
+		if c != '*' && c != '#' && c != '`' {
+			result.WriteRune(c)
 		}
+	}
+	s = result.String()
 
+	// 5. Collapse whitespace
+	re = regexp.MustCompile(`\s+`)
+	s = re.ReplaceAllString(s, " ")
+
+	return strings.TrimSpace(s)
+}
+
+// parseAiResponse extracts summary and tags from AI JSON response
+func parseAiResponse(content string) (string, []TagEvidence) {
+	// Try to find JSON in content
+	jsonStr := content
+
+	// Check for markdown code block
+	if idx := strings.Index(content, "```"); idx != -1 {
+		start := idx + 3
+		if strings.HasPrefix(content[start:], "json") {
+			start += 4
+		}
+		if endIdx := strings.Index(content[start:], "```"); endIdx != -1 {
+			jsonStr = content[start : start+endIdx]
+		}
+	} else if startIdx := strings.Index(content, "{"); startIdx != -1 {
+		if endIdx := strings.LastIndex(content, "}"); endIdx != -1 {
+			jsonStr = content[startIdx : endIdx+1]
+		}
+	}
+
+	jsonStr = strings.TrimSpace(jsonStr)
+
+	var result AiJsonResult
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		fmt.Printf("DEBUG: Failed to parse AI JSON: %v\n", err)
+		return "", nil
+	}
+
+	var tags []TagEvidence
+	for _, item := range result.Analysis {
+		tags = append(tags, TagEvidence{
+			Tag:      item.Tag,
+			Evidence: item.Evidence,
+		})
+	}
+
+	return result.Summary, tags
+}
+
+func (s *server) IndexDocument(ctx context.Context, req *pb.IndexDocumentRequest) (*pb.IndexDocumentResponse, error) {
+	// Content is required
+	if req.Document.Content == "" {
+		return &pb.IndexDocumentResponse{Success: false, Message: "Content is required"}, nil
+	}
+
+	// Variables for AI-generated data
+	var generatedSummary string
+	var generatedTags []TagEvidence
+
+	// Check if summary/tags need to be generated
+	needsAiGeneration := req.Document.Summary == "" || len(req.Document.TagEvidences) == 0
+
+	if needsAiGeneration {
+		fmt.Println("DEBUG: Generating AI summary/tags for document")
+		summary, tags, err := generateCompletion(req.Document.Content)
+		if err != nil {
+			fmt.Printf("DEBUG: AI generation failed (continuing without): %v\n", err)
+			// Continue without AI data - not a fatal error
+		} else {
+			generatedSummary = summary
+			generatedTags = tags
+			fmt.Printf("DEBUG: AI generated summary (%d chars), %d tags\n", len(summary), len(tags))
+		}
+	}
+
+	// Use provided or generated summary
+	finalSummary := req.Document.Summary
+	if finalSummary == "" && generatedSummary != "" {
+		finalSummary = generatedSummary
+	}
+
+	// Use provided or generated tags
+	var tagEvidences []TagEvidence
+	if len(req.Document.TagEvidences) > 0 {
+		for _, tc := range req.Document.TagEvidences {
+			tagEvidences = append(tagEvidences, TagEvidence{
+				Tag:      tc.Tag,
+				Evidence: tc.Evidence,
+			})
+		}
+	} else if len(generatedTags) > 0 {
+		tagEvidences = generatedTags
+	}
+
+	// Generate embedding
+	// Strategy: Prepend summary + tags to content for better RAG
+	contentForEmbedding := req.Document.Content
+	if finalSummary != "" || len(tagEvidences) > 0 {
+		var enrichedParts []string
+		if finalSummary != "" {
+			enrichedParts = append(enrichedParts, "Summary: "+finalSummary)
+		}
+		if len(tagEvidences) > 0 {
+			var tagStrings []string
+			for _, t := range tagEvidences {
+				tagStrings = append(tagStrings, t.Tag)
+			}
+			enrichedParts = append(enrichedParts, "Keywords: "+strings.Join(tagStrings, ", "))
+		}
+		if len(enrichedParts) > 0 {
+			contentForEmbedding = strings.Join(enrichedParts, "\n") + "\n\n" + req.Document.Content
+		}
+	}
+
+	vectorData := req.Document.Embedding
+	if len(vectorData) == 0 {
 		var err error
-		vectorData, err = generateEmbedding(req.Document.Content)
+		vectorData, err = generateEmbedding(contentForEmbedding)
 		if err != nil {
 			return &pb.IndexDocumentResponse{Success: false, Message: "Failed to generate embedding: " + err.Error()}, nil
 		}
+		fmt.Printf("DEBUG: Generated embedding with enriched content (%d chars)\n", len(contentForEmbedding))
 	} else if len(vectorData) != 768 {
-		// 차원 확인 (768로 가정)
 		return &pb.IndexDocumentResponse{Success: false, Message: "Invalid embedding dimension"}, nil
 	}
 
 	embeddingVector := pgvector.NewVector(vectorData)
 
-	// Proto TagEvidences -> Struct TagEvidences
-	var tagEvidences []TagEvidence
-	for _, tc := range req.Document.TagEvidences {
-		tagEvidences = append(tagEvidences, TagEvidence{
-			Tag:      tc.Tag,
-			Evidence: tc.Evidence,
-		})
-	}
-
-	// 1. Encrypt Data
-	// crypto.Encrypt expects (plaintext string, key string)
-
-	// TagEvidences -> JSON -> Encrypt
+	// TagEvidences -> JSON
 	tagEvidencesJson, err := json.Marshal(tagEvidences)
 	if err != nil {
 		return &pb.IndexDocumentResponse{Success: false, Message: "Failed to marshal tags"}, nil
 	}
-	// Client Side Encryption: 클라이언트가 이미 암호화해서 보냈으므로 그대로 저장
-	encryptedTagEvidences := string(tagEvidencesJson)
-	encryptedSummary := req.Document.Summary
 
 	doc := Document{
 		ID:           req.Document.Id,
 		Title:        req.Document.Title,
-		TagEvidences: encryptedTagEvidences,
-		Summary:      encryptedSummary,
+		TagEvidences: string(tagEvidencesJson),
+		Summary:      finalSummary,
 		OwnerID:      req.Document.OwnerId,
 		GroupID:      req.Document.GroupId,
 		GroupType:    req.Document.GroupType,
@@ -84,17 +314,30 @@ func (s *server) IndexDocument(ctx context.Context, req *pb.IndexDocumentRequest
 		Embedding:    embeddingVector,
 	}
 
-	// ID가 없으면 생성, 있으면 업데이트 (Upsert)
+	// Upsert
 	result := s.db.Save(&doc)
 	if result.Error != nil {
 		return &pb.IndexDocumentResponse{Success: false, Message: result.Error.Error()}, nil
 	}
 
+	// Build response tags
+	var responseTagEvidences []*pb.TagEvidence
+	for _, t := range tagEvidences {
+		responseTagEvidences = append(responseTagEvidences, &pb.TagEvidence{
+			Tag:      t.Tag,
+			Evidence: t.Evidence,
+		})
+	}
+
+	fmt.Printf("DEBUG: Document indexed: id=%s, summary=%d chars, tags=%d\n", doc.ID, len(finalSummary), len(tagEvidences))
+
 	return &pb.IndexDocumentResponse{
-		Success:    true,
-		Message:    "Document indexed successfully",
-		DocumentId: doc.ID,
-		Embedding:  vectorData, // 생성된(혹은 전달받은) 임베딩 반환
+		Success:      true,
+		Message:      "Document indexed successfully",
+		DocumentId:   doc.ID,
+		Embedding:    vectorData,
+		Summary:      finalSummary,
+		TagEvidences: responseTagEvidences,
 	}, nil
 }
 

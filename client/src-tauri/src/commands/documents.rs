@@ -1,10 +1,9 @@
 use crate::commands::auth::AuthState;
 use crate::config;
-use crate::crypto::{self, decrypt_content, encrypt_content};
+use crate::crypto::{decrypt_content, encrypt_content};
 use crate::database::DatabaseState;
-use base64::engine::Engine;
-use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension};
+use chrono::Utc;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::State;
@@ -130,6 +129,8 @@ pub async fn save_document(
   let media_size_enc = encrypt_content(&user_id, &media_size_str)?;
 
   let mut creator_name = None;
+  let mut return_summary = req.summary.clone();
+  let mut return_tags = req.tags.clone();
 
   let _rag_data = {
     let db = db_state.lock().unwrap();
@@ -296,18 +297,24 @@ pub async fn save_document(
 
         let tags_to_send = req.tags.clone().unwrap_or_default();
 
-        // Pass encrypted data to RAG sync
-        // We use the encrypted variables calculated earlier in this block
+        // Pass plaintext data to RAG sync for searchability
         (
           embedding_blob,
           tags_to_send,
-          summary_enc,
-          title_enc,
-          created_at_enc,
-          updated_at_enc,
+          req.summary.clone(),
+          req.title.clone(),
+          return_created_at.clone(),
+          now.clone(),
         )
       } else {
-        (None, Vec::new(), None, Vec::new(), Vec::new(), Vec::new())
+        (
+          None,
+          Vec::new(),
+          None,
+          String::new(),
+          String::new(),
+          String::new(),
+        )
       }
     } else {
       return Err("Database not initialized".to_string());
@@ -347,10 +354,10 @@ pub async fn save_document(
       let re_html = regex::Regex::new(r"(?s)<img[^>]*>").unwrap();
       let cleaned_content = re_html.replace_all(&no_md, "");
 
-      // Construct JSON
+      // Construct JSON - Send plaintext data for server-side search
       let payload = serde_json::json!({
-          "title": _rag_data.3, //base64::engine::general_purpose::STANDARD.encode(&_rag_data.3),
-          "summary": _rag_data.2, //.as_ref().map(|s| base64::engine::general_purpose::STANDARD.encode(s)).unwrap_or_default(),
+          "title": _rag_data.3,
+          "summary": _rag_data.2.clone().unwrap_or_default(),
           "tag_evidences": _rag_data.1.iter().map(|t| {
               serde_json::json!({
                   "tag": t.tag,
@@ -361,8 +368,8 @@ pub async fn save_document(
           "content": cleaned_content.to_string(), // Send cleaned plaintext content
           "group_id": req.group_id,
           "group_type": req.group_type,
-          "created_at": _rag_data.4, //base64::engine::general_purpose::STANDARD.encode(&_rag_data.4),
-          "updated_at": _rag_data.5, //base64::engine::general_purpose::STANDARD.encode(&_rag_data.5)
+          "created_at": _rag_data.4,
+          "updated_at": _rag_data.5
       });
 
       // Send Request
@@ -409,20 +416,79 @@ pub async fn save_document(
                     // Save returned embedding to local DB
                     let db = db_state.lock().unwrap();
                     if let Some(ref conn) = db.conn {
-                      let id_bytes = Uuid::parse_str(&doc_id)
-                        .unwrap_or_default()
-                        .as_bytes()
-                        .to_vec();
                       let embedding_bytes: Vec<u8> = embedding
                         .iter()
                         .flat_map(|f| f.to_le_bytes().to_vec())
                         .collect();
 
+                      // 1. Save Embedding
                       let _ = conn.execute(
-                                    "INSERT OR REPLACE INTO document_ai_data (document_id, embedding) VALUES (?1, ?2)",
-                                    rusqlite::params![doc_id, embedding_bytes],
-                                 );
+                        "INSERT OR REPLACE INTO document_ai_data (document_id, embedding) VALUES (?1, ?2)",
+                        rusqlite::params![doc_id, embedding_bytes],
+                      );
                       println!("Saved server-generated embedding for doc {}", doc_id);
+
+                      // 2. Save Summary (if present)
+                      // We receive plaintext summary, so we must encrypt it before saving to DB
+                      if let Some(summary_text) = json_body.get("summary").and_then(|s| s.as_str())
+                      {
+                        if !summary_text.is_empty() {
+                          return_summary = Some(summary_text.to_string());
+                          if let Ok(summary_enc) = encrypt_content(&user_id, summary_text) {
+                            let _ = conn.execute(
+                              "UPDATE documents SET summary = ?1 WHERE id = ?2",
+                              rusqlite::params![summary_enc, doc_id],
+                            );
+                            println!("Saved server-generated summary for doc {}", doc_id);
+                          }
+                        }
+                      }
+
+                      // 3. Save Tags (if present)
+                      if let Some(tag_evidences) =
+                        json_body.get("tag_evidences").and_then(|t| t.as_array())
+                      {
+                        if !tag_evidences.is_empty() {
+                          // Delete existing tags first (to replace with AI generated ones)
+                          let _ = conn.execute(
+                            "DELETE FROM document_tags WHERE document_id = ?1",
+                            [&doc_id],
+                          );
+
+                          let mut new_return_tags = Vec::new();
+
+                          for tag_obj in tag_evidences {
+                            if let (Some(tag), Some(evidence)) = (
+                              tag_obj.get("tag").and_then(|t| t.as_str()),
+                              tag_obj.get("evidence").and_then(|e| e.as_str()),
+                            ) {
+                              let tag_id = Uuid::new_v4().to_string();
+                              let created_at_enc =
+                                encrypt_content(&user_id, &now).unwrap_or_default();
+
+                              if let Ok(tag_enc) = encrypt_content(&user_id, tag) {
+                                let evidence_enc = encrypt_content(&user_id, evidence).ok();
+
+                                let _ = conn.execute(
+                                        "INSERT INTO document_tags (id, document_id, tag, evidence, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                                        rusqlite::params![tag_id, doc_id, tag_enc, evidence_enc, created_at_enc],
+                                     );
+                              }
+
+                              new_return_tags.push(DocumentTag {
+                                tag: tag.to_string(),
+                                evidence: Some(evidence.to_string()),
+                              });
+                            }
+                          }
+                          return_tags = Some(new_return_tags);
+                          println!(
+                            "Saved {} server-generated tags for doc {}",
+                            tag_evidences.len(),
+                            doc_id
+                          );
+                        }
+                      }
                     }
                   }
                 }
@@ -476,14 +542,14 @@ pub async fn save_document(
     group_type: req.group_type,
     group_id: req.group_id,
     parent_id: req.parent_id,
-    summary: None,
+    summary: return_summary,
     created_at: Some(return_created_at),
     updated_at: Some(now),
     last_synced_at: Some(ts),
     accessed_at: None,
     size: Some(size_str),
     is_favorite: req.is_favorite.unwrap_or(false),
-    tags: req.tags, // Return the tags we just saved
+    tags: return_tags, // Return updated tags
     deleted_at: None,
     media_size: Some(media_size_str),
     version: req.version.unwrap_or(0),

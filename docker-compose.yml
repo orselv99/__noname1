@@ -10,7 +10,7 @@ services:
       - PG_HOST=postgres
       - PG_PORT=5432
       - PG_USER=postgres
-      - PG_PASSWORD=postgres
+      - PG_PASSWORD=zzzzzzzz1!
       - AUTH_SERVICE_ADDR=auth:50051
       - INDEX_SERVICE_ADDR=index-service:50052
       - SIGNALING_SERVICE_ADDR=signaling:50053
@@ -34,7 +34,7 @@ services:
     ports:
       - "50051:50051"
     environment:
-      - DB_DSN=host=postgres user=postgres password=postgres dbname=fiery_auth port=5432 sslmode=disable
+      - DB_DSN=host=postgres user=postgres password=zzzzzzzz1! dbname=fiery_auth port=5432 sslmode=disable
       - JWT_SECRET=your_secret_key_dev
       # SMTP Configuration (SSL/TLS on port 465)
       - SMTP_HOST=${SMTP_HOST:-}
@@ -57,7 +57,7 @@ services:
     ports:
       - "50052:50052"
     environment:
-      - DB_DSN=host=postgres user=postgres password=postgres dbname=fiery_index port=5432 sslmode=disable
+      - DB_DSN=host=postgres user=postgres password=zzzzzzzz1! dbname=fiery_index port=5432 sslmode=disable
       - LLAMA_SERVER_ADDR=http://llama-server:8080
       - LLAMA_EMBEDDING_ADDR=http://llama-embedding:8080
     depends_on:
@@ -95,7 +95,7 @@ services:
     restart: always
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=zzzzzzzz1!
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./server/docker/init:/docker-entrypoint-initdb.d
@@ -132,7 +132,7 @@ services:
               capabilities: [ gpu ]
     volumes:
       - ./client-ai-service/model:/models
-    command: -m /models/google_gemma-3-4b-it-IQ3_M.gguf -c 4096 --host 0.0.0.0 --port 8080 -ngl 99
+    command: -m /models/gemma-2-2b-it-Q4_K_M.gguf -c 4096 --host 0.0.0.0 --port 8080 -ngl 99
     networks:
       - fiery-net
   # CPU Only Configuration (For non-GPU environments)

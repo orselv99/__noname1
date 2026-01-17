@@ -1,5 +1,5 @@
 /* Ensure postgres user password is set correctly */
-ALTER USER postgres WITH PASSWORD 'zzzzzzzzz1!';
+ALTER USER postgres WITH PASSWORD 'zzzzzzzz1!';
 
 /* Create databases */
 CREATE DATABASE fiery_auth;

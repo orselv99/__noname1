@@ -851,6 +851,7 @@ struct ServerDocument {
   id: String,
   title: String,
   summary: String,
+  #[serde(rename = "tag_evidences")]
   tag_evidences: Option<Vec<ServerTagEvidence>>,
 }
 
@@ -870,7 +871,11 @@ pub async fn search_server(
     auth.token.clone().ok_or("No token")?
   };
 
-  let client = reqwest::Client::new();
+  let client = reqwest::Client::builder()
+    .timeout(std::time::Duration::from_secs(10))
+    .build()
+    .map_err(|e| e.to_string())?;
+
   let limit_val = limit.unwrap_or(5);
   let url = format!("{}/api/v1/docs/search", config::get_api_url());
 
@@ -890,16 +895,15 @@ pub async fn search_server(
     .text()
     .await
     .map_err(|e| format!("Failed to read response: {}", e))?;
-  println!(
-    "DEBUG: Server search raw response: {}",
-    &text[..text.len().min(500)]
-  );
+
+  let debug_preview: String = text.chars().take(500).collect();
+  println!("DEBUG: Server search raw response: {}", debug_preview);
 
   let body: ServerSearchResponse = serde_json::from_str(&text).map_err(|e| {
+    let error_preview: String = text.chars().take(200).collect();
     format!(
       "Failed to parse server response: {} - Raw: {}",
-      e,
-      &text[..text.len().min(200)]
+      e, error_preview
     )
   })?;
 

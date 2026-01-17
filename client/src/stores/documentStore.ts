@@ -181,6 +181,11 @@ export const useDocumentStore = create<DocumentStore>()(
       },
 
       saveDocument: async (doc) => {
+        // Status Indicator
+        // 배포 상태이면 "배포 중...", 아니면 "저장 중..."
+        const statusMsg = doc.document_state === DocumentState.Published ? "배포 중..." : "저장 중...";
+        set({ autoSaveStatus: statusMsg });
+
         // Optimistic update
         get().updateDocument(doc);
 
@@ -222,10 +227,13 @@ export const useDocumentStore = create<DocumentStore>()(
           };
 
           get().updateDocument(mergedDoc);
+          set({ autoSaveStatus: null });
         } catch (error) {
           console.error("Failed to save document:", error);
           // Revert optimistic update by fetching latest state from DB (which might have been rolled back)
           get().fetchDocuments();
+          set({ autoSaveStatus: "저장 실패" });
+          setTimeout(() => set({ autoSaveStatus: null }), 3000);
           throw error; // Re-throw so caller knows it failed
         }
       },
