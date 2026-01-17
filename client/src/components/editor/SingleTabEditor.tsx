@@ -16,15 +16,19 @@ import TableHeader from '@tiptap/extension-table-header';
 import Superscript from '@tiptap/extension-superscript';
 import Paragraph from '@tiptap/extension-paragraph';
 import { findParentNode } from '@tiptap/core';
-import { useEffect, useState, useRef, useCallback, memo, useMemo } from 'react';
+import { useEffect, useState, useRef, useCallback, memo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
-import { Star, Save, Lock, Unlock } from 'lucide-react';
 import { EditorToolbar } from './EditorToolbar';
+import { SearchWidget, SearchOptions } from './SearchWidget';
+import { Breadcrumbs } from './Breadcrumbs';
+import { EditorActions } from './EditorActions';
+import { EditorTOC } from './EditorTOC';
 import { Document, DocumentState } from '../../types';
 import { useToast } from '../Toast';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { invoke } from '@tauri-apps/api/core';
+
 
 // --- Custom Plugin for Transient Highlighting ---
 const evidencePluginKey = new PluginKey('evidence-highlight');
@@ -55,6 +59,45 @@ const EvidenceHighlightExtension = Extension.create({
         props: {
           decorations(state) {
             return this.getState(state);
+          }
+        }
+      })
+    ];
+  }
+});
+
+// --- Custom Plugin for Search Highlighting ---
+const searchPluginKey = new PluginKey('search-highlight');
+
+const SearchHighlightExtension = Extension.create({
+  name: 'searchHighlight',
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: searchPluginKey,
+        state: {
+          init() {
+            return { decorations: DecorationSet.empty, matches: [] };
+          },
+          apply(tr, oldState) {
+            const meta = tr.getMeta(searchPluginKey);
+            if (meta) {
+              if (meta.action === 'set') {
+                return { decorations: DecorationSet.create(tr.doc, meta.decorations), matches: meta.matches };
+              } else if (meta.action === 'clear') {
+                return { decorations: DecorationSet.empty, matches: [] };
+              }
+            }
+            return {
+              decorations: oldState.decorations.map(tr.mapping, tr.doc),
+              matches: oldState.matches // Matches positions might need mapping if we were robust, but for now re-search is safer on edit
+            };
+          }
+        },
+        props: {
+          decorations(state) {
+            return this.getState(state)?.decorations;
           }
         }
       })
@@ -425,6 +468,8 @@ const TitleInput = memo(({ initialTitle, docId, onTitleChange, onFocusEditor }: 
 
 TitleInput.displayName = 'TitleInput';
 
+
+
 /**
  * SingleTabEditor - A TipTap editor instance for a single document tab.
  * Each tab has its own editor instance to enable instant tab switching.
@@ -432,45 +477,14 @@ TitleInput.displayName = 'TitleInput';
  */
 export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) => {
   const { showToast } = useToast();
-  const { fetchDocuments, highlightedEvidence, toggleFavorite, updateDocument, aiAnalysisStatus, setAiAnalysisStatus, setLiveEditorContent, setAutoSaveStatus, markTabDirty, addTab } = useDocumentStore();
+  const { highlightedEvidence, toggleFavorite, updateDocument, setLiveEditorContent, setAutoSaveStatus, markTabDirty } = useDocumentStore();
 
   // Get document data for this specific editor
   const doc = useDocumentStore(
     useCallback((state) => state.documents.find((d: Document) => d.id === docId), [docId])
   );
 
-  // Get all documents for breadcrumbs hierarchy
-  const documents = useDocumentStore(state => state.documents);
 
-  // Build breadcrumbs path from current document up to root
-  const breadcrumbs = useMemo(() => {
-    if (!doc) return [];
-
-    const path: { id: string; title: string }[] = [];
-    let currentDoc = doc;
-
-    // Traverse up the parent chain (max 10 levels to prevent infinite loop)
-    for (let i = 0; i < 10 && currentDoc; i++) {
-      path.unshift({ id: currentDoc.id, title: currentDoc.title || 'Untitled' });
-
-      if (!currentDoc.parent_id) break;
-
-      const parentDoc = documents.find(d => d.id === currentDoc!.parent_id);
-      if (!parentDoc) break;
-      currentDoc = parentDoc;
-    }
-
-    return path;
-  }, [doc, documents]);
-
-  // Handle breadcrumb click - open the document in a tab
-  const handleBreadcrumbClick = useCallback((breadcrumbDocId: string) => {
-    if (breadcrumbDocId === docId) return; // Already on this document
-    const targetDoc = documents.find(d => d.id === breadcrumbDocId);
-    if (targetDoc) {
-      addTab(targetDoc);
-    }
-  }, [docId, documents, addTab]);
 
   const editor = useEditor({
     extensions: [
@@ -509,6 +523,7 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
       TableCell,
       Superscript, // Standard Superscript is fine now
       EvidenceHighlightExtension,
+      SearchHighlightExtension,
       ImageEmbedExtension,
     ],
     editorProps: {
@@ -552,12 +567,192 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
     content: '', // Will be set on mount
   });
 
-  const [, setAiResult] = useState<any>(null);
+
   const [title, setTitle] = useState(() => doc?.title || '');
   const [isDirty, setIsDirty] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const ignoreUpdate = useRef(false);
   const contentLoaded = useRef(false);
+
+  // Search State
+  // Search State
+  const [showSearch, setShowSearch] = useState(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
+  const [totalMatches, setTotalMatches] = useState(0);
+  const [matches, setMatches] = useState<{ from: number; to: number }[]>([]);
+  const [currentTerm, setCurrentTerm] = useState('');
+  const [currentOptions, setCurrentOptions] = useState<SearchOptions>({ caseSensitive: false, wholeWord: false, isRegex: false });
+
+  // Search Logic
+  const handleSearch = useCallback((term: string, options: SearchOptions) => {
+    setCurrentTerm(term);
+    setCurrentOptions(options);
+
+    if (!term || !editor) {
+      setMatches([]);
+      setTotalMatches(0);
+      setCurrentMatchIndex(-1);
+      editor?.view.dispatch(editor.view.state.tr.setMeta(searchPluginKey, { action: 'clear' }));
+      return;
+    }
+
+    const { doc } = editor.state;
+    const foundMatches: { from: number; to: number }[] = [];
+
+    try {
+      let regex: RegExp;
+      if (options.isRegex) {
+        regex = new RegExp(term, options.caseSensitive ? 'g' : 'gi');
+      } else {
+        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex chars
+        if (options.wholeWord) {
+          regex = new RegExp(`\\b${escaped}\\b`, options.caseSensitive ? 'g' : 'gi');
+        } else {
+          regex = new RegExp(escaped, options.caseSensitive ? 'g' : 'gi');
+        }
+      }
+
+      doc.descendants((node, pos) => {
+        if (node.isText && node.text) {
+          const text = node.text;
+          let match;
+          while ((match = regex.exec(text)) !== null) {
+            foundMatches.push({
+              from: pos + match.index,
+              to: pos + match.index + match[0].length
+            });
+          }
+        }
+      });
+    } catch (e) {
+      // Invalid regex, ignore
+      console.warn("Invalid regex:", e);
+    }
+
+    setMatches(foundMatches);
+    setTotalMatches(foundMatches.length);
+
+    // Preserve current match index if possible, or reset to 0
+    // Actually, usually we reset to 0 or -1 on new search
+    // But if we are typing, maybe we want to keep focus on relevant match?
+    // For now, simpler to find the first match after current selection
+
+    if (foundMatches.length > 0) {
+      // Find nearest match after current selection
+      const { from } = editor.state.selection;
+      let nextIndex = foundMatches.findIndex(m => m.from >= from);
+      if (nextIndex === -1) nextIndex = 0;
+
+      setCurrentMatchIndex(nextIndex);
+
+      // Highlight logic
+      const decorations = foundMatches.map((m, i) =>
+        Decoration.inline(m.from, m.to, {
+          class: `search-match ${i === nextIndex ? 'current-search-match ring-2 ring-yellow-400' : 'bg-yellow-500/30'}`
+        })
+      );
+
+      editor.view.dispatch(editor.view.state.tr.setMeta(searchPluginKey, {
+        action: 'set',
+        decorations,
+        matches: foundMatches
+      }));
+
+      // Scroll to match
+      const match = foundMatches[nextIndex];
+      const dom = editor.view.domAtPos(match.from).node as HTMLElement;
+      if (dom) {
+        // We need to find the specific text node's parent or rely on cursor
+        editor.commands.setTextSelection(match.from);
+        editor.commands.scrollIntoView();
+      }
+    } else {
+      setCurrentMatchIndex(-1);
+      editor.view.dispatch(editor.view.state.tr.setMeta(searchPluginKey, { action: 'clear' }));
+    }
+  }, [editor]);
+
+  const handleReplace = useCallback((replacement: string) => {
+    if (!editor || matches.length === 0 || currentMatchIndex === -1) return;
+
+    const match = matches[currentMatchIndex];
+    if (!match) return;
+
+    editor.chain()
+      .setTextSelection({ from: match.from, to: match.to })
+      .insertContent(replacement)
+      .run();
+
+    // Re-trigger search to update matches
+    // Note: Inserting content shifts positions of subsequent matches, so simplistic re-search is safest
+    // Ideally we'd map positions, but re-search is robust.
+    // We can call handleSearch but we need to ensure we don't reset everything unexpectedly.
+    // The editor update will trigger if we have effects, but here we manually re-run.
+
+    // Ideally, we wait for update? Or just re-run search immediately after a tick?
+    setTimeout(() => handleSearch(currentTerm, currentOptions), 10);
+
+  }, [editor, matches, currentMatchIndex, currentTerm, currentOptions, handleSearch]);
+
+  const handleReplaceAll = useCallback((replacement: string) => {
+    if (!editor || matches.length === 0) return;
+
+    // Replace backwards to avoid index shifting issues
+    const tr = editor.state.tr;
+
+    // matches are sorted by document order. Reverse them.
+    [...matches].reverse().forEach(match => {
+      tr.insertText(replacement, match.from, match.to);
+    });
+
+    editor.view.dispatch(tr);
+
+    // Re-search
+    setTimeout(() => handleSearch(currentTerm, currentOptions), 10);
+
+  }, [editor, matches, currentTerm, currentOptions, handleSearch]);
+
+
+  const navigateSearch = useCallback((direction: 'next' | 'prev') => {
+    if (matches.length === 0 || !editor) return;
+
+    let newIndex = direction === 'next' ? currentMatchIndex + 1 : currentMatchIndex - 1;
+    if (newIndex >= matches.length) newIndex = 0;
+    if (newIndex < 0) newIndex = matches.length - 1;
+
+    setCurrentMatchIndex(newIndex);
+
+    const decorations = matches.map((m, i) => Decoration.inline(m.from, m.to, {
+      class: i === newIndex ? 'bg-orange-500 text-white current-search-match' : 'bg-yellow-500/50'
+    }));
+
+    editor.view.dispatch(
+      editor.view.state.tr.setMeta(searchPluginKey, {
+        action: 'set',
+        decorations,
+        matches
+      })
+    );
+
+    // Scroll to match
+    setTimeout(() => {
+      const el = document.querySelector('.current-search-match');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  }, [editor, matches, currentMatchIndex]);
+
+  // Handle Ctrl+F
+  useEffect(() => {
+    if (!isActive) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isActive]);
 
   const getDraftKey = (id: string) => `draft-${id}`;
 
@@ -920,31 +1115,7 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
     }
   }, [highlightedEvidence, editor, isActive]);
 
-  const handleAiExtraction = async () => {
-    if (!editor || !doc) return;
-    const text = editor.getText();
-    if (!text.trim()) return;
 
-    setAiAnalysisStatus('AI 분석중...');
-    setAiResult(null);
-
-    try {
-      const res = await invoke('extract_info', {
-        text,
-        content: editor.getHTML(),
-        title: title || undefined,
-        id: docId || undefined
-      });
-      console.log("AI Analysis Result:", res);
-      await fetchDocuments();
-      setAiResult(null);
-      setAiAnalysisStatus(null);
-    } catch (error) {
-      console.error('AI Extraction Failed:', error);
-      setAiAnalysisStatus('AI 분석 실패');
-      setTimeout(() => setAiAnalysisStatus(null), 3000);
-    }
-  };
 
   // ToC / Headings logic
   const getHeadings = () => {
@@ -1029,56 +1200,16 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-1 pt-2 pl-4 pr-2 shrink-0">
-        <div className='flex items-center gap-1 text-xs text-zinc-500 overflow-hidden whitespace-nowrap'>
-          <span className="text-zinc-400">{doc?.group_type === 2 ? 'Private' : 'Public'}</span>
-          {breadcrumbs.map((crumb, index) => (
-            <span key={crumb.id} className="flex items-center">
-              <span className="mx-1 text-zinc-600">/</span>
-              {index === breadcrumbs.length - 1 ? (
-                // Current document - not clickable
-                <span className="text-zinc-300 font-medium truncate max-w-[200px]">{crumb.title}</span>
-              ) : (
-                // Ancestor document - clickable
-                <button
-                  onClick={() => handleBreadcrumbClick(crumb.id)}
-                  className="text-zinc-400 hover:text-blue-400 hover:underline truncate max-w-[150px] transition-colors"
-                  title={crumb.title}
-                >
-                  {crumb.title}
-                </button>
-              )}
-            </span>
-          ))}
-        </div>
+        <Breadcrumbs currentDoc={doc} />
         <div>
-          {doc?.deleted_at ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-950/30 border border-red-900/50 text-red-400 select-none">
-              <span className="text-[10px] font-bold tracking-wider">DELETED</span>
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={() => setIsReadOnly(!isReadOnly)}
-                className={`p-2 rounded-lg transition-colors ${isReadOnly ? 'text-red-400 bg-red-900/20 hover:bg-red-900/30' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-                title={isReadOnly ? "Read-only Mode (Unlock)" : "Lock Document"}
-              >
-                {isReadOnly ? <Lock size={18} /> : <Unlock size={18} />}
-              </button>
-              <button
-                onClick={() => toggleFavorite(docId)}
-                className={`p-2 rounded-lg hover:bg-zinc-800 transition-colors ${doc?.is_favorite ? 'text-yellow-400' : 'text-zinc-400 hover:text-white'}`}
-              >
-                <Star size={18} className={doc?.is_favorite ? 'fill-current' : ''} />
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={!isDirty}
-                className={`p-2 rounded-lg transition-colors ${!isDirty ? 'text-zinc-700 cursor-not-allowed' : 'hover:bg-zinc-800 text-zinc-400 hover:text-white'}`}
-              >
-                <Save size={18} />
-              </button>
-            </>
-          )}
+          <EditorActions
+            doc={doc}
+            isReadOnly={isReadOnly}
+            onToggleReadOnly={() => setIsReadOnly(!isReadOnly)}
+            onToggleFavorite={() => toggleFavorite(docId)}
+            onSave={handleSave}
+            isDirty={isDirty}
+          />
         </div>
       </div>
 
@@ -1102,12 +1233,14 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
                 />
               </div>
 
-              <div className="px-4 py-4 sticky top-4 z-50 shrink-0">
-                {!doc?.deleted_at && (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 backdrop-blur shadow-2xl mx-auto max-w-fit transition-all duration-300">
-                    <EditorToolbar editor={editor} />
-                  </div>
-                )}
+              <div className="px-4 py-4 sticky top-4 z-50 shrink-0 flex justify-center pointer-events-none">
+                <div className="pointer-events-auto">
+                  {!doc?.deleted_at && (
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 backdrop-blur shadow-2xl mx-auto max-w-fit transition-all duration-300">
+                      <EditorToolbar editor={editor} />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex-1 px-12 pb-20 w-full">
@@ -1121,38 +1254,29 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
         </div>
 
         {/* TOC */}
-        {headings.length > 0 && (
-          <div className="absolute top-40 right-6 w-40 shrink-0 flex flex-col max-h-[calc(100%-13rem)] z-40 pointer-events-none">
-            <div className="flex-1 overflow-y-auto py-4 custom-scrollbar pointer-events-auto">
-              {headings.map((heading, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => scrollToHeading(heading.pos)}
-                  className={`block w-full text-right pr-3 py-1.5 text-[11px] truncate hover:text-white cursor-pointer transition-colors border-r-2 ${heading.level === 1 ? 'text-zinc-200 font-medium border-red-500' :
-                    heading.level === 2 ? 'text-zinc-400 border-transparent hover:border-zinc-600' :
-                      'text-zinc-500 border-transparent hover:border-zinc-700'
-                    }`}
-                  title={heading.text}
-                >
-                  {heading.text || '(empty)'}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <EditorTOC headings={headings} scrollToHeading={scrollToHeading} />
 
-        {/* AI FAB */}
-        <div className="absolute bottom-8 right-8 z-50">
-          <button
-            className={`flex items-center gap-2 px-5 py-3 rounded-full font-medium shadow-xl transition-all ${aiAnalysisStatus ? 'bg-zinc-800 text-zinc-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white hover:scale-105 active:scale-95'
-              }`}
-            onClick={handleAiExtraction}
-            disabled={!!aiAnalysisStatus}
-          >
-            {aiAnalysisStatus || 'AI 분석'}
-          </button>
-        </div>
+
       </div>
+
+      {showSearch && (
+        <div className="absolute top-15 right-5 z-60">
+          <SearchWidget
+            onSearch={handleSearch}
+            onNext={() => navigateSearch('next')}
+            onPrev={() => navigateSearch('prev')}
+            onReplace={handleReplace}
+            onReplaceAll={handleReplaceAll}
+            onClose={() => {
+              setShowSearch(false);
+              handleSearch('', { caseSensitive: false, wholeWord: false, isRegex: false });
+              editor?.commands.focus();
+            }}
+            matchIndex={currentMatchIndex}
+            totalMatches={totalMatches}
+          />
+        </div>
+      )}
     </div>
   );
 });

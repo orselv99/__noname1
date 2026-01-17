@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, Calendar, User, FileText, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity, Quote } from 'lucide-react';
+import { Tag, Calendar, User, FileText, ChevronUp, ChevronDown, Link as LinkIcon, ExternalLink, Eye, EyeOff, Globe, Edit3, Send, ChevronDown as ChevronDownIcon, Image, Video, Music, Paperclip, ChevronsUpDown, AlignLeft, History, Activity, Quote, Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { DocumentState, VisibilityLevel, GroupType, Document } from '../../types';
@@ -400,7 +400,7 @@ const DOCUMENT_STATES = [
   { value: DocumentState.Published, label: 'Published', icon: Globe, color: 'bg-green-900/50 text-green-300', hoverColor: 'hover:bg-green-800/50' },
 ];
 
-const DocumentStateDropdown = memo(({ currentState, onStateChange, isPrivate }: { currentState: DocumentState; onStateChange: (state: DocumentState) => void; isPrivate?: boolean }) => {
+const DocumentStateDropdown = memo(({ currentState, onStateChange, isPrivate, isLoading, disabled }: { currentState: DocumentState; onStateChange: (state: DocumentState) => void; isPrivate?: boolean; isLoading?: boolean; disabled?: boolean }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -408,6 +408,8 @@ const DocumentStateDropdown = memo(({ currentState, onStateChange, isPrivate }: 
 
   const toggleDropdown = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isLoading || disabled) return;
+
     if (!showDropdown && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       setDropdownPosition({
@@ -444,13 +446,14 @@ const DocumentStateDropdown = memo(({ currentState, onStateChange, isPrivate }: 
       <button
         ref={triggerRef}
         onClick={toggleDropdown}
-        className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full transition-all ${currentConfig.color} ${currentConfig.hoverColor} cursor-pointer`}
+        disabled={isLoading || disabled}
+        className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full transition-all ${currentConfig.color} ${currentConfig.hoverColor} ${(isLoading || disabled) ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <span className="flex items-center gap-1.5">
-          <Icon size={12} />
-          {currentConfig.label}
+          {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Icon size={12} />}
+          {isLoading ? (currentState === DocumentState.Published ? 'Publishing...' : 'Saving...') : currentConfig.label}
         </span>
-        <ChevronDownIcon size={12} className="opacity-50" />
+        {!isLoading && <ChevronDownIcon size={12} className="opacity-50" />}
       </button>
       {showDropdown && createPortal(
         <div
@@ -638,6 +641,9 @@ export const MetadataPanel = () => {
   // Revision 펼침 상태 (상단 모두펼치기에 영향 안받음)
   const [isRevisionExpanded, setIsRevisionExpanded] = useState(false);
 
+  // Status Change Loading State
+  const [isPublishing, setIsPublishing] = useState(false);
+
   // 모두 펼치기/접기
   const toggleAllSections = () => {
     const anyCollapsed = !isSummaryExpanded || !isTagsExpanded || !isLinksExpanded || !isResourcesExpanded || !isMentionsExpanded;
@@ -688,6 +694,8 @@ export const MetadataPanel = () => {
               <DocumentStateDropdown
                 currentState={activeDoc.document_state}
                 isPrivate={false} // Check handled by parent conditional
+                isLoading={isPublishing}
+                disabled={isPublishing}
                 onStateChange={async (state) => {
                   try {
                     // 1. Check if Private document is trying to be Published
@@ -710,7 +718,12 @@ export const MetadataPanel = () => {
                         confirmText: '게시',
                         variant: 'primary'
                       })) {
-                        await saveDocument({ ...activeDoc, document_state: state });
+                        setIsPublishing(true);
+                        try {
+                          await saveDocument({ ...activeDoc, document_state: state });
+                        } finally {
+                          setIsPublishing(false);
+                        }
                       }
                     }
                     // 3. All other state changes
@@ -718,6 +731,7 @@ export const MetadataPanel = () => {
                       await saveDocument({ ...activeDoc, document_state: state });
                     }
                   } catch (error) {
+                    setIsPublishing(false);
                     console.error('State change error:', error);
                     showToast('서버 동기화 문제로 인해 게시가 취소되었습니다 (잠시 후 다시 시도해주세요)', 'error');
                   }

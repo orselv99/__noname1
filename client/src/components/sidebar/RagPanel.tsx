@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { Loader2, Sparkles, Send, Plus, History, MessageSquare, X, Pencil, Database, Globe, ExternalLink, FileText, CheckCircle2, Circle, ChevronDown } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Loader2, Sparkles, Send, Plus, History, MessageSquare, X, Pencil, Database, Globe, ExternalLink, FileText, CheckCircle2, ChevronDown, Calendar, Tag } from 'lucide-react';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { useChatStore } from '../../stores/chatStore';
 import { useDocumentStore } from '../../stores/documentStore';
 
@@ -25,16 +27,111 @@ function CollapsibleSection({ title, icon: Icon, children, count, colorClass, de
   );
 }
 
-function ResultItem({ result, type }: { result: any, type: 'local' | 'server' | 'web' }) {
+function ServerDocPopup({ doc, onClose }: { doc: any, onClose: () => void }) {
+  if (!doc) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 relative" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-zinc-700 bg-zinc-900/50 shrink-0">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="p-2 rounded bg-blue-500/10 text-blue-400 shrink-0">
+              <Database size={18} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-zinc-100 truncate text-base">{doc.metadata.title || "Untitled"}</h3>
+              <div className="flex items-center gap-2 text-xs text-zinc-500 mt-1">
+                {doc.metadata.created_at && (
+                  <span className="flex items-center gap-1">
+                    <Calendar size={10} />
+                    {new Date(doc.metadata.created_at).toLocaleDateString()}
+                  </span>
+                )}
+                {doc.metadata.score && (
+                  <span className="bg-blue-900/30 text-blue-400 px-1.5 rounded">
+                    {Number(doc.metadata.score).toFixed(2)} similarity
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 text-zinc-500 hover:text-white rounded-md hover:bg-zinc-800 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+          {/* Summary if available */}
+          {doc.metadata.summary && (
+            <div className="mb-6 p-4 bg-zinc-950/50 rounded-lg border border-zinc-800">
+              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                <Sparkles size={12} className="text-yellow-500" /> Summary
+              </h4>
+              <p className="text-sm text-zinc-300 leading-relaxed">{doc.metadata.summary}</p>
+            </div>
+          )}
+
+          {/* Main Content */}
+          <div className="prose prose-invert prose-sm max-w-none">
+            <div className="text-sm leading-relaxed whitespace-pre-wrap text-zinc-300">
+              {doc.content}
+            </div>
+          </div>
+
+          {/* Tags */}
+          {doc.metadata.tag_evidences && doc.metadata.tag_evidences.length > 0 && (
+            <div className="mt-8 pt-4 border-t border-zinc-800">
+              <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Tag size={12} /> Tags
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {doc.metadata.tag_evidences.map((tag: any, i: number) => (
+                  <span key={i} className="text-xs px-2 py-1 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
+                    #{tag.tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-3 border-t border-zinc-700 bg-zinc-900/50 text-right shrink-0">
+          <button onClick={onClose} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm rounded transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function ResultItem({ result, type, hoverColor, onSelect }: { result: any, type: 'local' | 'server' | 'web', hoverColor?: string, onSelect?: (result: any) => void }) {
   const documents = useDocumentStore(state => state.documents);
   const addTab = useDocumentStore(state => state.addTab);
 
-  const handleOpen = (e: React.MouseEvent) => {
+  const handleOpen = async (e: React.MouseEvent) => {
     e.stopPropagation();
+
+    if (type === 'server' && onSelect) {
+      onSelect(result);
+      return;
+    }
+
     if (type === 'web') {
-      if (result.metadata.url) window.open(result.metadata.url, '_blank');
+      if (result.metadata.url) {
+        try {
+          await openUrl(result.metadata.url);
+        } catch (error) {
+          console.error("Failed to open URL:", error);
+          window.open(result.metadata.url, '_blank');
+        }
+      }
     } else {
-      // For local/server, open/select the document
+      // For local, open/select the document
       const doc = documents.find(d => d.id === result.metadata.id);
       if (doc) {
         addTab(doc);
@@ -47,13 +144,16 @@ function ResultItem({ result, type }: { result: any, type: 'local' | 'server' | 
   const getBadgeColor = (group: string) => {
     switch (group) {
       case 'Private': return 'bg-zinc-800 text-zinc-400';
-      case 'Department': return 'bg-blue-900/30 text-blue-400';
-      case 'Project': return 'bg-purple-900/30 text-purple-400';
+      case 'Personal': return 'bg-purple-900/30 text-purple-400'; // Local/Personal -> Purple
+      case 'Department': return 'bg-pink-900/30 text-pink-400';
+      case 'Project': return 'bg-indigo-900/30 text-indigo-400';
       case 'Web': return 'bg-green-900/30 text-green-400';
-      case 'Server': return 'bg-indigo-900/30 text-indigo-400';
+      case 'Server': return 'bg-blue-900/30 text-blue-400'; // Server -> Blue
       default: return 'bg-zinc-800 text-zinc-500';
     }
   };
+
+  const hoverClass = hoverColor || "group-hover:text-blue-400";
 
   return (
     <div
@@ -62,7 +162,7 @@ function ResultItem({ result, type }: { result: any, type: 'local' | 'server' | 
     >
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-medium text-zinc-300 truncate group-hover:text-blue-400 transition-colors">
+          <span className={`text-xs font-medium text-zinc-300 truncate transition-colors ${hoverClass}`}>
             {result.metadata.title || "Untitled"}
           </span>
           {/* Group Badge - Hide for Web */}
@@ -80,7 +180,7 @@ function ResultItem({ result, type }: { result: any, type: 'local' | 'server' | 
               {result.metadata.similarity.toFixed(0)}%
             </span>
           )}
-          <div className="text-zinc-600 group-hover:text-blue-400 transition-colors">
+          <div className={`text-zinc-600 transition-colors ${hoverClass}`}>
             <ExternalLink size={12} />
           </div>
         </div>
@@ -200,6 +300,7 @@ export function RagPanel() {
   const [showHistory, setShowHistory] = useState(false);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [selectedServerDoc, setSelectedServerDoc] = useState<any>(null);
 
 
   const {
@@ -261,17 +362,23 @@ export function RagPanel() {
     }
   }, [messages, prevScrollHeight]);
 
+  const scrollToBottom = () => {
+    if (isFirstRender.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      isFirstRender.current = false;
+      isAutoScrollEnabled.current = true;
+    } else if (isAutoScrollEnabled.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+
   useEffect(() => {
     if (prevScrollHeight === 0 && !isLoadingMore) {
-      if (isFirstRender.current) {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-        isFirstRender.current = false;
-        isAutoScrollEnabled.current = true;
-      } else if (isAutoScrollEnabled.current) {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }
+      scrollToBottom();
     }
   }, [messages, thinkingProcess, isLoadingMore, prevScrollHeight]);
+
+  // Also scroll when server doc selected? No, popup is overlay.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -478,11 +585,16 @@ export function RagPanel() {
                               <CollapsibleSection
                                 title="Local Docs"
                                 icon={FileText}
-                                colorClass="text-blue-400"
+                                colorClass="text-purple-400"
                                 count={ragData.results.local.length}
                               >
                                 {ragData.results.local.map((r: any, i: number) => (
-                                  <ResultItem key={i} result={r} type="local" />
+                                  <ResultItem
+                                    key={i}
+                                    result={r}
+                                    type="local"
+                                    hoverColor="group-hover:text-purple-400"
+                                  />
                                 ))}
                               </CollapsibleSection>
                             )}
@@ -491,12 +603,18 @@ export function RagPanel() {
                             <CollapsibleSection
                               title="Server Docs"
                               icon={Database}
-                              colorClass="text-purple-400"
+                              colorClass="text-blue-400"
                               count={ragData.results.server.length}
                             >
                               {ragData.results.server.length > 0 ? (
                                 ragData.results.server.map((r: any, i: number) => (
-                                  <ResultItem key={i} result={r} type="server" />
+                                  <ResultItem
+                                    key={i}
+                                    result={r}
+                                    type="server"
+                                    hoverColor="group-hover:text-blue-400"
+                                    onSelect={(doc) => setSelectedServerDoc(doc)}
+                                  />
                                 ))
                               ) : (
                                 <div className="text-xs text-zinc-500 italic px-1">
@@ -514,7 +632,12 @@ export function RagPanel() {
                                 count={ragData.results.web.length}
                               >
                                 {ragData.results.web.map((r: any, i: number) => (
-                                  <ResultItem key={i} result={r} type="web" />
+                                  <ResultItem
+                                    key={i}
+                                    result={r}
+                                    type="web"
+                                    hoverColor="group-hover:text-green-400"
+                                  />
                                 ))}
                               </CollapsibleSection>
                             )}
@@ -590,6 +713,9 @@ export function RagPanel() {
           </form>
         </div>
       )}
+
+      {/* Server Doc Popup */}
+      <ServerDocPopup doc={selectedServerDoc} onClose={() => setSelectedServerDoc(null)} />
     </div>
   );
 }
