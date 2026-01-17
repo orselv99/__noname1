@@ -35,17 +35,17 @@ const COMPLETION_URL_ENCRYPTED: &[u8] = &[
 
 /// Get the API gateway URL
 pub fn get_api_url() -> String {
-  xor_decrypt(API_URL_ENCRYPTED)
+  "http://localhost:8080".to_string()
 }
 
-/// Get the embedding server URL
+/// Get the embedding server URL (Routed via Gateway)
 pub fn get_embedding_url() -> String {
-  xor_decrypt(EMBEDDING_URL_ENCRYPTED)
+  "http://localhost:8080/api/v1".to_string()
 }
 
-/// Get the completion server URL
+/// Get the completion server URL (Routed via Gateway)
 pub fn get_completion_url() -> String {
-  xor_decrypt(COMPLETION_URL_ENCRYPTED)
+  "http://localhost:8080/api/v1".to_string()
 }
 
 // ============================================================================

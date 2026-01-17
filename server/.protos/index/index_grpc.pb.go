@@ -19,9 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IndexService_IndexDocument_FullMethodName   = "/index.IndexService/IndexDocument"
-	IndexService_SearchDocuments_FullMethodName = "/index.IndexService/SearchDocuments"
-	IndexService_SyncDocuments_FullMethodName   = "/index.IndexService/SyncDocuments"
+	IndexService_IndexDocument_FullMethodName     = "/index.IndexService/IndexDocument"
+	IndexService_SearchDocuments_FullMethodName   = "/index.IndexService/SearchDocuments"
+	IndexService_SyncDocuments_FullMethodName     = "/index.IndexService/SyncDocuments"
+	IndexService_GenerateEmbedding_FullMethodName = "/index.IndexService/GenerateEmbedding"
 )
 
 // IndexServiceClient is the client API for IndexService service.
@@ -37,6 +38,8 @@ type IndexServiceClient interface {
 	SearchDocuments(ctx context.Context, in *SearchDocumentsRequest, opts ...grpc.CallOption) (*SearchDocumentsResponse, error)
 	// 동기화: 클라이언트의 변경 사항(Delta)을 수신하고 충돌을 해결합니다.
 	SyncDocuments(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SyncRequest, SyncResponse], error)
+	// 임베딩 생성 (클라이언트 Local RAG용)
+	GenerateEmbedding(ctx context.Context, in *GenerateEmbeddingRequest, opts ...grpc.CallOption) (*GenerateEmbeddingResponse, error)
 }
 
 type indexServiceClient struct {
@@ -80,6 +83,16 @@ func (c *indexServiceClient) SyncDocuments(ctx context.Context, opts ...grpc.Cal
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type IndexService_SyncDocumentsClient = grpc.BidiStreamingClient[SyncRequest, SyncResponse]
 
+func (c *indexServiceClient) GenerateEmbedding(ctx context.Context, in *GenerateEmbeddingRequest, opts ...grpc.CallOption) (*GenerateEmbeddingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GenerateEmbeddingResponse)
+	err := c.cc.Invoke(ctx, IndexService_GenerateEmbedding_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IndexServiceServer is the server API for IndexService service.
 // All implementations must embed UnimplementedIndexServiceServer
 // for forward compatibility.
@@ -93,6 +106,8 @@ type IndexServiceServer interface {
 	SearchDocuments(context.Context, *SearchDocumentsRequest) (*SearchDocumentsResponse, error)
 	// 동기화: 클라이언트의 변경 사항(Delta)을 수신하고 충돌을 해결합니다.
 	SyncDocuments(grpc.BidiStreamingServer[SyncRequest, SyncResponse]) error
+	// 임베딩 생성 (클라이언트 Local RAG용)
+	GenerateEmbedding(context.Context, *GenerateEmbeddingRequest) (*GenerateEmbeddingResponse, error)
 	mustEmbedUnimplementedIndexServiceServer()
 }
 
@@ -111,6 +126,9 @@ func (UnimplementedIndexServiceServer) SearchDocuments(context.Context, *SearchD
 }
 func (UnimplementedIndexServiceServer) SyncDocuments(grpc.BidiStreamingServer[SyncRequest, SyncResponse]) error {
 	return status.Error(codes.Unimplemented, "method SyncDocuments not implemented")
+}
+func (UnimplementedIndexServiceServer) GenerateEmbedding(context.Context, *GenerateEmbeddingRequest) (*GenerateEmbeddingResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GenerateEmbedding not implemented")
 }
 func (UnimplementedIndexServiceServer) mustEmbedUnimplementedIndexServiceServer() {}
 func (UnimplementedIndexServiceServer) testEmbeddedByValue()                      {}
@@ -176,6 +194,24 @@ func _IndexService_SyncDocuments_Handler(srv interface{}, stream grpc.ServerStre
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type IndexService_SyncDocumentsServer = grpc.BidiStreamingServer[SyncRequest, SyncResponse]
 
+func _IndexService_GenerateEmbedding_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GenerateEmbeddingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndexServiceServer).GenerateEmbedding(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndexService_GenerateEmbedding_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndexServiceServer).GenerateEmbedding(ctx, req.(*GenerateEmbeddingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IndexService_ServiceDesc is the grpc.ServiceDesc for IndexService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -190,6 +226,10 @@ var IndexService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SearchDocuments",
 			Handler:    _IndexService_SearchDocuments_Handler,
+		},
+		{
+			MethodName: "GenerateEmbedding",
+			Handler:    _IndexService_GenerateEmbedding_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

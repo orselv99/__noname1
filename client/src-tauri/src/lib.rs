@@ -19,7 +19,6 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
     .manage(Mutex::new(commands::auth::AuthState::default()))
-    .manage(Mutex::new(sidecar::SidecarState::default()))
     .manage(Mutex::new(database::DatabaseState::default()))
     .invoke_handler(tauri::generate_handler![
       greet,
@@ -39,16 +38,17 @@ pub fn run() {
       commands::media::download_image,
       commands::media::read_local_file_as_data_url,
       commands::rag::ask_ai,
+      commands::rag::search_local,    // Added
+      commands::rag::add_rag_message, // Added
       commands::rag::create_new_chat,
       commands::rag::get_rag_chats,
       commands::rag::get_rag_messages,
       commands::rag::delete_rag_chat,
-      commands::rag::update_rag_chat_title
+      commands::rag::update_rag_chat_title,
+      commands::rag::search_web,    // Added
+      commands::rag::search_server  // Added
     ])
     .setup(|app| {
-      // Kill any existing sidecar processes to prevent orphans on startup
-      sidecar::kill_orphans();
-
       // Initialize SQLite database for offline support
       match database::init_database(&app.handle()) {
         Ok(conn) => {
@@ -62,17 +62,14 @@ pub fn run() {
         }
       }
 
-      // Note: Sidecars are now spawned after successful login, not at app startup
-      println!("Debug: App started. Sidecars will spawn after login.");
+      println!("Debug: App started. Server-Side AI Enabled.");
       Ok(())
     })
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
     .run(|_app_handle, event| {
       if let tauri::RunEvent::Exit = event {
-        println!("Debug: App exiting, killing sidecars...");
-        sidecar::kill_orphans();
-        println!("Debug: Killed sidecars via taskkill");
+        println!("Debug: App exiting.");
       }
     });
 }

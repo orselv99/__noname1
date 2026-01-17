@@ -269,16 +269,18 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Failed to create document_revisions table: {}", e))?;
 
-    // Migration: Update index to be UNIQUE for ON CONFLICT support
-    // First, check if the old non-unique index exists and drop it if necessary
-    // or we can just try to create the UNIQUE index.
-    // Ideally, we want a UNIQUE index on (document_id, version).
-    
-    // Let's drop the old index if it exists (not unique)
-    conn.execute("DROP INDEX IF EXISTS idx_revisions_document", []).ok();
+  // Migration: Update index to be UNIQUE for ON CONFLICT support
+  // First, check if the old non-unique index exists and drop it if necessary
+  // or we can just try to create the UNIQUE index.
+  // Ideally, we want a UNIQUE index on (document_id, version).
 
-    // Create UNIQUE index
-    conn
+  // Let's drop the old index if it exists (not unique)
+  conn
+    .execute("DROP INDEX IF EXISTS idx_revisions_document", [])
+    .ok();
+
+  // Create UNIQUE index
+  conn
     .execute(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_document_unique ON document_revisions(document_id, version)",
       [],
@@ -341,13 +343,38 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
     )
     .map_err(|e| format!("Failed to create document_tags index: {}", e))?;
 
+  // Create output_format migration if needed (omitted)
+
+  // Create departments table (Cache)
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS departments (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create departments table: {}", e))?;
+
+  // Create projects table (Cache)
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL
+        )",
+      [],
+    )
+    .map_err(|e| format!("Failed to create projects table: {}", e))?;
 
   // Migration: Fix version 1 for non-published documents (should be 0)
   // This handles documents created before the default was changed to 0.
-  conn.execute(
-    "UPDATE documents SET version = 0 WHERE document_state != 3 AND version = 1",
-    [],
-  ).ok();
+  conn
+    .execute(
+      "UPDATE documents SET version = 0 WHERE document_state != 3 AND version = 1",
+      [],
+    )
+    .ok();
 
   println!("Debug: Database initialized successfully");
   Ok(conn)

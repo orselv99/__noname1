@@ -52,7 +52,7 @@ func getPasswordEmailHTML(password string) string {
                 비밀번호가 변경되었습니다
               </h2>
               <p style="margin: 0 0 24px 0; color: #52525b; font-size: 15px; line-height: 1.6;">
-                관리자에 의해 비밀번호가 초기화되었습니다.<br>
+                관리자에 의해 비밀번호가 초기화되었습니다<br>
                 아래 임시 비밀번호로 로그인한 후, 반드시 새로운 비밀번호로 변경해 주세요.
               </p>
               

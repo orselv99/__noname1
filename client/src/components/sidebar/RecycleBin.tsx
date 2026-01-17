@@ -32,7 +32,7 @@ export const RecycleBin = () => {
     }
 
     const message = parentIsDeleted
-      ? `"${title}" 문서의 상위 폴더가 삭제되었습니다.\n최상위(Root) 경로로 복원하시겠습니까?`
+      ? `"${title}" 문서의 상위 폴더가 삭제되었습니다\n최상위(Root) 경로로 복원하시겠습니까?`
       : `"${title}" 문서를 복원하시겠습니까?`;
 
     if (await confirm({
@@ -56,7 +56,7 @@ export const RecycleBin = () => {
   const handleDeleteForever = async (id: string, title: string) => {
     if (await confirm({
       title: '영구 삭제',
-      message: `"${title}" 문서를 영구 삭제하시겠습니까?\n삭제된 문서는 복구할 수 없습니다.`,
+      message: `"${title}" 문서를 영구 삭제하시겠습니까?\n삭제된 문서는 복구할 수 없습니다`,
       confirmText: '영구 삭제',
       variant: 'danger'
     })) {
@@ -70,7 +70,7 @@ export const RecycleBin = () => {
 
     if (await confirm({
       title: '휴지통 비우기',
-      message: `휴지통에 있는 ${deletedDocs.length}개의 문서를 모두 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
+      message: `휴지통에 있는 ${deletedDocs.length}개의 문서를 모두 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다`,
       confirmText: '비우기',
       variant: 'danger'
     })) {
@@ -131,11 +131,11 @@ export const RecycleBin = () => {
           <div className="overflow-y-auto custom-scrollbar max-h-48 space-y-1">
             {deletedDocs.length === 0 ? (
               <div className="text-xs text-zinc-600 italic text-center py-2">
-                휴지통이 비었습니다.
+                휴지통이 비었습니다
               </div>
             ) : filteredDocs.length === 0 ? (
               <div className="text-xs text-zinc-600 italic text-center py-2">
-                검색 결과가 없습니다.
+                검색 결과가 없습니다
               </div>
             ) : (
               filteredDocs.map(item => (

@@ -7,7 +7,7 @@
     },
     "security": {
       "title": "로컬 우선, \n타협없는 보안.",
-      "description": "원하지 않는 한 데이터는 인프라를 떠나지 않습니다. 군사 등급 HKDF 암호화와 로컬 벡터 저장소를 통해 귀하의 지적 재산을 안전하게 보호합니다.",
+      "description": "원하지 않는 한 데이터는 인프라를 떠나지 않습니다 군사 등급 HKDF 암호화와 로컬 벡터 저장소를 통해 귀하의 지적 재산을 안전하게 보호합니다.",
       "features": [
         "종단간 암호화 (E2EE)",
         "로컬 벡터 데이터베이스 (SQLite-vec)",
@@ -40,7 +40,7 @@
       "username": "아이디",
       "password": "비밀번호",
       "submit": "로그인",
-      "error": "아이디 또는 비밀번호가 올바르지 않습니다."
+      "error": "아이디 또는 비밀번호가 올바르지 않습니다"
     },
     "sidebar": {
       "title": "Fiery 관리자",
@@ -83,7 +83,7 @@
         "role": "역할",
         "cancel": "취소",
         "submit": "생성",
-        "success": "사용자가 생성되었습니다.",
+        "success": "사용자가 생성되었습니다",
         "tabs": {
           "single": "단일 추가",
           "bulk": "일괄 추가 (CSV)"
@@ -107,7 +107,7 @@
           },
           "download_template": "템플릿 다운로드",
           "submit": "사용자 가져오기",
-          "success": "{count}명의 사용자를 성공적으로 가져왔습니다."
+          "success": "{count}명의 사용자를 성공적으로 가져왔습니다"
         }
       }
     },
@@ -116,7 +116,7 @@
       "subtitle": "조직의 부서와 팀을 관리하세요.",
       "add_department": "부서 추가",
       "search_placeholder": "부서 검색...",
-      "delete_confirm": "이 부서를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+      "delete_confirm": "이 부서를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다",
       "delete_error": "부서 삭제 실패",
       "table": {
         "name": "부서명",
@@ -141,7 +141,7 @@
         "visibility_level": "기본 공개 범위",
         "cancel": "취소",
         "submit": "부서 생성",
-        "success": "부서가 생성되었습니다.",
+        "success": "부서가 생성되었습니다",
         "bulk": {
           "drag_drop": "CSV 파일을 드래그하거나 클릭하여 업로드하세요",
           "import_mode": {
@@ -155,9 +155,9 @@
           "download_template": "템플릿 다운로드",
           "preview": "미리보기",
           "submit": "부서 생성",
-          "success": "{count}개 부서를 성공적으로 저장했습니다.",
+          "success": "{count}개 부서를 성공적으로 저장했습니다",
           "error": {
-            "empty": "CSV에 유효한 데이터가 없습니다."
+            "empty": "CSV에 유효한 데이터가 없습니다"
           }
         }
       }
@@ -166,14 +166,14 @@
       "positions": {
         "position": {
           "title": "직위 관리",
-          "description": "조직의 직위 체계를 관리하세요. 드래그 앤 드롭으로 순서를 변경할 수 있습니다.",
+          "description": "조직의 직위 체계를 관리하세요. 드래그 앤 드롭으로 순서를 변경할 수 있습니다",
           "add_button": "직위 추가",
           "modal": {
             "name": "직위명"
           },
           "create": {
             "bulk": {
-              "success": "{count}개 직위를 성공적으로 가져왔습니다."
+              "success": "{count}개 직위를 성공적으로 가져왔습니다"
             }
           }
         },
@@ -185,7 +185,7 @@
     "projects": {
       "create": {
         "bulk": {
-          "success": "{count}개 프로젝트를 성공적으로 가져왔습니다."
+          "success": "{count}개 프로젝트를 성공적으로 가져왔습니다"
         }
       }
     },

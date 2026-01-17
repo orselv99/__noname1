@@ -1,6 +1,191 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { Loader2, Sparkles, Send, User, Bot, Plus, History, MessageSquare, X, Pencil } from 'lucide-react';
+import { Loader2, Sparkles, Send, Plus, History, MessageSquare, X, Pencil, Database, Globe, ExternalLink, FileText, CheckCircle2, Circle, ChevronDown } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
+import { useDocumentStore } from '../../stores/documentStore';
+
+
+function CollapsibleSection({ title, icon: Icon, children, count, colorClass, defaultExpanded = true }: any) {
+  const [isOpen, setIsOpen] = useState(defaultExpanded);
+
+  if (!count && count !== 0) count = 0;
+
+  return (
+    <div className="mb-4">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center gap-2 w-full text-left mb-2 text-[11px] font-bold uppercase tracking-wider ${colorClass} hover:opacity-80 transition-opacity select-none`}
+      >
+        <Icon size={12} />
+        <span className="flex-1">{title}</span>
+        {count > 0 && <span className="text-[10px] opacity-70 bg-zinc-800/50 px-1.5 rounded-full">{count}</span>}
+        <ChevronDown size={12} className={`transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`} />
+      </button>
+      {isOpen && <div className="space-y-1 px-1 animate-in slide-in-from-top-1 duration-200">{children}</div>}
+    </div>
+  );
+}
+
+function ResultItem({ result, type }: { result: any, type: 'local' | 'server' | 'web' }) {
+  const documents = useDocumentStore(state => state.documents);
+  const addTab = useDocumentStore(state => state.addTab);
+
+  const handleOpen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (type === 'web') {
+      if (result.metadata.url) window.open(result.metadata.url, '_blank');
+    } else {
+      // For local/server, open/select the document
+      const doc = documents.find(d => d.id === result.metadata.id);
+      if (doc) {
+        addTab(doc);
+      } else {
+        console.warn("Document not found locally:", result.metadata.id);
+      }
+    }
+  };
+
+  const getBadgeColor = (group: string) => {
+    switch (group) {
+      case 'Private': return 'bg-zinc-800 text-zinc-400';
+      case 'Department': return 'bg-blue-900/30 text-blue-400';
+      case 'Project': return 'bg-purple-900/30 text-purple-400';
+      case 'Web': return 'bg-green-900/30 text-green-400';
+      case 'Server': return 'bg-indigo-900/30 text-indigo-400';
+      default: return 'bg-zinc-800 text-zinc-500';
+    }
+  };
+
+  return (
+    <div
+      className="bg-zinc-950/50 border border-zinc-800 rounded-md p-3 cursor-pointer hover:border-zinc-700 hover:bg-zinc-900/50 transition-all group"
+      onClick={handleOpen}
+    >
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs font-medium text-zinc-300 truncate group-hover:text-blue-400 transition-colors">
+            {result.metadata.title || "Untitled"}
+          </span>
+          {/* Group Badge */}
+          {result.metadata.group_name && (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wide ${getBadgeColor(result.metadata.group_name)}`}>
+              {result.metadata.group_name}
+            </span>
+          )}
+        </div>
+
+        <div className="shrink-0 text-zinc-600 group-hover:text-blue-400 transition-colors">
+          <ExternalLink size={12} />
+        </div>
+      </div>
+
+      <div className="text-xs text-zinc-500 line-clamp-2 break-all leading-relaxed">
+        {result.content}
+      </div>
+
+      {/* Web URL Footer */}
+      {type === 'web' && result.metadata.url && (
+        <div className="mt-2 text-[10px] text-zinc-600 flex items-center gap-1 truncate">
+          <Globe size={10} />
+          {new URL(result.metadata.url).hostname}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Helper Component for Thinking Process
+function ThinkingAccordion({ state, status, defaultExpanded = false }: { state: any, status?: string, defaultExpanded?: boolean }) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  if (!state) return null;
+
+  return (
+    <div className="w-full mb-4">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/50 hover:bg-zinc-800 rounded-full transition-colors w-fit"
+      >
+        <Sparkles size={11} className="text-blue-400 shrink-0" />
+        <span className="text-[11px] font-medium text-zinc-300">
+          {status || "생각하는 과정 표시"}
+        </span>
+        <ChevronDown size={12} className={`text-zinc-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isExpanded && (
+        <div className="pl-4 mt-2 border-l border-zinc-800 ml-3 space-y-4 animate-in slide-in-from-top-1 duration-200 font-mono text-left">
+
+          {/* Local Search Step */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className={`text-xs font-bold uppercase tracking-wider ${state.local.status === 'running' ? 'text-yellow-400' : 'text-zinc-500'}`}>
+                Local Docs
+              </div>
+              {state.local.status === 'running' && <Loader2 size={10} className="animate-spin text-yellow-400" />}
+              {state.local.status === 'done' && <CheckCircle2 size={10} className="text-green-500" />}
+            </div>
+            {/* Logs */}
+            <div className="space-y-1 pl-1">
+              {state.local.logs.map((log: any, i: number) => (
+                <div key={i} className="text-[11px] text-zinc-400">
+                  <div>{log.message}</div>
+                  {log.subItems && log.subItems.map((sub: string, j: number) => (
+                    <div key={j} className="text-zinc-500 pl-2 opacity-80">- {sub}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Server Search Step */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className={`text-xs font-bold uppercase tracking-wider ${state.server.status === 'running' ? 'text-purple-400' : 'text-zinc-500'}`}>
+                Server Docs
+              </div>
+              {state.server.status === 'running' && <Loader2 size={10} className="animate-spin text-purple-400" />}
+              {state.server.status === 'done' && <CheckCircle2 size={10} className="text-green-500" />}
+            </div>
+            {/* Logs */}
+            <div className="space-y-1 pl-1">
+              {state.server.logs.map((log: any, i: number) => (
+                <div key={i} className="text-[11px] text-zinc-400">
+                  <div>{log.message}</div>
+                  {log.subItems && log.subItems.map((sub: string, j: number) => (
+                    <div key={j} className="text-zinc-500 pl-2 opacity-80">- {sub}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Web Search Step */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className={`text-xs font-bold uppercase tracking-wider ${state.web.status === 'running' ? 'text-blue-400' : 'text-zinc-500'}`}>
+                Web Search
+              </div>
+              {state.web.status === 'running' && <Loader2 size={10} className="animate-spin text-blue-400" />}
+              {state.web.status === 'done' && <CheckCircle2 size={10} className="text-green-500" />}
+            </div>
+            {/* Logs */}
+            <div className="space-y-1 pl-1">
+              {state.web.logs.map((log: any, i: number) => (
+                <div key={i} className="text-[11px] text-zinc-400">
+                  <div>{log.message}</div>
+                  {log.subItems && log.subItems.map((sub: string, j: number) => (
+                    <div key={j} className="text-zinc-500 pl-2 opacity-80">- {sub}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function RagPanel() {
   const [input, setInput] = useState('');
@@ -8,9 +193,10 @@ export function RagPanel() {
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
+
   const {
     chats, currentChatId, messages,
-    isLoading, isLoadingMore, hasMore,
+    isLoading, loadingStatus, thinkingProcess, isLoadingMore, hasMore,
     loadChats, selectChat, createNewChat, sendMessage, loadMoreMessages, renameChat
   } = useChatStore();
 
@@ -26,6 +212,7 @@ export function RagPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
+  const isAutoScrollEnabled = useRef(true);
   const [prevScrollHeight, setPrevScrollHeight] = useState(0);
 
   // Load chats on mount
@@ -44,7 +231,12 @@ export function RagPanel() {
   }, [chats, currentChatId, showHistory]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight } = e.currentTarget;
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+
+    // Check if user is near bottom (within 50px)
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    isAutoScrollEnabled.current = distanceFromBottom < 50;
+
     if (scrollTop === 0 && hasMore && !isLoadingMore && currentChatId) {
       setPrevScrollHeight(scrollHeight);
       loadMoreMessages();
@@ -56,6 +248,8 @@ export function RagPanel() {
       const newScrollHeight = containerRef.current.scrollHeight;
       containerRef.current.scrollTop = newScrollHeight - prevScrollHeight;
       setPrevScrollHeight(0);
+      // Don't enable auto-scroll when loading history
+      isAutoScrollEnabled.current = false;
     }
   }, [messages, prevScrollHeight]);
 
@@ -64,11 +258,12 @@ export function RagPanel() {
       if (isFirstRender.current) {
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
         isFirstRender.current = false;
-      } else {
+        isAutoScrollEnabled.current = true;
+      } else if (isAutoScrollEnabled.current) {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }
     }
-  }, [messages, isLoadingMore, prevScrollHeight]);
+  }, [messages, thinkingProcess, isLoadingMore, prevScrollHeight]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,6 +284,9 @@ export function RagPanel() {
     setShowHistory(false);
     isFirstRender.current = true;
   };
+
+  // Helper Component for Thinking Process moved outside
+
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-white overflow-hidden">
@@ -238,36 +436,121 @@ export function RagPanel() {
               </div>
             ) : (
               <div className="space-y-6">
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                {messages.map((msg) => {
+                  let isRagResult = false;
+                  let ragData: any = null;
 
-                    <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${msg.role === 'user' ? 'bg-blue-600' : 'bg-zinc-800'
-                      }`}>
-                      {msg.role === 'user' ? <User size={12} /> : <Bot size={12} className="text-blue-400" />}
-                    </div>
+                  if (msg.role === 'assistant' && msg.content.trim().startsWith('{')) {
+                    try {
+                      const parsed = JSON.parse(msg.content);
+                      if (parsed.type === 'rag_search_result') {
+                        isRagResult = true;
+                        ragData = parsed;
+                      }
+                    } catch (e) { }
+                  }
 
-                    <div className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                      <div className={`px-3 py-2 rounded-lg text-xs leading-relaxed whitespace-pre-wrap ${msg.role === 'user'
-                        ? 'bg-blue-600/90 text-white rounded-tr-none'
-                        : 'bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-tl-none'
-                        }`}>
-                        {msg.content}
+                  if (isRagResult && ragData) {
+                    return (
+                      <div key={msg.id} className="flex flex-col gap-2 w-full mb-6">
+                        {/* 1. Thinking Process (Left Aligned, Separate) */}
+                        {ragData.thinking_process && (
+                          <div className="flex justify-start w-full max-w-[90%]">
+                            <ThinkingAccordion state={ragData.thinking_process} status="Thinking Process" />
+                          </div>
+                        )}
+
+                        {/* 2. Search Result (Center Aligned) */}
+                        <div className="flex justify-center w-full">
+                          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 w-full max-w-3xl shadow-lg">
+                            <div className="font-medium text-zinc-200 mb-4 text-base">{ragData.summary}</div>
+
+                            {/* Local Results */}
+                            {ragData.results.local.length > 0 && (
+                              <CollapsibleSection
+                                title="Local Docs"
+                                icon={FileText}
+                                colorClass="text-blue-400"
+                                count={ragData.results.local.length}
+                              >
+                                {ragData.results.local.map((r: any, i: number) => (
+                                  <ResultItem key={i} result={r} type="local" />
+                                ))}
+                              </CollapsibleSection>
+                            )}
+
+                            {/* Server Results */}
+                            <CollapsibleSection
+                              title="Server Docs"
+                              icon={Database}
+                              colorClass="text-purple-400"
+                              count={ragData.results.server.length}
+                            >
+                              {ragData.results.server.length > 0 ? (
+                                ragData.results.server.map((r: any, i: number) => (
+                                  <ResultItem key={i} result={r} type="server" />
+                                ))
+                              ) : (
+                                <div className="text-xs text-zinc-500 italic px-1">
+                                  검색된 서버 문서가 없습니다
+                                </div>
+                              )}
+                            </CollapsibleSection>
+
+                            {/* Web Results */}
+                            {ragData.results.web.length > 0 && (
+                              <CollapsibleSection
+                                title="Web Search"
+                                icon={Globe}
+                                colorClass="text-green-400"
+                                count={ragData.results.web.length}
+                              >
+                                {ragData.results.web.map((r: any, i: number) => (
+                                  <ResultItem key={i} result={r} type="web" />
+                                ))}
+                              </CollapsibleSection>
+                            )}
+
+                            <div className="pt-3 border-t border-zinc-800/50 text-xs text-zinc-500 flex items-center gap-2">
+                              <Sparkles size={12} className="text-zinc-600" />
+                              <span>종합 답변 생성 기능은 준비 중입니다</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pr-4">
+                          <span className="text-[10px] text-zinc-600">
+                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-[10px] text-zinc-600 mt-1 px-1">
-                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                    );
+                  }
+
+                  // Standard Message Rendering
+                  return (
+                    <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex flex-col max-w-[90%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        <div className={`px-3 py-2 rounded-lg text-xs leading-relaxed whitespace-pre-wrap wrap-break-word ${msg.role === 'user'
+                          ? 'bg-blue-600/90 text-white rounded-tr-none'
+                          : 'bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-tl-none w-full min-w-0'
+                          }`}>
+                          {msg.content}
+                        </div>
+                        <span className="text-[10px] text-zinc-600 mt-1 px-1">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {isLoading && (
-                  <div className="flex gap-3">
-                    <div className="shrink-0 w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
-                      <Bot size={12} className="text-blue-400" />
-                    </div>
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg rounded-tl-none px-4 py-3 flex items-center gap-2">
-                      <Loader2 size={12} className="animate-spin text-zinc-500" />
-                      <span className="text-xs text-zinc-500">Thinking...</span>
-                    </div>
+                  <div className="flex gap-3 w-full">
+                    <ThinkingAccordion
+                      state={thinkingProcess}
+                      status={loadingStatus || "답변 생성 중..."}
+                      defaultExpanded={true}
+                    />
                   </div>
                 )}
                 <div ref={messagesEndRef} />

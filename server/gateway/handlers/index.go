@@ -33,6 +33,7 @@ type IndexDocumentRequest struct {
 	TagEvidences []TagEvidence `json:"tag_evidences"`
 	Summary      string        `json:"summary"`
 	Embedding    []float32     `json:"embedding"`
+	Content      string        `json:"content"` // 원문 추가
 	GroupId      string        `json:"group_id"`
 	GroupType    int32         `json:"group_type"`
 	CreatedAt    string        `json:"created_at"`
@@ -46,7 +47,7 @@ func (h *IndexHandler) IndexDocument(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // 임베딩 생성 시간 고려하여 타임아웃 증가
 	defer cancel()
 
 	userID, exists := c.Get("user_id")
@@ -79,6 +80,7 @@ func (h *IndexHandler) IndexDocument(c *gin.Context) {
 			OwnerId:      userID.(string),
 			UserSalt:     saltStr, // Proto 필드 사용
 			Embedding:    req.Embedding,
+			Content:      req.Content, // 원문 전달
 			GroupId:      req.GroupId,
 			GroupType:    req.GroupType,
 			CreatedAt:    req.CreatedAt,
@@ -95,7 +97,13 @@ func (h *IndexHandler) IndexDocument(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, resp)
+	// 응답에 document_id와 embedding 포함
+	c.JSON(http.StatusOK, gin.H{
+		"success":     resp.Success,
+		"message":     resp.Message,
+		"document_id": resp.DocumentId,
+		"embedding":   resp.Embedding,
+	})
 }
 
 func (h *IndexHandler) SearchDocuments(c *gin.Context) {
@@ -124,4 +132,30 @@ func (h *IndexHandler) SearchDocuments(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// 임베딩 생성 요청 바디
+type GenerateEmbeddingRequest struct {
+	Text string `json:"text"`
+}
+
+func (h *IndexHandler) GenerateEmbedding(c *gin.Context) {
+	var req GenerateEmbeddingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := h.client.GenerateEmbedding(ctx, &pb.GenerateEmbeddingRequest{
+		Text: req.Text,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"embedding": resp.Embedding})
 }

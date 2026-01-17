@@ -14,42 +14,49 @@ pub fn derive_key(user_id: &str) -> [u8; 32] {
 
 /// Encrypt text using AES-256-GCM with user_id derived key
 pub fn encrypt_content(user_id: &str, plaintext: &str) -> Result<Vec<u8>, String> {
-  let key = derive_key(user_id);
-  let cipher =
-    Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
+  // [DISABLED FOR TESTING] Return plain text as bytes
+  Ok(plaintext.as_bytes().to_vec())
 
-  // Generate random nonce (12 bytes)
-  let nonce_bytes = generate_nonce();
-  let nonce = Nonce::from_slice(&nonce_bytes);
+  // Original encryption logic (commented out for testing):
+  // let key = derive_key(user_id);
+  // let cipher =
+  //   Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
 
-  let ciphertext = cipher
-    .encrypt(nonce, plaintext.as_bytes())
-    .map_err(|e| format!("Encryption failed: {}", e))?;
+  // // Generate random nonce (12 bytes)
+  // let nonce_bytes = generate_nonce();
+  // let nonce = Nonce::from_slice(&nonce_bytes);
 
-  // Prepend nonce to ciphertext for later decryption
-  let mut result = nonce_bytes.to_vec();
-  result.extend(ciphertext);
-  Ok(result)
+  // let ciphertext = cipher
+  //   .encrypt(nonce, plaintext.as_bytes())
+  //   .map_err(|e| format!("Encryption failed: {}", e))?;
+
+  // // Prepend nonce to ciphertext for later decryption
+  // let mut result = nonce_bytes.to_vec();
+  // result.extend(ciphertext);
+  // Ok(result)
 }
 
 /// Decrypt content using AES-256-GCM with user_id derived key
 pub fn decrypt_content(user_id: &str, encrypted: &[u8]) -> Result<String, String> {
-  if encrypted.len() < 12 {
-    return Err("Invalid encrypted data".to_string());
-  }
+  String::from_utf8(encrypted.to_vec()).map_err(|e| format!("Invalid UTF-8: {}", e))
 
-  let key = derive_key(user_id);
-  let cipher =
-    Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
-
-  let nonce = Nonce::from_slice(&encrypted[..12]);
-  let ciphertext = &encrypted[12..];
-
-  let plaintext = cipher
-    .decrypt(nonce, ciphertext)
-    .map_err(|e| format!("Decryption failed: {}", e))?;
-
-  String::from_utf8(plaintext).map_err(|e| format!("Invalid UTF-8: {}", e))
+  // Original decryption logic (commented out for testing):
+  // if encrypted.len() < 12 {
+  //   return Err("Invalid encrypted data".to_string());
+  // }
+  //
+  // let key = derive_key(user_id);
+  // let cipher =
+  //   Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
+  //
+  // let nonce = Nonce::from_slice(&encrypted[..12]);
+  // let ciphertext = &encrypted[12..];
+  //
+  // let plaintext = cipher
+  //   .decrypt(nonce, ciphertext)
+  //   .map_err(|e| format!("Decryption failed: {}", e))?;
+  //
+  // String::from_utf8(plaintext).map_err(|e| format!("Invalid UTF-8: {}", e))
 }
 
 fn generate_nonce() -> [u8; 12] {

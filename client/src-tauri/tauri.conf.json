@@ -34,12 +34,8 @@
     }
   },
   "bundle": {
-    "externalBin": [
-      "bin/llama-server"
-    ],
-    "resources": [
-      "../../client-ai-service/model"
-    ],
+    "externalBin": [],
+    "resources": [],
     "active": true,
     "targets": [
       "nsis"

@@ -55,6 +55,7 @@ services:
     environment:
       - DB_DSN=host=postgres user=postgres password=postgres dbname=fiery_index port=5432 sslmode=disable
       - LLAMA_SERVER_ADDR=http://llama-server:8080
+      - LLAMA_EMBEDDING_ADDR=http://llama-embedding:8080
     depends_on:
       postgres:
         condition: service_healthy
@@ -138,6 +139,23 @@ services:
   #   command: -m /models/google_gemma-3-4b-it-IQ3_M.gguf -c 4096 --host 0.0.0.0 --port 8080
   #   networks:
   #     - fiery-net
+
+  llama-embedding:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    ports:
+      - "8084:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    volumes:
+      - ./client-ai-service/model:/models
+    command: -m /models/nomic-embed-text-v1.5.Q4_K_M.gguf -c 2048 -b 2048 -ub 2048 --host 0.0.0.0 --port 8080 --embedding -ngl 99
+    networks:
+      - fiery-net
 
 volumes:
   pgdata:

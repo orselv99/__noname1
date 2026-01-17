@@ -88,6 +88,7 @@ type Document struct {
 	GroupId       string                 `protobuf:"bytes,9,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`                // 소속 그룹 ID (Department/Project)
 	GroupType     int32                  `protobuf:"varint,10,opt,name=group_type,json=groupType,proto3" json:"group_type,omitempty"`        // 그룹 타입 (0: Dept, 1: Project)
 	CreatedAt     string                 `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`         // 생성 시간 (암호화된 문자열)
+	Content       string                 `protobuf:"bytes,12,opt,name=content,proto3" json:"content,omitempty"`                              // 원문 내용 (임베딩 생성용)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -199,6 +200,13 @@ func (x *Document) GetCreatedAt() string {
 	return ""
 }
 
+func (x *Document) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
 // 인덱싱 요청
 type IndexDocumentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -250,6 +258,7 @@ type IndexDocumentResponse struct {
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	DocumentId    string                 `protobuf:"bytes,3,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	Embedding     []float32              `protobuf:"fixed32,4,rep,packed,name=embedding,proto3" json:"embedding,omitempty"` // 생성된 임베딩 벡터 반환
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -303,6 +312,13 @@ func (x *IndexDocumentResponse) GetDocumentId() string {
 		return x.DocumentId
 	}
 	return ""
+}
+
+func (x *IndexDocumentResponse) GetEmbedding() []float32 {
+	if x != nil {
+		return x.Embedding
+	}
+	return nil
 }
 
 // 검색 요청
@@ -578,6 +594,94 @@ func (x *SyncResponse) GetSuccess() bool {
 	return false
 }
 
+type GenerateEmbeddingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerateEmbeddingRequest) Reset() {
+	*x = GenerateEmbeddingRequest{}
+	mi := &file_index_index_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateEmbeddingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateEmbeddingRequest) ProtoMessage() {}
+
+func (x *GenerateEmbeddingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_index_index_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateEmbeddingRequest.ProtoReflect.Descriptor instead.
+func (*GenerateEmbeddingRequest) Descriptor() ([]byte, []int) {
+	return file_index_index_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GenerateEmbeddingRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+type GenerateEmbeddingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Embedding     []float32              `protobuf:"fixed32,1,rep,packed,name=embedding,proto3" json:"embedding,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerateEmbeddingResponse) Reset() {
+	*x = GenerateEmbeddingResponse{}
+	mi := &file_index_index_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateEmbeddingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateEmbeddingResponse) ProtoMessage() {}
+
+func (x *GenerateEmbeddingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_index_index_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateEmbeddingResponse.ProtoReflect.Descriptor instead.
+func (*GenerateEmbeddingResponse) Descriptor() ([]byte, []int) {
+	return file_index_index_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GenerateEmbeddingResponse) GetEmbedding() []float32 {
+	if x != nil {
+		return x.Embedding
+	}
+	return nil
+}
+
 var File_index_index_proto protoreflect.FileDescriptor
 
 const file_index_index_proto_rawDesc = "" +
@@ -585,7 +689,7 @@ const file_index_index_proto_rawDesc = "" +
 	"\x11index/index.proto\x12\x05index\";\n" +
 	"\vTagEvidence\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x1a\n" +
-	"\bevidence\x18\x02 \x01(\tR\bevidence\"\xd1\x02\n" +
+	"\bevidence\x18\x02 \x01(\tR\bevidence\"\xeb\x02\n" +
 	"\bDocument\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x18\n" +
@@ -601,14 +705,16 @@ const file_index_index_proto_rawDesc = "" +
 	"group_type\x18\n" +
 	" \x01(\x05R\tgroupType\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\v \x01(\tR\tcreatedAt\"C\n" +
+	"created_at\x18\v \x01(\tR\tcreatedAt\x12\x18\n" +
+	"\acontent\x18\f \x01(\tR\acontent\"C\n" +
 	"\x14IndexDocumentRequest\x12+\n" +
-	"\bdocument\x18\x01 \x01(\v2\x0f.index.DocumentR\bdocument\"l\n" +
+	"\bdocument\x18\x01 \x01(\v2\x0f.index.DocumentR\bdocument\"\x8a\x01\n" +
 	"\x15IndexDocumentResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1f\n" +
 	"\vdocument_id\x18\x03 \x01(\tR\n" +
-	"documentId\"u\n" +
+	"documentId\x12\x1c\n" +
+	"\tembedding\x18\x04 \x03(\x02R\tembedding\"u\n" +
 	"\x16SearchDocumentsRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x12\n" +
@@ -624,11 +730,16 @@ const file_index_index_proto_rawDesc = "" +
 	"\achanges\x18\x02 \x03(\v2\x0f.index.DocumentR\achanges\"S\n" +
 	"\fSyncResponse\x12)\n" +
 	"\aupdates\x18\x01 \x03(\v2\x0f.index.DocumentR\aupdates\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess2\xea\x01\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\".\n" +
+	"\x18GenerateEmbeddingRequest\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\"9\n" +
+	"\x19GenerateEmbeddingResponse\x12\x1c\n" +
+	"\tembedding\x18\x01 \x03(\x02R\tembedding2\xc2\x02\n" +
 	"\fIndexService\x12J\n" +
 	"\rIndexDocument\x12\x1b.index.IndexDocumentRequest\x1a\x1c.index.IndexDocumentResponse\x12P\n" +
 	"\x0fSearchDocuments\x12\x1d.index.SearchDocumentsRequest\x1a\x1e.index.SearchDocumentsResponse\x12<\n" +
-	"\rSyncDocuments\x12\x12.index.SyncRequest\x1a\x13.index.SyncResponse(\x010\x01B\x16Z\x14server/.protos/indexb\x06proto3"
+	"\rSyncDocuments\x12\x12.index.SyncRequest\x1a\x13.index.SyncResponse(\x010\x01\x12V\n" +
+	"\x11GenerateEmbedding\x12\x1f.index.GenerateEmbeddingRequest\x1a .index.GenerateEmbeddingResponseB\x16Z\x14server/.protos/indexb\x06proto3"
 
 var (
 	file_index_index_proto_rawDescOnce sync.Once
@@ -642,36 +753,40 @@ func file_index_index_proto_rawDescGZIP() []byte {
 	return file_index_index_proto_rawDescData
 }
 
-var file_index_index_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_index_index_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_index_index_proto_goTypes = []any{
-	(*TagEvidence)(nil),             // 0: index.TagEvidence
-	(*Document)(nil),                // 1: index.Document
-	(*IndexDocumentRequest)(nil),    // 2: index.IndexDocumentRequest
-	(*IndexDocumentResponse)(nil),   // 3: index.IndexDocumentResponse
-	(*SearchDocumentsRequest)(nil),  // 4: index.SearchDocumentsRequest
-	(*SearchResult)(nil),            // 5: index.SearchResult
-	(*SearchDocumentsResponse)(nil), // 6: index.SearchDocumentsResponse
-	(*SyncRequest)(nil),             // 7: index.SyncRequest
-	(*SyncResponse)(nil),            // 8: index.SyncResponse
+	(*TagEvidence)(nil),               // 0: index.TagEvidence
+	(*Document)(nil),                  // 1: index.Document
+	(*IndexDocumentRequest)(nil),      // 2: index.IndexDocumentRequest
+	(*IndexDocumentResponse)(nil),     // 3: index.IndexDocumentResponse
+	(*SearchDocumentsRequest)(nil),    // 4: index.SearchDocumentsRequest
+	(*SearchResult)(nil),              // 5: index.SearchResult
+	(*SearchDocumentsResponse)(nil),   // 6: index.SearchDocumentsResponse
+	(*SyncRequest)(nil),               // 7: index.SyncRequest
+	(*SyncResponse)(nil),              // 8: index.SyncResponse
+	(*GenerateEmbeddingRequest)(nil),  // 9: index.GenerateEmbeddingRequest
+	(*GenerateEmbeddingResponse)(nil), // 10: index.GenerateEmbeddingResponse
 }
 var file_index_index_proto_depIdxs = []int32{
-	0, // 0: index.Document.tag_evidences:type_name -> index.TagEvidence
-	1, // 1: index.IndexDocumentRequest.document:type_name -> index.Document
-	1, // 2: index.SearchResult.document:type_name -> index.Document
-	5, // 3: index.SearchDocumentsResponse.results:type_name -> index.SearchResult
-	1, // 4: index.SyncRequest.changes:type_name -> index.Document
-	1, // 5: index.SyncResponse.updates:type_name -> index.Document
-	2, // 6: index.IndexService.IndexDocument:input_type -> index.IndexDocumentRequest
-	4, // 7: index.IndexService.SearchDocuments:input_type -> index.SearchDocumentsRequest
-	7, // 8: index.IndexService.SyncDocuments:input_type -> index.SyncRequest
-	3, // 9: index.IndexService.IndexDocument:output_type -> index.IndexDocumentResponse
-	6, // 10: index.IndexService.SearchDocuments:output_type -> index.SearchDocumentsResponse
-	8, // 11: index.IndexService.SyncDocuments:output_type -> index.SyncResponse
-	9, // [9:12] is the sub-list for method output_type
-	6, // [6:9] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	0,  // 0: index.Document.tag_evidences:type_name -> index.TagEvidence
+	1,  // 1: index.IndexDocumentRequest.document:type_name -> index.Document
+	1,  // 2: index.SearchResult.document:type_name -> index.Document
+	5,  // 3: index.SearchDocumentsResponse.results:type_name -> index.SearchResult
+	1,  // 4: index.SyncRequest.changes:type_name -> index.Document
+	1,  // 5: index.SyncResponse.updates:type_name -> index.Document
+	2,  // 6: index.IndexService.IndexDocument:input_type -> index.IndexDocumentRequest
+	4,  // 7: index.IndexService.SearchDocuments:input_type -> index.SearchDocumentsRequest
+	7,  // 8: index.IndexService.SyncDocuments:input_type -> index.SyncRequest
+	9,  // 9: index.IndexService.GenerateEmbedding:input_type -> index.GenerateEmbeddingRequest
+	3,  // 10: index.IndexService.IndexDocument:output_type -> index.IndexDocumentResponse
+	6,  // 11: index.IndexService.SearchDocuments:output_type -> index.SearchDocumentsResponse
+	8,  // 12: index.IndexService.SyncDocuments:output_type -> index.SyncResponse
+	10, // 13: index.IndexService.GenerateEmbedding:output_type -> index.GenerateEmbeddingResponse
+	10, // [10:14] is the sub-list for method output_type
+	6,  // [6:10] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_index_index_proto_init() }
@@ -685,7 +800,7 @@ func file_index_index_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_index_index_proto_rawDesc), len(file_index_index_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

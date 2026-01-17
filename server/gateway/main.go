@@ -86,8 +86,9 @@ func main() {
 		protected := api.Group("") // This group will contain authenticated routes
 		protected.Use(authMiddleware.Handler())
 		{
-			protected.POST("/docs", indexHandler.IndexDocument)         // POST /api/v1/docs
-			protected.GET("/docs/search", indexHandler.SearchDocuments) // GET /api/v1/docs/search?query=...
+			protected.POST("/docs", indexHandler.IndexDocument)          // POST /api/v1/docs
+			protected.POST("/embedding", indexHandler.GenerateEmbedding) // POST /api/v1/embedding (For Local RAG)
+			protected.GET("/docs/search", indexHandler.SearchDocuments)  // GET /api/v1/docs/search?query=...
 			protected.GET("/ws/signaling", signalingHandler.HandleWebSocket)
 
 			// User Management Routes

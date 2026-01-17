@@ -338,6 +338,15 @@ pub async fn save_document(
         Vec::new()
       };
 
+      // Clean content (remove images) for server-side embedding
+      // 1. Remove Markdown images: ![alt](url)
+      let re_md = regex::Regex::new(r"(?s)!\[.*?\]\(.*?\)").unwrap();
+      let no_md = re_md.replace_all(&req.content, "");
+
+      // 2. Remove HTML images: <img ... >
+      let re_html = regex::Regex::new(r"(?s)<img[^>]*>").unwrap();
+      let cleaned_content = re_html.replace_all(&no_md, "");
+
       // Construct JSON
       let payload = serde_json::json!({
           "title": base64::engine::general_purpose::STANDARD.encode(&_rag_data.3),
@@ -349,6 +358,7 @@ pub async fn save_document(
               })
           }).collect::<Vec<_>>(),
           "embedding": embedding_vec,
+          "content": cleaned_content.to_string(), // Send cleaned plaintext content
           "group_id": req.group_id,
           "group_type": req.group_type,
           "created_at": base64::engine::general_purpose::STANDARD.encode(&_rag_data.4),
@@ -369,36 +379,68 @@ pub async fn save_document(
           if !r.status().is_success() {
             let status = r.status();
             let body = r.text().await.unwrap_or_default();
-            
+
             // Rollback state to Draft AND revert version
             {
-               let db = db_state.lock().unwrap();
-               if let Some(ref conn) = db.conn {
-                 let _ = conn.execute(
+              let db = db_state.lock().unwrap();
+              if let Some(ref conn) = db.conn {
+                let _ = conn.execute(
                    "UPDATE documents SET document_state = 1, version = version - 1 WHERE id = ?1 AND user_id = ?2",
                    [&doc_id, &user_id],
                  );
-               }
+              }
             }
-            
+
             return Err(format!(
               "Server sync failed (Published): HTTP {} - {}",
               status, body
             ));
           } else {
+            // Parse response to see if we got an embedding back
+            if let Ok(json_body) = r.json::<serde_json::Value>().await {
+              if let Some(embedding_val) = json_body.get("embedding") {
+                if let Some(embedding_arr) = embedding_val.as_array() {
+                  let embedding: Vec<f32> = embedding_arr
+                    .iter()
+                    .filter_map(|v| v.as_f64().map(|f| f as f32))
+                    .collect();
+
+                  if !embedding.is_empty() {
+                    // Save returned embedding to local DB
+                    let db = db_state.lock().unwrap();
+                    if let Some(ref conn) = db.conn {
+                      let id_bytes = Uuid::parse_str(&doc_id)
+                        .unwrap_or_default()
+                        .as_bytes()
+                        .to_vec();
+                      let embedding_bytes: Vec<u8> = embedding
+                        .iter()
+                        .flat_map(|f| f.to_le_bytes().to_vec())
+                        .collect();
+
+                      let _ = conn.execute(
+                                    "INSERT OR REPLACE INTO document_ai_data (document_id, embedding) VALUES (?1, ?2)",
+                                    rusqlite::params![doc_id, embedding_bytes],
+                                 );
+                      println!("Saved server-generated embedding for doc {}", doc_id);
+                    }
+                  }
+                }
+              }
+            }
             println!("RAG Sync Success for doc {}", doc_id);
           }
         }
         Err(e) => {
           // Rollback state to Draft AND revert version
           {
-             let db = db_state.lock().unwrap();
-             if let Some(ref conn) = db.conn {
-               let _ = conn.execute(
+            let db = db_state.lock().unwrap();
+            if let Some(ref conn) = db.conn {
+              let _ = conn.execute(
                  "UPDATE documents SET document_state = 1, version = version - 1 WHERE id = ?1 AND user_id = ?2",
                  [&doc_id, &user_id],
                );
-             }
+            }
           }
 
           return Err(format!(
@@ -410,13 +452,13 @@ pub async fn save_document(
     } else {
       // Rollback state to Draft AND revert version
       {
-         let db = db_state.lock().unwrap();
-         if let Some(ref conn) = db.conn {
-           let _ = conn.execute(
+        let db = db_state.lock().unwrap();
+        if let Some(ref conn) = db.conn {
+          let _ = conn.execute(
              "UPDATE documents SET document_state = 1, version = version - 1 WHERE id = ?1 AND user_id = ?2",
              [&doc_id, &user_id],
            );
-         }
+        }
       }
       return Err("Cannot publish document: Not authenticated".to_string());
     }
@@ -1071,8 +1113,12 @@ pub async fn empty_recycle_bin(
           .execute([&id])
           .map_err(|e| e.to_string())?;
         delete_ai_stmt.execute([&id]).map_err(|e| e.to_string())?;
-        delete_revisions_stmt.execute([&id]).map_err(|e| e.to_string())?;
-        delete_ai_data_stmt.execute([&id]).map_err(|e| e.to_string())?;
+        delete_revisions_stmt
+          .execute([&id])
+          .map_err(|e| e.to_string())?;
+        delete_ai_data_stmt
+          .execute([&id])
+          .map_err(|e| e.to_string())?;
         // Finally delete the doc
         delete_doc_stmt
           .execute([&id, &user_id])

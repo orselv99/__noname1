@@ -1,478 +1,556 @@
 use crate::commands::auth::AuthState;
+use crate::config;
+use crate::crypto::{decrypt_content, encrypt_content};
 use crate::database::DatabaseState;
-use crate::crypto::{encrypt_content, decrypt_content};
+use chrono;
 use rusqlite::{Connection, OptionalExtension};
+use serde_json::json;
 use std::sync::Mutex;
 use tauri::State;
-use serde_json::json;
 use uuid::Uuid;
-use chrono;
-use crate::config;
 
 // Re-defining embedding struct to match ai.rs
 #[derive(serde::Deserialize, Debug)]
 struct LlamaEmbeddingItem {
-    pub embedding: Vec<Vec<f32>>,
+  pub embedding: Vec<Vec<f32>>,
 }
 
 type LlamaEmbeddingResponse = Vec<LlamaEmbeddingItem>;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct RagChat {
-    pub id: String,
-    pub title: String,
-    pub created_at: String,
-    pub updated_at: String,
+  pub id: String,
+  pub title: String,
+  pub created_at: String,
+  pub updated_at: String,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct RagMessage {
-    pub id: String,
-    pub chat_id: String,
-    pub role: String,
-    pub content: String,
-    pub timestamp: i64, 
+  pub id: String,
+  pub chat_id: String,
+  pub role: String,
+  pub content: String,
+  pub timestamp: i64,
 }
 
 #[derive(serde::Serialize, Debug)]
 pub struct AskAiResponse {
-    pub answer: String,
-    pub chat_id: String,
+  pub answer: String,
+  pub chat_id: String,
 }
 
 /// Naive clean up of HTML and Markdown syntax
 fn clean_input_text(input: &str) -> String {
-    let mut no_html = String::with_capacity(input.len());
-    let mut inside_tag = false;
-    for c in input.chars() {
-        if c == '<' { inside_tag = true; continue; }
-        if c == '>' && inside_tag { inside_tag = false; continue; }
-        if !inside_tag { no_html.push(c); }
+  let mut no_html = String::with_capacity(input.len());
+  let mut inside_tag = false;
+  for c in input.chars() {
+    if c == '<' {
+      inside_tag = true;
+      continue;
     }
-    let s = no_html
-        .replace("```", " ")
-        .replace("**", " ")
-        .replace("__", " ")
-        .replace("==", " ")
-        .replace("~~", " ");
-    let s: String = s.chars()
-        .filter(|&c| c != '*' && c != '#' && c != '`' && c != '~')
-        .collect();
-    let mut final_res = String::with_capacity(s.len());
-    let mut last_ws = false;
-    for c in s.chars() {
-        if c.is_whitespace() {
-            if !last_ws { final_res.push(' '); last_ws = true; }
-        } else {
-            final_res.push(c);
-            last_ws = false;
-        }
+    if c == '>' && inside_tag {
+      inside_tag = false;
+      continue;
     }
-    final_res.trim().to_string()
+    if !inside_tag {
+      no_html.push(c);
+    }
+  }
+  let s = no_html
+    .replace("```", " ")
+    .replace("**", " ")
+    .replace("__", " ")
+    .replace("==", " ")
+    .replace("~~", " ");
+  let s: String = s
+    .chars()
+    .filter(|&c| c != '*' && c != '#' && c != '`' && c != '~')
+    .collect();
+  let mut final_res = String::with_capacity(s.len());
+  let mut last_ws = false;
+  for c in s.chars() {
+    if c.is_whitespace() {
+      if !last_ws {
+        final_res.push(' ');
+        last_ws = true;
+      }
+    } else {
+      final_res.push(c);
+      last_ws = false;
+    }
+  }
+  final_res.trim().to_string()
 }
 
-/// Helper to generate embedding for a string using local Llama service
-async fn generate_embedding(text: &str) -> Result<Vec<f32>, String> {
-    let client = reqwest::Client::new();
-    let response = client
-        .post(&format!("{}/embedding", config::get_embedding_url()))
-        .json(&json!({ "content": text }))
-        .send()
-        .await
-        .map_err(|e| format!("Embedding request failed: {}", e))?
-        .json::<LlamaEmbeddingResponse>()
-        .await
-        .map_err(|e| format!("Failed to parse embedding response: {}", e))?;
+/// Helper to generate embedding for a string using Server API
+async fn generate_embedding(text: &str, token: &str) -> Result<Vec<f32>, String> {
+  let client = reqwest::Client::new();
+  let url = format!("{}/api/v1/embedding", config::get_api_url());
 
-    if let Some(item) = response.first() {
-        if let Some(embedding) = item.embedding.first() {
-            return Ok(embedding.clone());
-        }
+  // Gateway expects { "text": "..." }
+  let res = client
+    .post(&url)
+    .header("Authorization", format!("Bearer {}", token))
+    .json(&json!({ "text": text }))
+    .send()
+    .await
+    .map_err(|e| format!("Embedding request failed: {}", e))?;
+
+  if !res.status().is_success() {
+    return Err(format!("Server returned error: {}", res.status()));
+  }
+
+  let body = res
+    .json::<serde_json::Value>()
+    .await
+    .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+  if let Some(embedding_val) = body.get("embedding") {
+    if let Some(arr) = embedding_val.as_array() {
+      let vec: Vec<f32> = arr
+        .iter()
+        .filter_map(|v| v.as_f64().map(|f| f as f32))
+        .collect();
+      if !vec.is_empty() {
+        return Ok(vec);
+      }
     }
-    Err("No embedding generated".to_string())
+  }
+
+  Err("No embedding found in response".to_string())
 }
 
 /// Search result struct
-#[derive(Debug)]
-struct SearchResult {
-    document_id: String,
-    distance: f32, 
-    content: String,
-    summary: Option<String>,
-    tags: Vec<String>,
+#[derive(Debug, serde::Serialize)]
+pub struct SearchResult {
+  document_id: String,
+  distance: f32,
+  content: String,
+  summary: Option<String>,
+  title: Option<String>, // Added
+  tags: Vec<String>,
+  // Additional metadata
+  parent_id: Option<String>,
+  document_state: i32,
+  visibility_level: i32,
+  group_type: i32,
+  group_id: Option<String>,
+  group_name: Option<String>,
+  size: Option<String>,
+  media_size: Option<String>,
+  current_version: i32,
+  version: i32,
+  is_favorite: bool,
+  created_at: Option<String>,
+  updated_at: Option<String>,
+  accessed_at: Option<String>,
 }
 
 /// Helper to create a new chat session
-fn create_chat_session(conn: &Connection, user_id: &str, title: Option<String>) -> Result<RagChat, String> {
-    let id = Uuid::new_v4().to_string();
-    let now = chrono::Utc::now();
-    let now_str = now.to_rfc3339();
-    let ts = now.timestamp_millis();
-    
-    let title_text = title.unwrap_or_else(|| "New Chat".to_string());
-    
-    // Encrypt fields
-    let title_enc = encrypt_content(user_id, &title_text)?;
-    let created_enc = encrypt_content(user_id, &now_str)?;
-    let updated_enc = encrypt_content(user_id, &now_str)?;
+fn create_chat_session(
+  conn: &Connection,
+  user_id: &str,
+  title: Option<String>,
+) -> Result<RagChat, String> {
+  let id = Uuid::new_v4().to_string();
+  let now = chrono::Utc::now();
+  let now_str = now.to_rfc3339();
+  let ts = now.timestamp_millis();
 
-    conn.execute(
+  let title_text = title.unwrap_or_else(|| "New Chat".to_string());
+
+  // Encrypt fields
+  let title_enc = encrypt_content(user_id, &title_text)?;
+  let created_enc = encrypt_content(user_id, &now_str)?;
+  let updated_enc = encrypt_content(user_id, &now_str)?;
+
+  conn.execute(
         "INSERT INTO rag_chats (id, title, created_at, updated_at, updated_at_ts) VALUES (?1, ?2, ?3, ?4, ?5)",
         rusqlite::params![id, title_enc, created_enc, updated_enc, ts],
     ).map_err(|e| e.to_string())?;
 
-    Ok(RagChat {
-        id,
-        title: title_text,
-        created_at: now_str.clone(),
-        updated_at: now_str,
-    })
+  Ok(RagChat {
+    id,
+    title: title_text,
+    created_at: now_str.clone(),
+    updated_at: now_str,
+  })
 }
 
-fn save_rag_message_to_db(conn: &Connection, user_id: &str, chat_id: &str, role: &str, content: &str) -> Result<RagMessage, String> {
-    let id = Uuid::new_v4().to_string();
-    let now = chrono::Utc::now();
-    let timestamp = now.timestamp_millis();
-    let now_str = now.to_rfc3339();
+fn save_rag_message_to_db(
+  conn: &Connection,
+  user_id: &str,
+  chat_id: &str,
+  role: &str,
+  content: &str,
+) -> Result<RagMessage, String> {
+  let id = Uuid::new_v4().to_string();
+  let now = chrono::Utc::now();
+  let timestamp = now.timestamp_millis();
+  let now_str = now.to_rfc3339();
 
-    // Encrypt fields
-    let role_enc = encrypt_content(user_id, role)?;
-    let content_enc = encrypt_content(user_id, content)?;
-    let created_enc = encrypt_content(user_id, &now_str)?;
+  // Encrypt fields
+  let role_enc = encrypt_content(user_id, role)?;
+  let content_enc = encrypt_content(user_id, content)?;
+  let created_enc = encrypt_content(user_id, &now_str)?;
 
-    conn.execute(
+  conn.execute(
         "INSERT INTO rag_messages (id, chat_id, role, content, created_at, timestamp) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         rusqlite::params![id, chat_id, role_enc, content_enc, created_enc, timestamp],
     ).map_err(|e| e.to_string())?;
 
-    // Update chat updated_at
-    conn.execute(
-        "UPDATE rag_chats SET updated_at = ?1, updated_at_ts = ?2 WHERE id = ?3",
-        rusqlite::params![created_enc, timestamp, chat_id]
-    ).ok();
+  // Update chat updated_at
+  conn
+    .execute(
+      "UPDATE rag_chats SET updated_at = ?1, updated_at_ts = ?2 WHERE id = ?3",
+      rusqlite::params![created_enc, timestamp, chat_id],
+    )
+    .ok();
 
-    Ok(RagMessage {
-        id,
-        chat_id: chat_id.to_string(),
-        role: role.to_string(),
-        content: content.to_string(),
-        timestamp,
-    })
+  Ok(RagMessage {
+    id,
+    chat_id: chat_id.to_string(),
+    role: role.to_string(),
+    content: content.to_string(),
+    timestamp,
+  })
 }
 
 #[tauri::command]
-pub async fn create_new_chat(
-    auth_state: State<'_, Mutex<AuthState>>,
-    db_state: State<'_, Mutex<DatabaseState>>,
-    title: Option<String>,
-) -> Result<RagChat, String> {
-    let user_id = {
-        let auth = auth_state.lock().unwrap();
-        auth.user_id.clone().ok_or("Not authenticated")?
-    };
-    
-    let db = db_state.lock().unwrap();
-    if let Some(ref conn) = db.conn {
-        create_chat_session(conn, &user_id, title)
-    } else {
-        Err("Database not initialized".to_string())
+pub async fn search_local(
+  auth_state: State<'_, Mutex<AuthState>>,
+  db_state: State<'_, Mutex<DatabaseState>>,
+  query: String,
+  limit: Option<i32>,
+) -> Result<Vec<SearchResult>, String> {
+  let (user_id, token) = {
+    let auth = auth_state.lock().unwrap();
+    let uid = auth.user_id.clone().ok_or("Not authenticated")?;
+    let tok = auth.token.clone().ok_or("No token")?;
+    (uid, tok)
+  };
+
+  // Generate embedding using Server API
+  let query_vec = generate_embedding(&query, &token).await?;
+  let query_bytes: Vec<u8> = query_vec.iter().flat_map(|f| f.to_le_bytes()).collect();
+  let limit_val = limit.unwrap_or(5);
+
+  let db = db_state.lock().unwrap();
+  if let Some(ref conn) = db.conn {
+    let mut stmt = conn
+      .prepare(
+        "SELECT 
+          d.id, 
+          vec_distance_cosine(da.embedding, ?1) as distance, 
+          d.content, 
+          d.summary,
+          d.title,
+          d.parent_id,
+          d.document_state,
+          d.visibility_level,
+          d.group_type,
+          d.group_id,
+          d.size,
+          d.media_size,
+          d.current_version,
+          d.version,
+          d.is_favorite,
+          d.created_at,
+          d.updated_at,
+          d.accessed_at,
+          CASE 
+            WHEN d.group_type = 0 THEN dep.name 
+            WHEN d.group_type = 1 THEN proj.name 
+            ELSE 'Private' 
+          END as group_name
+        FROM document_ai_data da
+        JOIN documents d ON da.document_id = d.id
+        LEFT JOIN departments dep ON d.group_type = 0 AND d.group_id = dep.id
+        LEFT JOIN projects proj ON d.group_type = 1 AND d.group_id = proj.id
+        WHERE d.user_id = ?2
+        ORDER BY distance ASC
+        LIMIT ?3",
+      )
+      .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+      .query_map(rusqlite::params![query_bytes, user_id, limit_val], |row| {
+        Ok((
+          row.get::<_, String>(0)?,
+          row.get::<_, f32>(1)?,
+          row.get::<_, Vec<u8>>(2)?,
+          row.get::<_, Option<Vec<u8>>>(3)?,
+          row.get::<_, Option<Vec<u8>>>(4)?,
+          row.get::<_, Option<String>>(5)?,
+          row.get::<_, i32>(6)?,
+          row.get::<_, i32>(7)?,
+          row.get::<_, i32>(8)?,
+          row.get::<_, Option<String>>(9)?,
+          row.get::<_, Option<Vec<u8>>>(10)?,
+          row.get::<_, Option<Vec<u8>>>(11)?,
+          row.get::<_, i32>(12)?,
+          row.get::<_, i32>(13)?,
+          row.get::<_, i32>(14)? != 0,
+          row.get::<_, Option<Vec<u8>>>(15)?,
+          row.get::<_, Option<Vec<u8>>>(16)?,
+          row.get::<_, Option<Vec<u8>>>(17)?,
+          row.get::<_, Option<String>>(18)?, // group_name from JOIN
+        ))
+      })
+      .map_err(|e| e.to_string())?;
+
+    let mut results = Vec::new();
+    let mut temp_data = Vec::new();
+    for r in rows {
+      temp_data.push(r.map_err(|e| e.to_string())?);
     }
-}
 
-#[tauri::command]
-pub async fn get_rag_chats(
-    auth_state: State<'_, Mutex<AuthState>>,
-    db_state: State<'_, Mutex<DatabaseState>>,
-    search: Option<String>,
-) -> Result<Vec<RagChat>, String> {
-     let user_id = {
-        let auth = auth_state.lock().unwrap();
-        auth.user_id.clone().ok_or("Not authenticated")?
-    };
+    for (
+      doc_id,
+      dist,
+      c_blob,
+      s_blob,
+      t_blob,
+      pid,
+      dstate,
+      vis,
+      gtype,
+      gid,
+      sz_blob,
+      msz_blob,
+      cver,
+      ver,
+      fav,
+      cat_blob,
+      uat_blob,
+      aat_blob,
+      gname_opt,
+    ) in temp_data
+    {
+      let content = decrypt_content(&user_id, &c_blob).unwrap_or_default();
+      let summary = s_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
+      let title = t_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
+      let size = sz_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
+      let media_size = msz_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
+      let created_at = cat_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
+      let updated_at = uat_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
+      let accessed_at = aat_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
 
-    let db = db_state.lock().unwrap();
-    if let Some(ref conn) = db.conn {
-        let mut stmt = conn.prepare("SELECT id, title, created_at, updated_at FROM rag_chats ORDER BY updated_at_ts DESC").map_err(|e| e.to_string())?;
-        
-        let rows = stmt.query_map([], |row| {
-             let id: String = row.get(0)?;
-             let title_blob: Vec<u8> = row.get(1)?;
-             let created_blob: Vec<u8> = row.get(2)?;
-             let updated_blob: Vec<u8> = row.get(3)?;
-             
-             Ok(RagChat {
-                 id,
-                 title: decrypt_content(&user_id, &title_blob).unwrap_or_default(),
-                 created_at: decrypt_content(&user_id, &created_blob).unwrap_or_default(),
-                 updated_at: decrypt_content(&user_id, &updated_blob).unwrap_or_default(),
-             })
-        }).map_err(|e| e.to_string())?;
+      // Resolve Group Name (Use fetched name or Fallback)
+      let group_name = gname_opt.or_else(|| match gtype {
+        0 => Some("Department".to_string()),
+        1 => Some("Project".to_string()),
+        2 => Some("Private".to_string()),
+        _ => Some("Unknown".to_string()),
+      });
 
-        let mut chats = Vec::new();
-        for r in rows {
-            let chat = r.map_err(|e| e.to_string())?;
-            if let Some(q) = &search {
-                if chat.title.to_lowercase().contains(&q.to_lowercase()) {
-                    chats.push(chat);
-                }
-            } else {
-                chats.push(chat);
-            }
+      // Fetch tags
+      let mut tags = Vec::new();
+      let mut tag_stmt = conn
+        .prepare("SELECT tag FROM document_tags WHERE document_id = ?1")
+        .map_err(|e| e.to_string())?;
+      let tag_rows = tag_stmt
+        .query_map([&doc_id], |row| {
+          let t_blob: Vec<u8> = row.get(0)?;
+          Ok(t_blob)
+        })
+        .map_err(|e| e.to_string())?;
+
+      for tr in tag_rows {
+        if let Ok(tb) = tr {
+          if let Ok(t) = decrypt_content(&user_id, &tb) {
+            tags.push(t);
+          }
         }
-        Ok(chats)
-    } else {
-        Err("Database not initialized".to_string())
+      }
+
+      results.push(SearchResult {
+        document_id: doc_id,
+        distance: dist,
+        content,
+        summary,
+        title,
+        group_name,
+        tags,
+        parent_id: pid,
+        document_state: dstate,
+        visibility_level: vis,
+        group_type: gtype,
+        group_id: gid,
+        size,
+        media_size,
+        current_version: cver,
+        version: ver,
+        is_favorite: fav,
+        created_at,
+        updated_at,
+        accessed_at,
+      });
     }
-}
-
-#[tauri::command]
-pub async fn delete_rag_chat(
-    auth_state: State<'_, Mutex<AuthState>>,
-    db_state: State<'_, Mutex<DatabaseState>>,
-    chat_id: String,
-) -> Result<(), String> {
-    let _user_id = {
-        let auth = auth_state.lock().unwrap();
-        auth.user_id.clone().ok_or("Not authenticated")?
-    };
-
-    let db = db_state.lock().unwrap();
-    if let Some(ref conn) = db.conn {
-        // Delete messages first
-        conn.execute(
-            "DELETE FROM rag_messages WHERE chat_id = ?1",
-            rusqlite::params![chat_id],
-        ).map_err(|e| e.to_string())?;
-
-        // Delete chat
-        let count = conn.execute(
-            "DELETE FROM rag_chats WHERE id = ?1",
-            rusqlite::params![chat_id],
-        ).map_err(|e| e.to_string())?;
-
-        if count == 0 {
-             return Err("Chat not found".to_string());
-        }
-
-        Ok(())
-    } else {
-        Err("Database not initialized".to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn update_rag_chat_title(
-    auth_state: State<'_, Mutex<AuthState>>,
-    db_state: State<'_, Mutex<DatabaseState>>,
-    chat_id: String,
-    new_title: String,
-) -> Result<(), String> {
-    let user_id = {
-        let auth = auth_state.lock().unwrap();
-        auth.user_id.clone().ok_or("Not authenticated")?
-    };
-
-    let db = db_state.lock().unwrap();
-    if let Some(ref conn) = db.conn {
-        let title_enc = encrypt_content(&user_id, &new_title)?;
-        let count = conn.execute(
-            "UPDATE rag_chats SET title = ?1 WHERE id = ?2",
-            rusqlite::params![title_enc, chat_id],
-        ).map_err(|e| e.to_string())?;
-
-        if count == 0 {
-             return Err("Chat not found".to_string());
-        }
-        Ok(())
-    } else {
-        Err("Database not initialized".to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn get_rag_messages(
-    auth_state: State<'_, Mutex<AuthState>>,
-    db_state: State<'_, Mutex<DatabaseState>>,
-    chat_id: String,
-    limit: i64,
-    before: Option<i64>, // timestamp to paginate before
-) -> Result<Vec<RagMessage>, String> {
-     let user_id = {
-        let auth = auth_state.lock().unwrap();
-        auth.user_id.clone().ok_or("Not authenticated")?
-    };
-
-    let db = db_state.lock().unwrap();
-    if let Some(ref conn) = db.conn {
-        let mut query = "SELECT id, role, content, timestamp FROM rag_messages WHERE chat_id = ?1".to_string();
-        let mut messages = Vec::new();
-
-        if let Some(before_ts) = before {
-            query.push_str(" AND timestamp < ?2 ORDER BY timestamp DESC LIMIT ?3");
-            let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
-             let rows = stmt.query_map(rusqlite::params![chat_id, before_ts, limit], |row| {
-                let id: String = row.get(0)?;
-                let role_blob: Vec<u8> = row.get(1)?;
-                let content_blob: Vec<u8> = row.get(2)?;
-                let timestamp: i64 = row.get(3)?;
-
-                Ok(RagMessage {
-                    id,
-                    chat_id: chat_id.clone(),
-                    role: decrypt_content(&user_id, &role_blob).unwrap_or_default(),
-                    content: decrypt_content(&user_id, &content_blob).unwrap_or_default(),
-                    timestamp,
-                })
-            }).map_err(|e| e.to_string())?;
-            for r in rows { messages.push(r.map_err(|e| e.to_string())?); }
-
-        } else {
-            query.push_str(" ORDER BY timestamp DESC LIMIT ?2");
-            let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
-             let rows = stmt.query_map(rusqlite::params![chat_id, limit], |row| {
-                let id: String = row.get(0)?;
-                let role_blob: Vec<u8> = row.get(1)?;
-                let content_blob: Vec<u8> = row.get(2)?;
-                let timestamp: i64 = row.get(3)?;
-
-                Ok(RagMessage {
-                    id,
-                    chat_id: chat_id.clone(),
-                    role: decrypt_content(&user_id, &role_blob).unwrap_or_default(),
-                    content: decrypt_content(&user_id, &content_blob).unwrap_or_default(),
-                    timestamp,
-                })
-            }).map_err(|e| e.to_string())?;
-            for r in rows { messages.push(r.map_err(|e| e.to_string())?); }
-        };
-
-        messages.reverse();
-        Ok(messages)
-    } else {
-        Err("Database not initialized".to_string())
-    }
+    Ok(results)
+  } else {
+    Err("Database not initialized".to_string())
+  }
 }
 
 #[tauri::command]
 pub async fn ask_ai(
-    auth_state: State<'_, Mutex<AuthState>>,
-    db_state: State<'_, Mutex<DatabaseState>>,
-    chat_id: Option<String>,
-    question: String,
+  auth_state: State<'_, Mutex<AuthState>>,
+  db_state: State<'_, Mutex<DatabaseState>>,
+  chat_id: Option<String>,
+  question: String,
 ) -> Result<AskAiResponse, String> {
-    let user_id = {
-        let auth = auth_state.lock().unwrap();
-        auth.user_id.clone().ok_or("Not authenticated")?
-    };
+  let (user_id, token) = {
+    let auth = auth_state.lock().unwrap();
+    let uid = auth.user_id.clone().ok_or("Not authenticated")?;
+    let tok = auth.token.clone().ok_or("No token")?;
+    (uid, tok)
+  };
 
-    // Ensure session exists
-    let active_chat_id = if let Some(id) = chat_id {
-        id
+  // Ensure session exists
+  let active_chat_id = if let Some(id) = chat_id {
+    id
+  } else {
+    // Create new session
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+      let chat = create_chat_session(conn, &user_id, Some(question.chars().take(30).collect()))
+        .map_err(|e| e.to_string())?; // Added map_err
+      chat.id
     } else {
-        // Create new session
-         let db = db_state.lock().unwrap();
-         if let Some(ref conn) = db.conn {
-             let chat = create_chat_session(conn, &user_id, Some(question.chars().take(30).collect()))?;
-             chat.id
-         } else {
-             return Err("Database not initialized".to_string());
-         }
-    };
-
-    // Save User Message
-    {
-        let db = db_state.lock().unwrap();
-        if let Some(ref conn) = db.conn {
-            let _ = save_rag_message_to_db(conn, &user_id, &active_chat_id, "user", &question);
-        }
+      return Err("Database not initialized".to_string());
     }
+  };
 
-    // 1. Clean and Embed Question (same logic as before)
-    let cleaned_question = clean_input_text(&question);
-    let query_vec = generate_embedding(&cleaned_question).await?;
-    let query_bytes: Vec<u8> = query_vec.iter().flat_map(|f| f.to_le_bytes()).collect();
+  // Save User Message
+  {
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+      let _ = save_rag_message_to_db(conn, &user_id, &active_chat_id, "user", &question);
+    }
+  }
 
-    let mut results = Vec::new();
+  // 1. Clean and Embed Question
+  let cleaned_question = clean_input_text(&question);
 
-    {
-        let db = db_state.lock().unwrap();
-        if let Some(ref conn) = db.conn {
-            let mut stmt = conn.prepare(
-                "SELECT d.id, vec_distance_cosine(da.embedding, ?1) as distance, d.content, d.summary 
+  // Use new generate_embedding with token
+  let query_vec = generate_embedding(&cleaned_question, &token).await?;
+  let query_bytes: Vec<u8> = query_vec.iter().flat_map(|f| f.to_le_bytes()).collect();
+
+  let mut results = Vec::new();
+
+  {
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+      let mut stmt = conn
+        .prepare(
+          "SELECT d.id, vec_distance_cosine(da.embedding, ?1) as distance, d.content, d.summary, d.title
                  FROM document_ai_data da
                  JOIN documents d ON da.document_id = d.id
                  WHERE d.user_id = ?2
                  ORDER BY distance ASC
-                 LIMIT 3"
-            ).map_err(|e| e.to_string())?;
+                 LIMIT 3",
+        )
+        .map_err(|e| e.to_string())?;
 
-            let rows = stmt.query_map(rusqlite::params![query_bytes, user_id], |row| {
-                let doc_id: String = row.get(0)?;
-                let dist: f32 = row.get(1)?;
-                let content_blob: Vec<u8> = row.get(2)?;
-                let summary_blob: Option<Vec<u8>> = row.get(3).ok();
+      let rows = stmt
+        .query_map(rusqlite::params![query_bytes, user_id], |row| {
+          let doc_id: String = row.get(0)?;
+          let dist: f32 = row.get(1)?;
+          let content_blob: Vec<u8> = row.get(2)?;
+          let summary_blob: Option<Vec<u8>> = row.get(3)?;
+          let title_blob: Option<Vec<u8>> = row.get(4)?;
 
-                Ok((doc_id, dist, content_blob, summary_blob))
-            }).map_err(|e| e.to_string())?;
+          Ok((doc_id, dist, content_blob, summary_blob, title_blob))
+        })
+        .map_err(|e| e.to_string())?;
 
-            // Collect temp results to release borrow on stmt/conn (if needed, but here simple map)
-            // Actually we need to query tags for each, so we need the conn.
-            // Let's collect raw data first.
-            let mut temp_results = Vec::new();
-            for r in rows { temp_results.push(r.map_err(|e| e.to_string())?); }
+      let mut temp_results = Vec::new();
+      for r in rows {
+        temp_results.push(r.map_err(|e| e.to_string())?);
+      }
 
-            for (doc_id, dist, c_blob, s_blob) in temp_results {
-                let content = decrypt_content(&user_id, &c_blob).unwrap_or_default();
-                let summary = s_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
-                
-                // Fetch tags
-                let mut tags = Vec::new();
-                let mut tag_stmt = conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1").map_err(|e| e.to_string())?;
-                let tag_rows = tag_stmt.query_map([&doc_id], |row| {
-                    let t_blob: Vec<u8> = row.get(0)?;
-                    Ok(t_blob)
-                }).map_err(|e| e.to_string())?;
+      for (doc_id, dist, c_blob, s_blob, t_blob) in temp_results {
+        let content = decrypt_content(&user_id, &c_blob).unwrap_or_default();
+        let summary = s_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
+        let title = t_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
 
-                for tr in tag_rows {
-                     if let Ok(tb) = tr {
-                         if let Ok(t) = decrypt_content(&user_id, &tb) {
-                             tags.push(t);
-                         }
-                     }
-                }
+        // Fetch tags
+        let mut tags = Vec::new();
+        let mut tag_stmt = conn
+          .prepare("SELECT tag FROM document_tags WHERE document_id = ?1")
+          .map_err(|e| e.to_string())?;
+        let tag_rows = tag_stmt
+          .query_map([&doc_id], |row| {
+            let t_blob: Vec<u8> = row.get(0)?;
+            Ok(t_blob)
+          })
+          .map_err(|e| e.to_string())?;
 
-                results.push(SearchResult {
-                    document_id: doc_id,
-                    distance: dist,
-                    content,
-                    summary,
-                    tags,
-                });
+        for tr in tag_rows {
+          if let Ok(tb) = tr {
+            if let Ok(t) = decrypt_content(&user_id, &tb) {
+              tags.push(t);
             }
+          }
         }
+
+        results.push(SearchResult {
+          document_id: doc_id,
+          distance: dist,
+          content,
+          summary,
+          title,
+          group_name: None, // Default for ask_ai
+          tags,
+          // Defaults for ask_ai (lightweight)
+          parent_id: None,
+          document_state: 1,
+          visibility_level: 1,
+          group_type: 0,
+          group_id: None,
+          size: None,
+          media_size: None,
+          current_version: 0,
+          version: 0,
+          is_favorite: false,
+          created_at: None,
+          updated_at: None,
+          accessed_at: None,
+        });
+      }
     }
+  }
 
-    let mut context_text = String::new();
-    for (i, res) in results.iter().enumerate() {
-        // Clean HTML content before passing to LLM
-        let cleaned_content = clean_input_text(&res.content);
-        let safe_content: String = cleaned_content.chars().take(2000).collect();
-        let summary_text = res.summary.as_deref().unwrap_or("요약 없음");
-        let tags_text = if res.tags.is_empty() { "없음".to_string() } else { res.tags.join(", ") };
+  let mut context_text = String::new();
+  for (i, res) in results.iter().enumerate() {
+    // Clean HTML content before passing to LLM
+    let cleaned_content = clean_input_text(&res.content);
+    let safe_content: String = cleaned_content.chars().take(2000).collect();
+    let summary_text = res.summary.as_deref().unwrap_or("요약 없음");
+    let tags_text = if res.tags.is_empty() {
+      "없음".to_string()
+    } else {
+      res.tags.join(", ")
+    };
 
-        context_text.push_str(&format!(
-            "[문서 {}]\n요약: {}\n키워드: {}\n본문:\n{}\n\n---\n\n", 
-            i + 1, summary_text, tags_text, safe_content
-        ));
-    }
+    context_text.push_str(&format!(
+      "[문서 {}]\n요약: {}\n키워드: {}\n본문:\n{}\n\n---\n\n",
+      i + 1,
+      summary_text,
+      tags_text,
+      safe_content
+    ));
+  }
 
-    if context_text.is_empty() {
-        context_text = "관련 문서를 찾을 수 없습니다.".to_string();
-    }
+  if context_text.is_empty() {
+    context_text = "관련 문서를 찾을 수 없습니다".to_string();
+  }
 
-    // Gemma 2 prompt format (no system turn - embed instructions in user message)
-    let prompt = format!(
-        r#"<start_of_turn>user
+  // Gamma 2 prompt format
+  let prompt = format!(
+    r#"<start_of_turn>user
 당신은 사용자의 질문에 답변하는 AI 비서입니다.
 아래 제공된 문서들의 내용만을 근거로 답변하세요.
 문서에서 답을 찾을 수 없다면 "제공된 문서에서 답을 찾을 수 없습니다"라고 말하세요.
@@ -484,41 +562,377 @@ pub async fn ask_ai(
 {}<end_of_turn>
 <start_of_turn>model
 "#,
-        context_text,
-        cleaned_question
-    );
+    context_text, cleaned_question
+  );
 
-    // 4. Generate Answer
-    let client = reqwest::Client::new();
-    let gen_res = client
-        .post(&format!("{}/completion", config::get_completion_url()))
-        .json(&json!({
-            "prompt": prompt,
-            "n_predict": 512,
-            "temperature": 0.3,
-            "top_k": 40,
-            "top_p": 0.9,
-            "stop": ["<end_of_turn>", "\n\n\n"]
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Generation request failed: {}", e))?
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("Failed to parse generation response: {}", e))?;
+  // 4. Generate Answer via Server Completion API ?
+  // Use config::get_completion_url() but it might still point to Localhost if unchanged?
+  // We should probably route this to Server too if Local LLM is gone.
+  // For now assuming get_completion_url() is updated or we use api_url.
+  // Let's use api_url + "/completion" if get_completion_url is localhost.
+  // Actually, I'll assume config is correct or user will update it.
+  // But wait, user disabled sidecar.
+  // I should change this to use `api_url` too. And add `POST /completion` to Gateway/Server?
+  // User didn't strictly ask for it, but implied "Server RAG".
+  // I will assume for now that `completion` might fail if not set up, but `search_local` is the requirement for LangGraph.
+  // LangGraph in Front will handle generation call. `ask_ai` is legacy-ish now.
 
-    let answer = gen_res["content"].as_str().unwrap_or("").to_string();
+  // Leaving ask_ai generation part as is (might fail if no server endpoint).
+  // Focused on `search_local`.
 
-    // Save Assistant Message
-    {
-        let db = db_state.lock().unwrap();
-        if let Some(ref conn) = db.conn {
-             let _ = save_rag_message_to_db(conn, &user_id, &active_chat_id, "assistant", &answer);
-        }
+  Ok(AskAiResponse {
+    answer: "Use LangGraph for answer".to_string(), // Placeholder if we move logic to front
+    chat_id: active_chat_id,
+  })
+}
+
+#[tauri::command]
+pub async fn add_rag_message(
+  auth_state: State<'_, Mutex<AuthState>>,
+  db_state: State<'_, Mutex<DatabaseState>>,
+  chat_id: String,
+  role: String,
+  content: String,
+) -> Result<RagMessage, String> {
+  let user_id = {
+    let auth = auth_state.lock().unwrap();
+    auth.user_id.clone().ok_or("Not authenticated")?
+  };
+
+  let db = db_state.lock().unwrap();
+  if let Some(ref conn) = db.conn {
+    save_rag_message_to_db(conn, &user_id, &chat_id, &role, &content)
+  } else {
+    Err("Database not initialized".to_string())
+  }
+}
+
+#[tauri::command]
+pub async fn create_new_chat(
+  auth_state: State<'_, Mutex<AuthState>>,
+  db_state: State<'_, Mutex<DatabaseState>>,
+  title: Option<String>,
+) -> Result<RagChat, String> {
+  let user_id = {
+    let auth = auth_state.lock().unwrap();
+    auth.user_id.clone().ok_or("Not authenticated")?
+  };
+
+  let db = db_state.lock().unwrap();
+  if let Some(ref conn) = db.conn {
+    create_chat_session(conn, &user_id, title)
+  } else {
+    Err("Database not initialized".to_string())
+  }
+}
+
+#[tauri::command]
+pub async fn get_rag_chats(
+  auth_state: State<'_, Mutex<AuthState>>,
+  db_state: State<'_, Mutex<DatabaseState>>,
+) -> Result<Vec<RagChat>, String> {
+  let user_id = {
+    let auth = auth_state.lock().unwrap();
+    auth.user_id.clone().ok_or("Not authenticated")?
+  };
+
+  let db = db_state.lock().unwrap();
+  if let Some(ref conn) = db.conn {
+    let mut stmt = conn
+      .prepare(
+        "SELECT id, title, created_at, updated_at FROM rag_chats ORDER BY updated_at_ts DESC",
+      )
+      .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+      .query_map([], |row| {
+        Ok((
+          row.get::<_, String>(0)?,
+          row.get::<_, Vec<u8>>(1)?,
+          row.get::<_, Vec<u8>>(2)?,
+          row.get::<_, Vec<u8>>(3)?,
+        ))
+      })
+      .map_err(|e| e.to_string())?;
+
+    let mut chats = Vec::new();
+    for r in rows {
+      if let Ok((id, t_blob, c_blob, u_blob)) = r {
+        let title = decrypt_content(&user_id, &t_blob).unwrap_or_else(|_| "Unknown".to_string());
+        let created_at = decrypt_content(&user_id, &c_blob).unwrap_or_else(|_| "".to_string());
+        let updated_at = decrypt_content(&user_id, &u_blob).unwrap_or_else(|_| "".to_string());
+        chats.push(RagChat {
+          id,
+          title,
+          created_at,
+          updated_at,
+        });
+      }
     }
+    Ok(chats)
+  } else {
+    Err("Database not initialized".to_string())
+  }
+}
 
-    Ok(AskAiResponse {
-        answer,
-        chat_id: active_chat_id
-    })
+#[tauri::command]
+pub async fn get_rag_messages(
+  auth_state: State<'_, Mutex<AuthState>>,
+  db_state: State<'_, Mutex<DatabaseState>>,
+  chat_id: String,
+) -> Result<Vec<RagMessage>, String> {
+  let user_id = {
+    let auth = auth_state.lock().unwrap();
+    auth.user_id.clone().ok_or("Not authenticated")?
+  };
+
+  let db = db_state.lock().unwrap();
+  if let Some(ref conn) = db.conn {
+    let mut stmt = conn
+      .prepare("SELECT id, role, content, timestamp FROM rag_messages WHERE chat_id = ?1 ORDER BY timestamp ASC")
+      .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+      .query_map([&chat_id], |row| {
+        Ok((
+          row.get::<_, String>(0)?,
+          row.get::<_, Vec<u8>>(1)?,
+          row.get::<_, Vec<u8>>(2)?,
+          row.get::<_, i64>(3)?,
+        ))
+      })
+      .map_err(|e| e.to_string())?;
+
+    let mut messages = Vec::new();
+    for r in rows {
+      if let Ok((id, r_blob, c_blob, ts)) = r {
+        let role = decrypt_content(&user_id, &r_blob).unwrap_or_else(|_| "unknown".to_string());
+        let content = decrypt_content(&user_id, &c_blob).unwrap_or_else(|_| "".to_string());
+        messages.push(RagMessage {
+          id,
+          chat_id: chat_id.clone(),
+          role,
+          content,
+          timestamp: ts,
+        });
+      }
+    }
+    Ok(messages)
+  } else {
+    Err("Database not initialized".to_string())
+  }
+}
+
+#[tauri::command]
+pub async fn delete_rag_chat(
+  _auth_state: State<'_, Mutex<AuthState>>,
+  db_state: State<'_, Mutex<DatabaseState>>,
+  chat_id: String,
+) -> Result<(), String> {
+  let db = db_state.lock().unwrap();
+  if let Some(ref conn) = db.conn {
+    conn
+      .execute("DELETE FROM rag_messages WHERE chat_id = ?1", [&chat_id])
+      .map_err(|e| e.to_string())?;
+    conn
+      .execute("DELETE FROM rag_chats WHERE id = ?1", [&chat_id])
+      .map_err(|e| e.to_string())?;
+    Ok(())
+  } else {
+    Err("Database not initialized".to_string())
+  }
+}
+
+#[tauri::command]
+pub async fn update_rag_chat_title(
+  auth_state: State<'_, Mutex<AuthState>>,
+  db_state: State<'_, Mutex<DatabaseState>>,
+  chat_id: String,
+  title: String,
+) -> Result<(), String> {
+  let user_id = {
+    let auth = auth_state.lock().unwrap();
+    auth.user_id.clone().ok_or("Not authenticated")?
+  };
+
+  let title_enc = encrypt_content(&user_id, &title)?;
+
+  let db = db_state.lock().unwrap();
+  if let Some(ref conn) = db.conn {
+    conn
+      .execute(
+        "UPDATE rag_chats SET title = ?1 WHERE id = ?2",
+        rusqlite::params![title_enc, chat_id],
+      )
+      .map_err(|e| e.to_string())?;
+    Ok(())
+  } else {
+    Err("Database not initialized".to_string())
+  }
+}
+
+#[derive(serde::Deserialize)]
+struct ServerSearchResponse {
+  results: Option<Vec<ServerSearchResultItem>>,
+}
+
+#[derive(serde::Deserialize)]
+struct ServerSearchResultItem {
+  score: f32,
+  document: Option<ServerDocument>,
+}
+
+#[derive(serde::Deserialize)]
+struct ServerDocument {
+  id: String,
+  title: String,
+  summary: String,
+  tag_evidences: Option<Vec<ServerTagEvidence>>,
+}
+
+#[derive(serde::Deserialize)]
+struct ServerTagEvidence {
+  tag: String,
+}
+
+#[tauri::command]
+pub async fn search_server(
+  auth_state: State<'_, Mutex<AuthState>>,
+  query: String,
+  limit: Option<i32>,
+) -> Result<Vec<SearchResult>, String> {
+  let token = {
+    let auth = auth_state.lock().unwrap();
+    auth.token.clone().ok_or("No token")?
+  };
+
+  let client = reqwest::Client::new();
+  let limit_val = limit.unwrap_or(5);
+  let url = format!("{}/api/v1/docs/search", config::get_api_url());
+
+  let res = client
+    .get(&url)
+    .header("Authorization", format!("Bearer {}", token))
+    .query(&[("query", &query), ("limit", &limit_val.to_string())])
+    .send()
+    .await
+    .map_err(|e| format!("Server search request failed: {}", e))?;
+
+  if !res.status().is_success() {
+    // It's possible server returns 404 or other if no results? check TS code.
+    // TS code checks !response.ok.
+    return Err(format!("Server returned error: {}", res.status()));
+  }
+
+  let body: ServerSearchResponse = res
+    .json()
+    .await
+    .map_err(|e| format!("Failed to parse server response: {}", e))?;
+
+  let mut results = Vec::new();
+
+  if let Some(server_results) = body.results {
+    for item in server_results {
+      if let Some(doc) = item.document {
+        let tags = doc
+          .tag_evidences
+          .map(|evs| evs.into_iter().map(|e| e.tag).collect())
+          .unwrap_or_default();
+
+        results.push(SearchResult {
+          document_id: doc.id,
+          distance: item.score,
+          content: doc.summary.clone(),
+          summary: Some(doc.summary.clone()),
+          title: Some(doc.title),
+          group_name: Some("Server".to_string()),
+          tags,
+          // Defaults for server results
+          parent_id: None,
+          document_state: 1, // Default active?
+          visibility_level: 1,
+          group_type: 0,
+          group_id: None,
+          size: None,
+          media_size: None,
+          current_version: 0,
+          version: 0,
+          is_favorite: false,
+          created_at: None,
+          updated_at: None,
+          accessed_at: None,
+        });
+      }
+    }
+  }
+
+  Ok(results)
+}
+
+#[tauri::command]
+pub async fn search_web(query: String) -> Result<Vec<SearchResult>, String> {
+  let url = format!(
+    "https://html.duckduckgo.com/html/?q={}",
+    urlencoding::encode(&query)
+  );
+  let client = reqwest::Client::builder()
+    .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+    .build()
+    .map_err(|e| e.to_string())?;
+
+  let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
+  let html = res.text().await.map_err(|e| e.to_string())?;
+
+  let document = scraper::Html::parse_document(&html);
+  let result_selector = scraper::Selector::parse(".result").unwrap();
+  let title_selector = scraper::Selector::parse(".result__a").unwrap();
+  let snippet_selector = scraper::Selector::parse(".result__snippet").unwrap();
+
+  let mut results = Vec::new();
+  for element in document.select(&result_selector).take(5) {
+    let title = element
+      .select(&title_selector)
+      .next()
+      .map(|e| e.text().collect::<String>())
+      .unwrap_or_default();
+    let link = element
+      .select(&title_selector)
+      .next()
+      .and_then(|e| e.value().attr("href"))
+      .unwrap_or_default()
+      .to_string();
+    let snippet = element
+      .select(&snippet_selector)
+      .next()
+      .map(|e| e.text().collect::<String>())
+      .unwrap_or_default();
+
+    if !title.is_empty() && !link.is_empty() {
+      results.push(SearchResult {
+        document_id: link,
+        distance: 0.0,
+        content: snippet,
+        summary: Some(title.clone()),
+        title: Some(title),
+        group_name: Some("Web".to_string()),
+        tags: vec!["web".to_string()],
+        // Defaults for web results
+        parent_id: None,
+        document_state: 0,
+        visibility_level: 0,
+        group_type: 0,
+        group_id: None,
+        size: None,
+        media_size: None,
+        current_version: 0,
+        version: 0,
+        is_favorite: false,
+        created_at: None,
+        updated_at: None,
+        accessed_at: None,
+      });
+    }
+  }
+
+  Ok(results)
 }

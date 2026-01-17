@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { executeSearch, ThinkingState } from '../utils/LangGraphSearch';
 
 export interface ChatMessage {
   id: string;
@@ -16,16 +17,13 @@ export interface ChatSession {
   updated_at: string;
 }
 
-interface AskAiResponse {
-  answer: string;
-  chat_id: string;
-}
-
 interface ChatStore {
   chats: ChatSession[];
   currentChatId: string | null;
   messages: ChatMessage[];
   isLoading: boolean;
+  loadingStatus: string | null;
+  thinkingProcess: ThinkingState | null;
   isLoadingMore: boolean;
   hasMore: boolean;
 
@@ -44,11 +42,19 @@ interface ChatStore {
 
 const PAGE_SIZE = 50;
 
+const INITIAL_THINKING_STATE: ThinkingState = {
+  web: { status: 'idle', logs: [] },
+  server: { status: 'idle', logs: [] },
+  local: { status: 'idle', logs: [] }
+};
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   chats: [],
   currentChatId: null,
   messages: [],
   isLoading: false,
+  loadingStatus: null,
+  thinkingProcess: null,
   isLoadingMore: false,
   hasMore: true,
 
@@ -106,54 +112,114 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   createNewChat: async () => {
     set({ currentChatId: null, messages: [], hasMore: false });
-    // We don't necessarily create on backend yet until first message,
-    // OR we can create immediately. Let's create on first message to avoid empty chats.
-    // So just clearing state looks like a new chat.
   },
 
   sendMessage: async (content) => {
-    const { currentChatId, messages } = get();
-
-    // Optimistic User Msg
-    const tempId = crypto.randomUUID();
-    const optimisticUserMsg: ChatMessage = {
-      id: tempId,
-      chat_id: currentChatId || 'temp', // unknown yet if new
-      role: 'user',
-      content,
-      timestamp: Date.now(),
-    };
-
+    // 0. Immediate optimistic lock
     set({
-      messages: [...messages, optimisticUserMsg],
-      isLoading: true
+      isLoading: true,
+      loadingStatus: "준비 중...",
+      thinkingProcess: JSON.parse(JSON.stringify(INITIAL_THINKING_STATE)) // Deep copy initial
     });
 
+    let { currentChatId } = get();
+
+    // 1. Ensure chat session exists
+    if (!currentChatId) {
+      try {
+        const chat = await invoke<ChatSession>('create_new_chat', { title: content.substring(0, 30) });
+        currentChatId = chat.id;
+        set({ currentChatId });
+        get().loadChats();
+      } catch (e) {
+        console.error("Failed to create chat:", e);
+        set({ isLoading: false, loadingStatus: null });
+        return;
+      }
+    }
+
+    // 2. Persist User Message
+    let userMsg: ChatMessage;
     try {
-      const response = await invoke<AskAiResponse>('ask_ai', {
+      userMsg = await invoke<ChatMessage>('add_rag_message', {
         chatId: currentChatId,
-        question: content
+        role: 'user',
+        content
+      });
+    } catch (e) {
+      // Fallback optimistic
+      const tempId = crypto.randomUUID();
+      userMsg = {
+        id: tempId,
+        chat_id: currentChatId,
+        role: 'user',
+        content,
+        timestamp: Date.now()
+      };
+      console.error("Failed to save user message:", e);
+    }
+
+    // Dedup and add
+    set((state) => ({
+      messages: state.messages.some(m => m.id === userMsg.id) ? state.messages : [...state.messages, userMsg],
+    }));
+
+    try {
+      // 3. Execute LangGraph Search with Progress Callback
+      const results = await executeSearch(content, (partialState) => {
+        set((prev) => {
+          // Merge partial state
+          const newState = { ...prev.thinkingProcess, ...partialState } as ThinkingState;
+
+          // Derive simple status for header
+          let statusLabel = "답변 생성 중";
+          if (newState.web.status === 'running') statusLabel = "웹 검색 수행 중";
+          else if (newState.server.status === 'running') statusLabel = "서버 지식 검색 중";
+          else if (newState.local.status === 'running') statusLabel = "로컬 문서 검색 중";
+
+          return {
+            thinkingProcess: newState,
+            loadingStatus: statusLabel
+          };
+        });
       });
 
-      // Update current chat ID if it was new
-      if (currentChatId !== response.chat_id) {
-        set({ currentChatId: response.chat_id });
-        // Refresh chat list to show new chat
-        get().loadChats();
+      // 4. Generate Answer (Validation Logic for now)
+      let answer = "";
+      if (results.length === 0) {
+        answer = "관련된 문서를 찾을 수 없습니다";
+      } else {
+        // Flatten results
+        const local = results.filter(r => r.source === 'local');
+        const server = results.filter(r => r.source === 'server');
+        const web = results.filter(r => r.source === 'web');
+
+        // Serialize results as JSON for Rich UI
+        const structuredResponse = {
+          type: 'rag_search_result',
+          results: {
+            local,
+            server,
+            web
+          },
+          summary: "검색 결과를 찾았습니다",
+          thinking_process: get().thinkingProcess
+        };
+        answer = JSON.stringify(structuredResponse);
       }
 
-      // Optimistic Assistant Msg
-      const optimisticAsstMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        chat_id: response.chat_id,
+      // 5. Persist Assistant Message
+      const asstMsg = await invoke<ChatMessage>('add_rag_message', {
+        chatId: currentChatId,
         role: 'assistant',
-        content: response.answer,
-        timestamp: Date.now(),
-      };
+        content: answer
+      });
 
       set((state) => ({
-        messages: [...state.messages, optimisticAsstMsg],
-        isLoading: false
+        messages: [...state.messages, asstMsg],
+        isLoading: false,
+        thinkingProcess: null,
+        loadingStatus: null
       }));
 
     } catch (err) {
@@ -161,7 +227,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Add error message
       const errorMsg: ChatMessage = {
         id: crypto.randomUUID(),
-        chat_id: currentChatId || 'temp',
+        chat_id: currentChatId!,
         role: 'assistant',
         content: `Error: ${String(err)}`,
         timestamp: Date.now(),
@@ -188,11 +254,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       });
 
       if (olderMsgs.length > 0) {
-        set((state) => ({
-          messages: [...olderMsgs, ...state.messages],
-          hasMore: olderMsgs.length === PAGE_SIZE,
-          isLoadingMore: false
-        }));
+        set((state) => {
+          // Robust Dedup: Filter out messages that already exist by ID
+          const newUniqueMsgs = olderMsgs.filter(newMsg => !state.messages.some(existing => existing.id === newMsg.id));
+          return {
+            messages: [...newUniqueMsgs, ...state.messages],
+            hasMore: olderMsgs.length === PAGE_SIZE,
+            isLoadingMore: false
+          };
+        });
       } else {
         set({ hasMore: false, isLoadingMore: false });
       }

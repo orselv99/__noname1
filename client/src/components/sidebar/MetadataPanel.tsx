@@ -694,7 +694,7 @@ export const MetadataPanel = () => {
                     if (state === DocumentState.Published && activeDoc.group_type === GroupType.Private) {
                       await confirm({
                         title: '게시 불가',
-                        message: '개인(Private) 문서는 게시할 수 없습니다.',
+                        message: '개인(Private) 문서는 게시할 수 없습니다',
                         confirmText: '확인',
                         variant: 'primary'
                       });
@@ -719,7 +719,7 @@ export const MetadataPanel = () => {
                     }
                   } catch (error) {
                     console.error('State change error:', error);
-                    showToast('서버 동기화 문제로 인해 게시가 취소되었습니다. (잠시 후 다시 시도해주세요)', 'error');
+                    showToast('서버 동기화 문제로 인해 게시가 취소되었습니다 (잠시 후 다시 시도해주세요)', 'error');
                   }
                 }}
               />
@@ -764,7 +764,7 @@ export const MetadataPanel = () => {
                     }
                   } catch (error) {
                     console.error('Visibility change error:', error);
-                    showToast('가시성 설정을 변경할 수 없습니다.', 'error');
+                    showToast('가시성 설정을 변경할 수 없습니다', 'error');
                   }
                 }}
               />

@@ -1010,7 +1010,7 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
       updateDocument(mergedDoc);
       setIsDirty(false);
       localStorage.removeItem(getDraftKey(docId));
-      showToast('저장되었습니다.', 'success');
+      showToast('저장되었습니다', 'success');
       console.log('Document saved successfully, new size:', savedDoc.size);
     } catch (error) {
       console.error('Failed to save document:', error);

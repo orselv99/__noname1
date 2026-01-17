@@ -21,7 +21,7 @@ export default async function middleware(req: NextRequest) {
   const hostname = req.headers.get('host') || '';
 
   // 테스트를 위한 허용 도메인 목록입니다.
-  // 실제 운영 환경에서는 환경 변수 등을 통해 관리하는 것이 좋습니다.
+  // 실제 운영 환경에서는 환경 변수 등을 통해 관리하는 것이 좋습니다
   const allowedDomains = ['localhost:3000', 'lvh.me:3000', 'fiery-horizon.com'];
 
   // 현재 요청이 허용된 메인 도메인 중 하나에 포함되는지 확인합니다.

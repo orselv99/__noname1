@@ -19,4 +19,4 @@
 
 ## 데이터베이스
 `fiery_index` 데이터베이스를 사용합니다.
-(Postgres 컨테이너에 접속해 `CREATE DATABASE fiery_index;` 가 필요할 수 있습니다.)
+(Postgres 컨테이너에 접속해 `CREATE DATABASE fiery_index;` 가 필요할 수 있습니다)

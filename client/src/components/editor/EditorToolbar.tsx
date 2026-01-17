@@ -52,7 +52,7 @@ const ImagePickerModal = ({ isOpen, onClose, onInsert }: ImagePickerModalProps) 
         onClose();
       };
       reader.onerror = () => {
-        setError('파일을 읽는데 실패했습니다.');
+        setError('파일을 읽는데 실패했습니다');
         setIsLoading(false);
       };
       reader.readAsDataURL(file);
