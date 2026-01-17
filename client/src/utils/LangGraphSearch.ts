@@ -91,6 +91,7 @@ export const executeSearch = async (
           id: r.document_id,
           title: r.title || r.summary || "Untitled Document",
           group_name: r.group_name || "Unknown",
+          similarity: r.similarity || 0,
           tags: r.tags
         }
       }));
@@ -148,6 +149,7 @@ export const executeSearch = async (
           id: r.document_id,
           title: r.title || r.summary || "Untitled",
           group_name: r.group_name || "Server",
+          similarity: r.similarity || 0,
           tags: r.tags ? r.tags.join(", ") : ""
         }
       }));
@@ -181,7 +183,8 @@ export const executeSearch = async (
         metadata: {
           url: r.document_id,
           title: r.title || r.summary,
-          group_name: r.group_name || "Web"
+          group_name: r.group_name || "Web",
+          similarity: r.similarity || 100.0
         }
       }));
 

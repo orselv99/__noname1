@@ -17,7 +17,7 @@ func main() {
 	// DB 이름: fiery_index (기존 fiery_auth와 분리 권장)
 	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
-		dsn = "host=localhost user=postgres password=postgres dbname=fiery_index port=5432 sslmode=disable"
+		dsn = "host=localhost user=postgres password=zzzzzzzz1! dbname=fiery_index port=5432 sslmode=disable"
 		log.Println("DB_DSN not set, using default for local development. Ensure DB 'fiery_index' exists.")
 	}
 
@@ -33,6 +33,9 @@ func main() {
 	if err := db.AutoMigrate(&Document{}); err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
+
+	// NOTE: HNSW index creation is CPU-intensive. Create manually if needed:
+	// CREATE INDEX documents_embedding_hnsw_idx ON documents USING hnsw (embedding vector_cosine_ops);
 
 	// gRPC 서버 시작
 	lis, err := net.Listen("tcp", ":50052")

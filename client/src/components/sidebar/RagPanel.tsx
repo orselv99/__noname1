@@ -65,16 +65,24 @@ function ResultItem({ result, type }: { result: any, type: 'local' | 'server' | 
           <span className="text-xs font-medium text-zinc-300 truncate group-hover:text-blue-400 transition-colors">
             {result.metadata.title || "Untitled"}
           </span>
-          {/* Group Badge */}
-          {result.metadata.group_name && (
+          {/* Group Badge - Hide for Web */}
+          {type !== 'web' && result.metadata.group_name && (
             <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wide ${getBadgeColor(result.metadata.group_name)}`}>
               {result.metadata.group_name}
             </span>
           )}
         </div>
 
-        <div className="shrink-0 text-zinc-600 group-hover:text-blue-400 transition-colors">
-          <ExternalLink size={12} />
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Similarity Score - Hide for Web */}
+          {type !== 'web' && result.metadata.similarity !== undefined && (
+            <span className="text-[9px] text-zinc-500 font-mono">
+              {result.metadata.similarity.toFixed(0)}%
+            </span>
+          )}
+          <div className="text-zinc-600 group-hover:text-blue-400 transition-colors">
+            <ExternalLink size={12} />
+          </div>
         </div>
       </div>
 

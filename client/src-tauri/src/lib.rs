@@ -38,13 +38,13 @@ pub fn run() {
       commands::media::download_image,
       commands::media::read_local_file_as_data_url,
       commands::rag::ask_ai,
-      commands::rag::search_local,    // Added
       commands::rag::add_rag_message, // Added
       commands::rag::create_new_chat,
       commands::rag::get_rag_chats,
       commands::rag::get_rag_messages,
       commands::rag::delete_rag_chat,
       commands::rag::update_rag_chat_title,
+      commands::rag::search_local,  // Added
       commands::rag::search_web,    // Added
       commands::rag::search_server  // Added
     ])

@@ -15,10 +15,14 @@ services:
       - INDEX_SERVICE_ADDR=index-service:50052
       - SIGNALING_SERVICE_ADDR=signaling:50053
     depends_on:
-      - postgres
-      - auth
-      - index-service
-      - signaling
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_started
+      index-service:
+        condition: service_started
+      signaling:
+        condition: service_started
     networks:
       - fiery-net
 
@@ -95,8 +99,10 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./server/docker/init:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
+    # SECURITY: Do NOT expose postgres port externally!
+    # Use internal docker network only
+    # ports:
+    #   - "5432:5432"
     networks:
       - fiery-net
     healthcheck:

@@ -18,7 +18,7 @@ func main() {
 	// 기본값: "host=localhost user=postgres password=secret dbname=fiery_auth port=5432 sslmode=disable"
 	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
-		dsn = "host=localhost user=postgres password=postgres dbname=fiery_auth port=5432 sslmode=disable"
+		dsn = "host=localhost user=postgres password=zzzzzzzz1! dbname=fiery_auth port=5432 sslmode=disable"
 		log.Println("DB_DSN not set, using default for local development. Please ensure Postgres contains this DB/User.")
 	}
 

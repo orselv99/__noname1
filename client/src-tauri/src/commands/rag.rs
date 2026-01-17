@@ -113,6 +113,17 @@ async fn generate_embedding(text: &str, token: &str) -> Result<Vec<f32>, String>
         .filter_map(|v| v.as_f64().map(|f| f as f32))
         .collect();
       if !vec.is_empty() {
+        // Debug: Log embedding stats to verify uniqueness per query
+        let sum: f32 = vec.iter().sum();
+        let first_3: Vec<f32> = vec.iter().take(3).cloned().collect();
+        let last_3: Vec<f32> = vec.iter().rev().take(3).cloned().collect();
+        println!(
+          "DEBUG: Query embedding len={} sum={:.4} first3={:?} last3={:?}",
+          vec.len(),
+          sum,
+          first_3,
+          last_3
+        );
         return Ok(vec);
       }
     }
@@ -126,9 +137,10 @@ async fn generate_embedding(text: &str, token: &str) -> Result<Vec<f32>, String>
 pub struct SearchResult {
   document_id: String,
   distance: f32,
+  similarity: f32, // Similarity percentage (0-100)
   content: String,
   summary: Option<String>,
-  title: Option<String>, // Added
+  title: Option<String>,
   tags: Vec<String>,
   // Additional metadata
   parent_id: Option<String>,
@@ -337,6 +349,55 @@ pub async fn search_local(
       let updated_at = uat_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
       let accessed_at = aat_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
 
+      // Hybrid Search: Apply keyword boost
+      // If query substring is found in title or content, reduce distance
+      let query_lower = query.to_lowercase();
+      let title_lower = title.clone().unwrap_or_default().to_lowercase();
+      let content_lower = content.to_lowercase();
+
+      let mut boosted_dist = dist;
+      let mut boost_reason = String::new();
+
+      if title_lower.contains(&query_lower) {
+        boosted_dist -= 0.15; // Strong boost for title match
+        boost_reason = format!("title match (-0.15)");
+      } else if content_lower.contains(&query_lower) {
+        boosted_dist -= 0.08; // Moderate boost for content match
+        boost_reason = format!("content match (-0.08)");
+      }
+
+      // Clamp to prevent negative distance
+      boosted_dist = boosted_dist.max(0.0);
+
+      // Threshold check (cosine distance: 0.0 = identical, 2.0 = opposite)
+      // Lower threshold = stricter filtering (0.4 = ~80% similarity required)
+      let threshold = 0.4;
+      if boosted_dist > threshold {
+        println!(
+          "DEBUG: Skipped '{}' (orig_dist: {:.4}, boosted: {:.4} > threshold: {})",
+          title.clone().unwrap_or("Untitled".to_string()),
+          dist,
+          boosted_dist,
+          threshold
+        );
+        continue;
+      }
+
+      // Calculate similarity percentage from BOOSTED distance
+      let similarity = ((1.0 - boosted_dist / 2.0) * 100.0).clamp(0.0, 100.0);
+      println!(
+        "DEBUG: Included '{}' (orig: {:.4}, boost: {}, final: {:.4}, similarity: {:.1}%)",
+        title.clone().unwrap_or("Untitled".to_string()),
+        dist,
+        if boost_reason.is_empty() {
+          "none".to_string()
+        } else {
+          boost_reason
+        },
+        boosted_dist,
+        similarity
+      );
+
       // Resolve Group Name (Use fetched name or Fallback)
       let group_name = gname_opt.or_else(|| match gtype {
         0 => Some("Department".to_string()),
@@ -368,6 +429,7 @@ pub async fn search_local(
       results.push(SearchResult {
         document_id: doc_id,
         distance: dist,
+        similarity,
         content,
         summary,
         title,
@@ -499,6 +561,7 @@ pub async fn ask_ai(
         results.push(SearchResult {
           document_id: doc_id,
           distance: dist,
+          similarity: ((1.0 - dist / 2.0) * 100.0).clamp(0.0, 100.0),
           content,
           summary,
           title,
@@ -771,18 +834,19 @@ pub async fn update_rag_chat_title(
   }
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 struct ServerSearchResponse {
   results: Option<Vec<ServerSearchResultItem>>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 struct ServerSearchResultItem {
   score: f32,
   document: Option<ServerDocument>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 struct ServerDocument {
   id: String,
   title: String,
@@ -790,7 +854,7 @@ struct ServerDocument {
   tag_evidences: Option<Vec<ServerTagEvidence>>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 struct ServerTagEvidence {
   tag: String,
 }
@@ -819,15 +883,25 @@ pub async fn search_server(
     .map_err(|e| format!("Server search request failed: {}", e))?;
 
   if !res.status().is_success() {
-    // It's possible server returns 404 or other if no results? check TS code.
-    // TS code checks !response.ok.
     return Err(format!("Server returned error: {}", res.status()));
   }
 
-  let body: ServerSearchResponse = res
-    .json()
+  let text = res
+    .text()
     .await
-    .map_err(|e| format!("Failed to parse server response: {}", e))?;
+    .map_err(|e| format!("Failed to read response: {}", e))?;
+  println!(
+    "DEBUG: Server search raw response: {}",
+    &text[..text.len().min(500)]
+  );
+
+  let body: ServerSearchResponse = serde_json::from_str(&text).map_err(|e| {
+    format!(
+      "Failed to parse server response: {} - Raw: {}",
+      e,
+      &text[..text.len().min(200)]
+    )
+  })?;
 
   let mut results = Vec::new();
 
@@ -842,9 +916,10 @@ pub async fn search_server(
         results.push(SearchResult {
           document_id: doc.id,
           distance: item.score,
+          similarity: ((1.0 - item.score / 2.0) * 100.0).clamp(0.0, 100.0),
           content: doc.summary.clone(),
           summary: Some(doc.summary.clone()),
-          title: Some(doc.title),
+          title: Some(doc.title.clone()),
           group_name: Some("Server".to_string()),
           tags,
           // Defaults for server results
@@ -862,6 +937,13 @@ pub async fn search_server(
           updated_at: None,
           accessed_at: None,
         });
+
+        println!(
+          "DEBUG: Server result '{}' (dist: {:.4}, similarity: {:.1}%)",
+          doc.title,
+          item.score,
+          ((1.0 - item.score / 2.0) * 100.0).clamp(0.0, 100.0)
+        );
       }
     }
   }
@@ -911,6 +993,7 @@ pub async fn search_web(query: String) -> Result<Vec<SearchResult>, String> {
       results.push(SearchResult {
         document_id: link,
         distance: 0.0,
+        similarity: 100.0, // Web results are assumed relevant
         content: snippet,
         summary: Some(title.clone()),
         title: Some(title),

@@ -284,32 +284,43 @@ func (s *server) SearchDocuments(ctx context.Context, req *pb.SearchDocumentsReq
 	// req.Query를 AI Service에 보내 임베딩 벡터로 변환 (Query Embedding)
 	vec, err := generateEmbedding(req.Query)
 	if err != nil {
-		// Log error?
-		// Fallback to dummy?
 		return nil, err
 	}
 
 	queryVector := pgvector.NewVector(vec)
 
-	var docs []Document
-	// L2 distance (<->) or Cosine distance (<=>)
-	// pgvector-go documentation recommends specific syntax
-	// s.db.Order("embedding <-> ?", queryVector).Limit(int(req.Limit)).Find(&docs)
+	// Use raw SQL to get both document data AND distance score
+	type DocWithDistance struct {
+		Document
+		Distance float32 `gorm:"column:distance"`
+	}
 
-	if err := s.db.Order(gorm.Expr("embedding <=> ?", queryVector)).Limit(int(req.Limit)).Find(&docs).Error; err != nil {
+	var docsWithDist []DocWithDistance
+
+	// Raw SQL with cosine distance calculation
+	// <=> is cosine distance operator in pgvector
+	sql := `
+		SELECT 
+			id, title, summary, tag_evidences, updated_at, created_at, owner_id, group_id, group_type,
+			(embedding <=> ?) as distance
+		FROM documents 
+		ORDER BY embedding <=> ?
+		LIMIT ?
+	`
+
+	if err := s.db.Raw(sql, queryVector, queryVector, req.Limit).Scan(&docsWithDist).Error; err != nil {
 		return nil, err
 	}
 
 	var results []*pb.SearchResult
 
-	for _, d := range docs {
+	for _, d := range docsWithDist {
 		// Title, Summary는 암호화된 상태 그대로 반환
 		decryptedTitle := d.Title
 		decryptedSummary := d.Summary
 
 		// TagEvidences: DB의 JSON 문자열을 파싱 (값은 암호화되어 있음)
 		var tagEvidences []TagEvidence
-		// 에러 처리 생략 (또는 로그)
 		json.Unmarshal([]byte(d.TagEvidences), &tagEvidences)
 
 		// Struct TagEvidences -> Proto TagEvidences
@@ -331,9 +342,11 @@ func (s *server) SearchDocuments(ctx context.Context, req *pb.SearchDocumentsReq
 				CreatedAt:    d.CreatedAt,
 				OwnerId:      d.OwnerID,
 			},
-			Score: 0.0,
+			Score: d.Distance, // Actual cosine distance from pgvector
 		})
 	}
+
+	fmt.Printf("DEBUG: Server SearchDocuments found %d results for query '%s'\n", len(results), req.Query)
 
 	return &pb.SearchDocumentsResponse{Results: results}, nil
 }

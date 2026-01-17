@@ -349,8 +349,8 @@ pub async fn save_document(
 
       // Construct JSON
       let payload = serde_json::json!({
-          "title": base64::engine::general_purpose::STANDARD.encode(&_rag_data.3),
-          "summary": _rag_data.2.as_ref().map(|s| base64::engine::general_purpose::STANDARD.encode(s)).unwrap_or_default(),
+          "title": _rag_data.3, //base64::engine::general_purpose::STANDARD.encode(&_rag_data.3),
+          "summary": _rag_data.2, //.as_ref().map(|s| base64::engine::general_purpose::STANDARD.encode(s)).unwrap_or_default(),
           "tag_evidences": _rag_data.1.iter().map(|t| {
               serde_json::json!({
                   "tag": t.tag,
@@ -361,8 +361,8 @@ pub async fn save_document(
           "content": cleaned_content.to_string(), // Send cleaned plaintext content
           "group_id": req.group_id,
           "group_type": req.group_type,
-          "created_at": base64::engine::general_purpose::STANDARD.encode(&_rag_data.4),
-          "updated_at": base64::engine::general_purpose::STANDARD.encode(&_rag_data.5)
+          "created_at": _rag_data.4, //base64::engine::general_purpose::STANDARD.encode(&_rag_data.4),
+          "updated_at": _rag_data.5, //base64::engine::general_purpose::STANDARD.encode(&_rag_data.5)
       });
 
       // Send Request
