@@ -16,11 +16,6 @@ export interface ChatSession {
   updated_at: string;
 }
 
-interface AskAiResponse {
-  answer: string;
-  chat_id: string;
-}
-
 interface ChatStore {
   chats: ChatSession[];
   currentChatId: string | null;
@@ -116,9 +111,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     // Optimistic User Msg
     const tempId = crypto.randomUUID();
+    const chatId = currentChatId || crypto.randomUUID();
     const optimisticUserMsg: ChatMessage = {
       id: tempId,
-      chat_id: currentChatId || 'temp', // unknown yet if new
+      chat_id: chatId,
       role: 'user',
       content,
       timestamp: Date.now(),
@@ -126,28 +122,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     set({
       messages: [...messages, optimisticUserMsg],
-      isLoading: true
+      isLoading: true,
+      currentChatId: chatId,
     });
 
     try {
-      const response = await invoke<AskAiResponse>('ask_ai', {
-        chatId: currentChatId,
-        question: content
-      });
+      // Import aiService dynamically to avoid circular deps
+      const { aiService } = await import('../utils/aiService');
 
-      // Update current chat ID if it was new
-      if (currentChatId !== response.chat_id) {
-        set({ currentChatId: response.chat_id });
-        // Refresh chat list to show new chat
-        get().loadChats();
-      }
+      // Build conversation history for context - use fresh state
+      const currentMessages = get().messages;
+      const chatHistory = currentMessages.slice(-10).map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content
+      }));
+
+      console.log('[ChatStore] Sending chat with history:', chatHistory.length, 'messages');
+
+      // Call client-side AI
+      const answer = await aiService.chat(chatHistory);
+      console.log('[ChatStore] Received answer:', answer?.slice(0, 50) + '...');
 
       // Optimistic Assistant Msg
       const optimisticAsstMsg: ChatMessage = {
         id: crypto.randomUUID(),
-        chat_id: response.chat_id,
+        chat_id: chatId,
         role: 'assistant',
-        content: response.answer,
+        content: answer || '응답을 생성할 수 없습니다.',
         timestamp: Date.now(),
       };
 
@@ -156,12 +157,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         isLoading: false
       }));
 
+      // Refresh chat list if new chat
+      if (!currentChatId) {
+        get().loadChats();
+      }
+
     } catch (err) {
       console.error(err);
       // Add error message
       const errorMsg: ChatMessage = {
         id: crypto.randomUUID(),
-        chat_id: currentChatId || 'temp',
+        chat_id: chatId,
         role: 'assistant',
         content: `Error: ${String(err)}`,
         timestamp: Date.now(),

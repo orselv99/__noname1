@@ -156,9 +156,27 @@ function AppContent() {
       showToast('Login successful', 'success');
       setView('main');
 
+      // Set up AI callbacks for StatusBar progress display
+      const { setAiProgress, setAiAnalysisStatus } = useDocumentStore.getState();
+      aiService.setCallbacks(
+        (progress, model) => {
+          setAiProgress({ model, progress, type: 'download' });
+        },
+        (status, message) => {
+          if (status === 'model_ready') {
+            setAiProgress(null);
+            setAiAnalysisStatus(null);
+          } else {
+            setAiAnalysisStatus(message);
+          }
+        }
+      );
+
       // Preload AI models in background after login
       aiService.preloadModels().catch(err => {
         console.warn('[App] AI model preloading failed:', err);
+        setAiProgress(null);
+        setAiAnalysisStatus(null);
       });
     }
   };

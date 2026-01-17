@@ -670,4 +670,53 @@ pub async fn save_tags(
   Ok(())
 }
 
+// ============================================================================
+// LINDERA + TF-IDF TEXT PROCESSING (Korean NLP)
+// ============================================================================
+
+/// Result from Lindera + TF-IDF text processing
+#[derive(serde::Serialize, Debug)]
+pub struct ProcessTextResult {
+  pub summary: String,
+  pub tags: Vec<DocumentTag>,
+}
+
+/// Process text using Lindera morphological analyzer + TF-IDF
+/// This is a traditional NLP approach (no LLM required)
+#[tauri::command]
+pub async fn process_text(text: String) -> Result<ProcessTextResult, String> {
+  use crate::text_processor;
+
+  if text.trim().is_empty() {
+    return Ok(ProcessTextResult {
+      summary: String::new(),
+      tags: Vec::new(),
+    });
+  }
+
+  // Use Lindera + TF-IDF to process text
+  let result = text_processor::process_document(&text);
+
+  // Convert to output format
+  let tags: Vec<DocumentTag> = result
+    .tags
+    .into_iter()
+    .map(|t| DocumentTag {
+      tag: t.tag,
+      evidence: Some(t.evidence),
+    })
+    .collect();
+
+  println!(
+    "[AI] process_text: summary len={}, tags={}",
+    result.summary.len(),
+    tags.len()
+  );
+
+  Ok(ProcessTextResult {
+    summary: result.summary,
+    tags,
+  })
+}
+
 // rand module removed

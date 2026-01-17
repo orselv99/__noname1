@@ -1,28 +1,83 @@
-// AI Worker for running transformer.js models (v3)
 // This runs in a Web Worker to avoid blocking the main thread
 
-console.log('[AIWorker] Script starting...');
+import { pipeline as pipelineFn, env as envConfig } from '@huggingface/transformers';
 
-let pipeline: any;
-let env: any;
+let pipeline: typeof pipelineFn | null = null;
+let env: typeof envConfig | null = null;
 
-// Dynamic import to avoid top-level import issues
-// Using CDN since node_modules doesn't work in Web Workers with Vite
+// Initialize transformers with custom fetch proxy
 async function loadTransformers() {
-  console.log('[AIWorker] Loading transformers from CDN...');
   try {
-    const transformers = await import(
-      /* @vite-ignore */
-      'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3'
-    );
-    pipeline = transformers.pipeline;
-    env = transformers.env;
+    // Use npm package directly (Vite handles worker bundling)
+    pipeline = pipelineFn;
+    env = envConfig;
 
-    // Configure for browser
+    // Custom fetch to proxy model requests to main thread
+    const PROXY_PREFIX = 'http://local-proxy-model/';
+    const pendingFetches = new Map<number, { resolve: (res: Response) => void, reject: (err: any) => void }>();
+    let fetchIdCounter = 0;
+
+    // Override GLOBAL fetch to ensure we catch everything
+    const originalFetch = self.fetch;
+    self.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+
+      if (url.startsWith(PROXY_PREFIX)) {
+        let relativePath = url.replace(PROXY_PREFIX, '');
+        // IMPORTANT: Decode URL
+        relativePath = decodeURIComponent(relativePath);
+        // Fix mismatch: 'onnx/model_quantized.onnx' -> 'model_quantized.onnx'
+        relativePath = relativePath.replace('/onnx/', '/');
+
+        // FIX: transformers.js may request "onnx/model_quantized.onnx" but we saved it as "model_quantized.onnx"
+        // We flatten the structure for simplicity in our storage.
+        // If path contains "/onnx/", remove "onnx/" part.
+        // e.g. "embedding/onnx/model_quantized.onnx" -> "embedding/model_quantized.onnx"
+        relativePath = relativePath.replace('/onnx/', '/');
+
+
+        const id = ++fetchIdCounter;
+        return new Promise<Response>((resolve, reject) => {
+          pendingFetches.set(id, { resolve, reject });
+          self.postMessage({ type: 'fetch_file', id, path: relativePath });
+        });
+      }
+      return originalFetch(input, init);
+    };
+
+    // Handle responses from main thread for file fetches
+    self.addEventListener('message', (event) => {
+      const { type, id, data, error, success } = event.data;
+      if (type === 'fetch_result' && pendingFetches.has(id)) {
+        const { resolve, reject } = pendingFetches.get(id)!;
+        pendingFetches.delete(id);
+
+        if (success) {
+          const blob = new Blob([data]);
+          const response = new Response(blob, { status: 200, statusText: 'OK' });
+          resolve(response);
+        } else {
+          reject(new TypeError(`Failed to fetch local file: ${error}`));
+        }
+      }
+    });
+
+    // Configure for local execution (fetching from local server)
     env.allowLocalModels = false;
-    env.useBrowserCache = true;
+    env.allowRemoteModels = true;
+    env.useBrowserCache = false; // CRITICAL: Disable internal caching to avoid 1.5B mismatch
 
-    console.log('[AIWorker] Transformers loaded successfully!');
+    // Explicitly try to clear old cache to be safe
+    try {
+      if ('caches' in self) {
+        await caches.delete('transformers-cache');
+      }
+    } catch (e) {
+      console.warn('[AIWorker] Failed to clear cache:', e);
+    }
+
+    // We don't need to set cacheDir since we are fetching "remote" URLs that happen to be local
+    // But we can try to disable caching if we want to ensure fresh fetch, though browser cache is fine.
     return true;
   } catch (error: any) {
     console.error('[AIWorker] Failed to load transformers:', error);
@@ -37,17 +92,17 @@ let generationPipeline: any = null;
 let isLoadingEmbedding = false;
 let isLoadingGeneration = false;
 
+// Local paths for models (served via public folder)
+const EMBEDDING_MODEL_ID = 'embedding';
+const GENERATION_MODEL_ID = 'generation';
+
 // ============================================================================
 // EMBEDDING MODEL
 // ============================================================================
 
 async function initEmbeddingModel() {
-  if (embeddingPipeline) {
-    console.log('[AIWorker] Embedding model already loaded');
-    return embeddingPipeline;
-  }
+  if (embeddingPipeline) return embeddingPipeline;
   if (isLoadingEmbedding) {
-    console.log('[AIWorker] Waiting for embedding model...');
     while (isLoadingEmbedding) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -57,28 +112,32 @@ async function initEmbeddingModel() {
   isLoadingEmbedding = true;
 
   try {
-    // Ensure transformers is loaded
     if (!pipeline) {
       const success = await loadTransformers();
       if (!success) throw new Error('Transformers not loaded');
     }
 
-    console.log('[AIWorker] Starting embedding model download...');
-    self.postMessage({ type: 'status', status: 'loading_embedding', message: 'Downloading embedding model...' });
+    self.postMessage({ type: 'status', status: 'loading_embedding', message: 'Loading embedding model...' });
 
-    embeddingPipeline = await pipeline(
+    // Configure transformers to use our custom protocol
+    env!.allowLocalModels = false;
+    env!.allowRemoteModels = true;
+    // We use a fake HTTP host which is intercepted by our fetch override
+    env!.remoteHost = 'http://local-proxy-model/';
+    env!.remotePathTemplate = '{model}/';
+
+    embeddingPipeline = await pipeline!(
       'feature-extraction',
-      'Xenova/multilingual-e5-base',
+      EMBEDDING_MODEL_ID,
       {
         dtype: 'q8',
+        device: 'webgpu', // Switch to WebGPU as requested
         progress_callback: (progress: any) => {
           if (progress.progress !== undefined) {
-            const pct = Number(progress.progress) || 0;
-            console.log(`[AIWorker] Embedding download: ${pct.toFixed(1)}%`);
             self.postMessage({
               type: 'progress',
               model: 'embedding',
-              progress: pct,
+              progress: progress.progress,
               status: progress.status || 'downloading'
             });
           }
@@ -86,7 +145,6 @@ async function initEmbeddingModel() {
       }
     );
 
-    console.log('[AIWorker] Embedding model loaded!');
     self.postMessage({ type: 'status', status: 'model_ready', message: 'Embedding model ready' });
     return embeddingPipeline;
   } catch (error: any) {
@@ -99,12 +157,8 @@ async function initEmbeddingModel() {
 }
 
 async function generateEmbedding(text: string): Promise<number[]> {
-  console.log('[AIWorker] generateEmbedding called');
-
   const model = await initEmbeddingModel();
   const prefixedText = `passage: ${text}`;
-
-  console.log('[AIWorker] Running embedding inference...');
   self.postMessage({ type: 'status', status: 'embedding', message: 'Generating embedding...' });
 
   const output = await model(prefixedText, { pooling: 'mean', normalize: true });
@@ -118,7 +172,6 @@ async function generateEmbedding(text: string): Promise<number[]> {
     embedding = Array.from(output);
   }
 
-  console.log('[AIWorker] Embedding generated, dims:', embedding.length);
   self.postMessage({ type: 'status', status: 'complete', message: 'Embedding complete' });
   return embedding;
 }
@@ -128,12 +181,8 @@ async function generateEmbedding(text: string): Promise<number[]> {
 // ============================================================================
 
 async function initGenerationModel() {
-  if (generationPipeline) {
-    console.log('[AIWorker] Generation model already loaded');
-    return generationPipeline;
-  }
+  if (generationPipeline) return generationPipeline;
   if (isLoadingGeneration) {
-    console.log('[AIWorker] Waiting for generation model...');
     while (isLoadingGeneration) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -148,23 +197,22 @@ async function initGenerationModel() {
       if (!success) throw new Error('Transformers not loaded');
     }
 
-    console.log('[AIWorker] Starting generation model download...');
-    self.postMessage({ type: 'status', status: 'loading_generation', message: 'Downloading summarization model...' });
+    self.postMessage({ type: 'status', status: 'loading_generation', message: 'Loading generation model...' });
 
-    // Using Flan-T5-small instead of Qwen to avoid WebAssembly memory issues
-    generationPipeline = await pipeline(
-      'text2text-generation',
-      'Xenova/flan-t5-small',
+    // Using Qwen2.5-0.5B-Instruct
+    generationPipeline = await pipeline!(
+      'text-generation',
+      GENERATION_MODEL_ID,
       {
-        dtype: 'q8',
+        dtype: 'q4f16', // q4f16 is 483MB
+        device: 'wasm', // WASM is more stable than WebGPU for this model
+        local_files_only: false,
         progress_callback: (progress: any) => {
           if (progress.progress !== undefined) {
-            const pct = Number(progress.progress) || 0;
-            console.log(`[AIWorker] Generation download: ${pct.toFixed(1)}%`);
             self.postMessage({
               type: 'progress',
               model: 'generation',
-              progress: pct,
+              progress: progress.progress,
               status: progress.status || 'downloading'
             });
           }
@@ -172,7 +220,6 @@ async function initGenerationModel() {
       }
     );
 
-    console.log('[AIWorker] Generation model loaded!');
     self.postMessage({ type: 'status', status: 'model_ready', message: 'Generation model ready' });
     return generationPipeline;
   } catch (error: any) {
@@ -190,31 +237,42 @@ interface TagResult {
 }
 
 async function extractTags(text: string): Promise<TagResult> {
-  console.log('[AIWorker] extractTags called');
-
   const model = await initGenerationModel();
-
-  console.log('[AIWorker] Running tag extraction...');
   self.postMessage({ type: 'status', status: 'extracting', message: 'Extracting tags...' });
 
-  // Truncate to 1000 chars for faster processing
-  const truncatedText = text.slice(0, 1000);
+  // Truncate and clean text for better results
+  const cleanText = text
+    .replace(/[#*_`~>\[\](){}|\\]/g, ' ')  // Remove markdown
+    .replace(/\s+/g, ' ')  // Normalize whitespace
+    .trim()
+    .slice(0, 2000);
 
-  // Flan-T5 uses simple instruction format (no chat messages)
-  const prompt = `Extract 3 named entities from this document and provide a one-sentence summary in Korean:
+  // Qwen2.5-Instruct optimized prompt
+  const messages = [
+    {
+      role: 'system',
+      content: 'You are a document analyzer. Extract key information and respond in valid JSON only. No explanations.'
+    },
+    {
+      role: 'user',
+      content: `Analyze this text and extract:
+1. A brief Korean summary (1 sentence)
+2. 3 key named entities (people, organizations, products, locations)
 
-Document: ${truncatedText}
+Text:
+"""${cleanText}"""
 
-Output JSON format: {"summary":"이 문서는 ~에 대해 설명합니다.", "tags":[{"tag":"entity1", "evidence":"evidence text"}, {"tag":"entity2", "evidence":"evidence text"}, {"tag":"entity3", "evidence":"evidence text"}]}
+Respond with this exact JSON structure:
+{"summary": "한국어 요약문", "tags": [{"tag": "엔티티명", "evidence": "근거 텍스트"}]}`
+    }
+  ];
 
-JSON:`;
-
-  console.log('[AIWorker] Sending to model...');
   let output;
   try {
-    output = await model(prompt, {
-      max_new_tokens: 256,
-      do_sample: false,
+    output = await model(messages, {
+      max_new_tokens: 512,
+      do_sample: false, // Greedy
+      return_full_text: false,
     });
   } catch (error: any) {
     console.error('[AIWorker] Model inference error:', error);
@@ -222,12 +280,12 @@ JSON:`;
     return { summary: '', tags: [] };
   }
 
-  console.log('[AIWorker] Raw output:', output);
 
   let generatedText = '';
   try {
     if (Array.isArray(output) && output[0]?.generated_text) {
-      generatedText = output[0].generated_text;
+      const raw = output[0].generated_text;
+      generatedText = typeof raw === 'string' ? raw : JSON.stringify(raw);
     } else if (typeof output === 'string') {
       generatedText = output;
     }
@@ -235,14 +293,13 @@ JSON:`;
     console.error('[AIWorker] Error extracting response:', e);
   }
 
-  console.log('[AIWorker] Generated text:', generatedText);
   self.postMessage({ type: 'status', status: 'parsing', message: 'Parsing response...' });
 
   try {
-    const jsonMatch = (generatedText || '').match(/\{[\s\S]*\}/);
+    // Attempt to find JSON in the response (Qwen might be chatty even with system prompt)
+    const jsonMatch = (generatedText || '').match(/\{[\s\S]*\}|\[[\s\S]*\]/); // Match {} or []
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      console.log('[AIWorker] Parsed result:', parsed);
       self.postMessage({ type: 'status', status: 'complete', message: 'Tag extraction complete' });
       return {
         summary: parsed.summary || '',
@@ -258,12 +315,69 @@ JSON:`;
 }
 
 // ============================================================================
+// CHAT GENERATION
+// ============================================================================
+
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+async function generateChatResponse(messages: ChatMessage[]): Promise<string> {
+  const model = await initGenerationModel();
+  self.postMessage({ type: 'status', status: 'generating', message: 'Generating response...' });
+
+  try {
+    const output = await model(messages, {
+      max_new_tokens: 256,
+      do_sample: true,
+      temperature: 0.7,
+      top_p: 0.9,
+      return_full_text: false,
+    });
+
+    console.log('[AIWorker] Chat output:', JSON.stringify(output, null, 2));
+
+    let generatedText = '';
+
+    // Handle various output formats from transformers.js
+    if (Array.isArray(output) && output.length > 0) {
+      const first = output[0];
+      if (first?.generated_text) {
+        // If generated_text is an array of messages (chat format)
+        if (Array.isArray(first.generated_text)) {
+          const lastMsg = first.generated_text[first.generated_text.length - 1];
+          generatedText = lastMsg?.content || '';
+        } else {
+          generatedText = typeof first.generated_text === 'string'
+            ? first.generated_text
+            : String(first.generated_text);
+        }
+      } else if (typeof first === 'string') {
+        generatedText = first;
+      }
+    } else if (typeof output === 'string') {
+      generatedText = output;
+    } else if (output?.generated_text) {
+      generatedText = String(output.generated_text);
+    }
+
+    console.log('[AIWorker] Extracted text:', generatedText);
+
+    self.postMessage({ type: 'status', status: 'complete', message: 'Response generated' });
+    return generatedText.trim();
+  } catch (error: any) {
+    console.error('[AIWorker] Chat generation error:', error);
+    throw error;
+  }
+}
+
+// ============================================================================
 // MESSAGE HANDLER
 // ============================================================================
 
 self.onmessage = async (event: MessageEvent) => {
   const { type, id, data } = event.data;
-  console.log('[AIWorker] Received message:', type, 'id:', id);
 
   try {
     switch (type) {
@@ -287,6 +401,15 @@ self.onmessage = async (event: MessageEvent) => {
         self.postMessage({ type: 'result', id, success: true, ...tagResult });
         break;
 
+      case 'chat':
+        const response = await generateChatResponse(data.messages);
+        self.postMessage({ type: 'result', id, success: true, response });
+        break;
+
+      case 'fetch_result':
+        // Handled by separate listener
+        return;
+
       default:
         self.postMessage({ type: 'error', id, error: `Unknown type: ${type}` });
     }
@@ -295,7 +418,5 @@ self.onmessage = async (event: MessageEvent) => {
     self.postMessage({ type: 'error', id, error: error?.message || String(error) });
   }
 };
-
-console.log('[AIWorker] Worker ready!');
 
 export { };

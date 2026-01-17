@@ -2,11 +2,12 @@
 use std::sync::Mutex;
 use tauri::Manager;
 
+pub mod ai_system;
 pub mod commands;
 pub mod config;
 pub mod crypto;
 pub mod database;
-pub mod sidecar;
+pub mod text_processor;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -18,14 +19,83 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
+    .register_uri_scheme_protocol("model", |_app, request| {
+      let uri = request.uri().to_string();
+
+      // Handle both standard scheme and Windows http://<scheme>.localhost format
+      // IMPORTANT: WebView2 on Windows converts `http://model.localhost/` to `model://localhost/` in the protocol handler.
+      // We must strip `model://localhost/` specifically to avoid "localhost" becoming part of the path.
+      let clean_path = if let Some(p) = uri.strip_prefix("http://model.localhost/") {
+        p
+      } else if let Some(p) = uri.strip_prefix("model://localhost/") {
+        p
+      } else if let Some(p) = uri.strip_prefix("model://") {
+        p
+      } else {
+        &uri
+      };
+
+      // Remove query params and decode percent-encoding
+      let path_str = clean_path.split('?').next().unwrap_or(&clean_path);
+      let decoded_path = urlencoding::decode(path_str).expect("UTF-8").to_string();
+
+      // Sanitization: Remove leading slash to ensure it's treated as relative by join
+      let relative_path = decoded_path.trim_start_matches('/');
+
+      // Windows path normalization: replace / with \
+      let relative_path = relative_path.replace('/', std::path::MAIN_SEPARATOR_STR);
+
+      // Security: prevent traversal ..
+      if relative_path.contains("..") {
+        return tauri::http::Response::builder()
+          .status(403)
+          .header("Access-Control-Allow-Origin", "*")
+          .body(Vec::new())
+          .unwrap();
+      }
+
+      // Use `_app.app_handle()` to get the handle, then resolve path.
+      let app_data = _app.app_handle().path().app_local_data_dir().unwrap();
+      let file_path = app_data.join("models").join(relative_path);
+
+      // Serve file
+      if file_path.exists() {
+        let mut content = std::fs::read(&file_path).unwrap_or_default();
+        let mime_type = if file_path.extension().map_or(false, |e| e == "json") {
+          "application/json"
+        } else if file_path.extension().map_or(false, |e| e == "onnx") {
+          "application/octet-stream"
+        } else {
+          "text/plain"
+        };
+
+        tauri::http::Response::builder()
+          .header("Access-Control-Allow-Origin", "*") // Important for fetch
+          .header("Content-Type", mime_type)
+          .body(content)
+          .unwrap()
+      } else {
+        let error_msg = format!("File not found: {:?}\nURI: {}", file_path, uri);
+        println!("Debug: {}", error_msg);
+        tauri::http::Response::builder()
+          .status(404)
+          .header("Access-Control-Allow-Origin", "*") // CORS header needed even for errors
+          .body(error_msg.as_bytes().to_vec())
+          .unwrap()
+      }
+    })
     .manage(Mutex::new(commands::auth::AuthState::default()))
-    .manage(Mutex::new(sidecar::SidecarState::default()))
     .manage(Mutex::new(database::DatabaseState::default()))
     .invoke_handler(tauri::generate_handler![
       greet,
+      ai_system::get_system_info,
+      ai_system::check_model_exists,
+      ai_system::download_model_file,
+      ai_system::read_model_file,
       commands::ai::extract_info,
       commands::ai::save_embedding,
       commands::ai::save_tags,
+      commands::ai::process_text,
       commands::auth::login,
       commands::auth::lookup_tenants,
       commands::auth::get_saved_tenant,
@@ -48,9 +118,6 @@ pub fn run() {
       commands::rag::update_rag_chat_title
     ])
     .setup(|app| {
-      // Kill any existing sidecar processes to prevent orphans on startup
-      sidecar::kill_orphans();
-
       // Initialize SQLite database for offline support
       match database::init_database(&app.handle()) {
         Ok(conn) => {
@@ -63,18 +130,11 @@ pub fn run() {
           println!("Warning: Failed to initialize database: {}", e);
         }
       }
-
-      // Note: Sidecars are now spawned after successful login, not at app startup
-      println!("Debug: App started. Sidecars will spawn after login.");
       Ok(())
     })
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
     .run(|_app_handle, event| {
-      if let tauri::RunEvent::Exit = event {
-        println!("Debug: App exiting, killing sidecars...");
-        sidecar::kill_orphans();
-        println!("Debug: Killed sidecars via taskkill");
-      }
+      // App exit handling can remain empty if no cleanup needed
     });
 }

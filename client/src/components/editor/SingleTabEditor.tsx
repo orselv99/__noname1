@@ -433,7 +433,7 @@ TitleInput.displayName = 'TitleInput';
  */
 export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) => {
   const { showToast } = useToast();
-  const { fetchDocuments, highlightedEvidence, toggleFavorite, updateDocument, aiAnalysisStatus, setAiAnalysisStatus, setAiProgress, setLiveEditorContent, setAutoSaveStatus, markTabDirty, addTab } = useDocumentStore();
+  const { highlightedEvidence, toggleFavorite, updateDocument, aiAnalysisStatus, setAiAnalysisStatus, setAiProgress, setLiveEditorContent, setAutoSaveStatus, markTabDirty, addTab } = useDocumentStore();
 
   // Get document data for this specific editor
   const doc = useDocumentStore(
@@ -927,60 +927,55 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
     if (!text.trim()) return;
 
     console.log('[AI Analysis] Starting analysis for document:', docId);
-    console.log('[AI Analysis] Text length:', text.length);
     setAiAnalysisStatus('AI 분석 시작...');
     setAiResult(null);
 
     try {
-      // Set up progress callbacks for console logging AND status bar
+      // Set up progress callbacks
       aiService.setCallbacks(
         (progress, model) => {
           console.log(`[AI Analysis] ${model} progress: ${progress.toFixed(1)}%`);
-          // Determine if this is download or task progress based on status
           setAiProgress({ model, progress, type: 'download' });
         },
         (status, message) => {
           console.log(`[AI Analysis] Status: ${status} - ${message}`);
-          // Clear progress when model is ready (not downloading anymore)
           if (status === 'model_ready' || status === 'complete') {
             setAiProgress(null);
           } else if (status === 'embedding' || status === 'extracting') {
-            // Show task progress for actual inference
             setAiProgress({ model: status === 'embedding' ? 'embedding' : 'generation', progress: 0, type: 'task' });
           }
           setAiAnalysisStatus(message);
         }
       );
 
-      console.log('[AI Analysis] Step 1: Generating embedding...');
-      setAiAnalysisStatus('임베딩 생성 중...');
-      const embedding = await aiService.generateEmbedding(text);
-      console.log('[AI Analysis] Embedding generated, dimensions:', embedding.length);
-      setAiProgress(null);
-
-      console.log('[AI Analysis] Step 2: Saving embedding to database...');
-      await invoke('save_embedding', { documentId: docId, embedding });
-      console.log('[AI Analysis] Embedding saved successfully');
-
-      console.log('[AI Analysis] Step 3: Extracting tags and summary...');
-      setAiAnalysisStatus('태그 추출 중...');
+      // Step 1: Extract summary and tags (Rust backend - fast)
+      setAiAnalysisStatus('요약/태그 추출 중...');
       const { summary, tags } = await aiService.extractTags(text);
-      console.log('[AI Analysis] Extraction result:', { summary, tags });
+      console.log('[AI Analysis] Extracted:', { summary: summary.slice(0, 50), tags });
+
+      // Step 2: Build combined text and generate embedding
+      setAiAnalysisStatus('임베딩 생성 중...');
+      const tagTexts = tags.map(t => t.tag).join(' ');
+      const combinedText = `${summary}\n\n키워드: ${tagTexts}\n\n${text}`;
+      const embedding = await aiService.generateEmbedding(combinedText);
+      console.log('[AI Analysis] Embedding generated from combined text, dim:', embedding.length);
       setAiProgress(null);
 
+      // Step 3: Save to database
+      setAiAnalysisStatus('저장 중...');
+      await invoke('save_embedding', { documentId: docId, embedding });
       if (tags.length > 0 || summary) {
-        console.log('[AI Analysis] Step 4: Saving tags to database...');
-        await invoke('save_tags', {
-          documentId: docId,
-          summary: summary || null,
-          tags
-        });
-        console.log('[AI Analysis] Tags saved successfully');
+        await invoke('save_tags', { documentId: docId, summary: summary || null, tags });
       }
 
-      console.log('[AI Analysis] Complete! Refreshing documents...');
-      await fetchDocuments();
-      setAiResult(null);
+      // Step 4: Update document in store with new summary/tags
+      updateDocument({
+        ...doc,
+        summary,
+        tags: tags.map(t => ({ tag: t.tag, evidence: t.evidence }))
+      });
+
+      console.log('[AI Analysis] Complete!');
       setAiProgress(null);
       setAiAnalysisStatus('분석 완료!');
       setTimeout(() => setAiAnalysisStatus(null), 2000);
@@ -992,6 +987,7 @@ export const SingleTabEditor = memo(({ docId, isActive }: SingleTabEditorProps) 
       setTimeout(() => setAiAnalysisStatus(null), 3000);
     }
   };
+
 
   // ToC / Headings logic
   const getHeadings = () => {
