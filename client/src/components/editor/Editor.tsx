@@ -23,7 +23,6 @@ import { EditorActions } from './EditorActions';
 import { EditorTOC } from './EditorTOC';
 import { Document, DocumentState } from '../../types';
 import { useToast } from '../Toast';
-
 import { invoke } from '@tauri-apps/api/core';
 
 // Import extracted extensions
@@ -103,10 +102,8 @@ const TitleInput = memo(({ initialTitle, docId, onTitleChange, onFocusEditor }: 
 
 TitleInput.displayName = 'TitleInput';
 
-
-
 /**
- * SingleTabEditor - A TipTap editor instance for a single document tab.
+ * Editor - A TipTap editor instance for a single document tab.
  * Each tab has its own editor instance to enable instant tab switching.
  * When not active, the editor is hidden with display:none but kept in memory.
  */
@@ -118,8 +115,6 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
   const doc = useDocumentStore(
     useCallback((state) => state.documents.find((d: Document) => d.id === docId), [docId])
   );
-
-
 
   // Memoize extensions array to prevent recreation on every render
   const extensions = useMemo(() => [
@@ -205,7 +200,6 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
     content: '', // Will be set on mount
   });
 
-
   const [title, setTitle] = useState(() => doc?.title || '');
   const [isDirty, setIsDirty] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -216,7 +210,6 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
   const {
     showSearch,
     setShowSearch,
-    matches,
     currentMatchIndex,
     totalMatches,
     handleSearch,
@@ -229,7 +222,6 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selectedText: string } | null>(null);
-
 
   const getDraftKey = (id: string) => `draft-${id}`;
 
@@ -390,10 +382,6 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [editor, doc, title, isDirty, isActive]);
 
-
-
-
-
   // ToC / Headings logic
   const [headings, setHeadings] = useState<{ level: number; text: string; pos: number }[]>([]);
 
@@ -477,6 +465,10 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
     }
   };
 
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
   if (!doc) {
     return null; // Don't render if document doesn't exist
   }
@@ -486,6 +478,63 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
       className="flex flex-col h-full bg-zinc-950 relative"
       style={{ display: isActive ? 'flex' : 'none' }}
     >
+      <style>{`
+        @media print {
+          @page {
+            margin: 2cm;
+            size: auto;
+          }
+          html, body {
+            visibility: hidden;
+            background: white !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          #printable-area {
+            visibility: visible;
+            position: fixed !important; /* Fixed relative to viewport/page to escape parent constraints */
+            left: 0 !important;
+            top: 0 !important;
+            right: 0 !important;
+            bottom: auto !important;
+            width: 100% !important;
+            max-width: none !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            color: black !important;
+            overflow: visible !important;
+            display: block !important;
+            z-index: 9999;
+          }
+          #printable-area * {
+            visibility: visible;
+          }
+          /* Ensure content takes full width */
+          #printable-area > div {
+            width: 100% !important;
+            max-width: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          /* Reset prose width constraint */
+          .prose {
+            max-width: none !important;
+            width: 100% !important;
+          }
+          /* Ensure text colors are printed */
+          * {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          /* Hide non-printable elements */
+          .no-print, .print\\:hidden {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       {/* Header */}
       <div className="flex items-center justify-between gap-1 pt-2 pl-4 pr-2 shrink-0">
         <Breadcrumbs currentDoc={doc} />
@@ -495,6 +544,7 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
             isReadOnly={isReadOnly}
             onToggleReadOnly={() => setIsReadOnly(!isReadOnly)}
             onToggleFavorite={() => toggleFavorite(docId)}
+            onPrint={handlePrint}
             onSave={handleSave}
             isDirty={isDirty}
           />
@@ -508,8 +558,8 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
           style={{ scrollbarGutter: 'stable' }}
         >
           <div className="flex-1 flex flex-col items-center min-h-full">
-            <div className="w-full max-w-4xl flex flex-col relative">
-              <div className="px-12 pt-10 pb-4 shrink-0">
+            <div className="w-full max-w-4xl flex flex-col relative" id="printable-area">
+              <div className="px-12 pt-10 pb-4 shrink-0 print:px-0">
                 <TitleInput
                   initialTitle={title}
                   docId={docId}
@@ -521,7 +571,7 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
                 />
               </div>
 
-              <div className="px-4 py-4 sticky top-4 z-50 shrink-0 flex justify-center pointer-events-none">
+              <div className="px-4 py-4 sticky top-4 z-50 shrink-0 flex justify-center pointer-events-none print:hidden">
                 <div className="pointer-events-auto">
                   {!doc?.deleted_at && (
                     <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 backdrop-blur shadow-2xl mx-auto max-w-fit transition-all duration-300">
@@ -532,7 +582,7 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
               </div>
 
               <div
-                className="flex-1 px-12 pb-20 w-full"
+                className="flex-1 px-12 pb-20 w-full print:px-0"
                 onContextMenu={(e) => {
                   if (!editor) return;
                   e.preventDefault();
@@ -543,123 +593,133 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
               >
                 <EditorContent
                   editor={editor}
-                  className="prose prose-invert prose-lg max-w-none w-full outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[500px] text-zinc-300"
+                  className="prose prose-invert prose-lg max-w-none w-full outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[500px] text-zinc-300 print:text-black"
                 />
+              </div>
+
+              {/* Watermark - Only visible in print */}
+              <div className="fixed inset-0 pointer-events-none hidden print:flex items-center justify-center opacity-10 z-50" style={{ transform: 'rotate(-45deg)' }}>
+                <div className="text-[150px] font-bold text-gray-500 whitespace-nowrap select-none">
+                  CONFIDENTIAL
+                </div>
               </div>
             </div>
           </div>
         </div>
-
         {/* TOC */}
         <EditorTOC headings={headings} scrollToHeading={scrollToHeading} />
 
 
       </div>
 
-      {showSearch && (
-        <div className="absolute top-15 right-5 z-60">
-          <SearchWidget
-            onSearch={handleSearch}
-            onNext={() => navigateSearch('next')}
-            onPrev={() => navigateSearch('prev')}
-            onReplace={handleReplace}
-            onReplaceAll={handleReplaceAll}
-            onClose={() => {
-              setShowSearch(false);
-              handleSearch('', { caseSensitive: false, wholeWord: false, isRegex: false });
-              editor?.commands.focus();
-            }}
-            matchIndex={currentMatchIndex}
-            totalMatches={totalMatches}
-          />
-        </div>
-      )}
+      {
+        showSearch && (
+          <div className="absolute top-15 right-5 z-60">
+            <SearchWidget
+              onSearch={handleSearch}
+              onNext={() => navigateSearch('next')}
+              onPrev={() => navigateSearch('prev')}
+              onReplace={handleReplace}
+              onReplaceAll={handleReplaceAll}
+              onClose={() => {
+                setShowSearch(false);
+                handleSearch('', { caseSensitive: false, wholeWord: false, isRegex: false });
+                editor?.commands.focus();
+              }}
+              matchIndex={currentMatchIndex}
+              totalMatches={totalMatches}
+            />
+          </div>
+        )
+      }
 
       {/* Custom Context Menu */}
-      {contextMenu && (
-        <EditorContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          selectedText={contextMenu.selectedText}
-          editor={editor}
-          onClose={() => setContextMenu(null)}
-          onAddFootnote={(_text) => {
-            if (!editor) return;
+      {
+        contextMenu && (
+          <EditorContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            selectedText={contextMenu.selectedText}
+            editor={editor}
+            onClose={() => setContextMenu(null)}
+            onAddFootnote={(_text) => {
+              if (!editor) return;
 
-            // 1. Count existing footnotes to get next number
-            let footnoteCount = 0;
-            editor.state.doc.descendants((node) => {
-              if (node.type.name === 'paragraph' && node.attrs.id?.startsWith('footnote-')) {
-                footnoteCount++;
-              }
-            });
-            const footnoteNumber = footnoteCount + 1;
-            const footnoteId = `footnote-${footnoteNumber}`;
-
-            // 2. Get the end of current selection and insert footnote reference node
-            const { to } = editor.state.selection;
-
-            // Insert footnote reference node at selection end
-            editor.chain()
-              .focus()
-              .setTextSelection(to)
-              .insertContent({
-                type: 'footnoteRef',
-                attrs: {
-                  target: footnoteId,
-                  number: footnoteNumber
+              // 1. Count existing footnotes to get next number
+              let footnoteCount = 0;
+              editor.state.doc.descendants((node) => {
+                if (node.type.name === 'paragraph' && node.attrs.id?.startsWith('footnote-')) {
+                  footnoteCount++;
                 }
-              })
-              .run();
+              });
+              const footnoteNumber = footnoteCount + 1;
+              const footnoteId = `footnote-${footnoteNumber}`;
 
-            // 3. Add footnote section at document end
-            const docEnd = editor.state.doc.content.size;
+              // 2. Get the end of current selection and insert footnote reference node
+              const { to } = editor.state.selection;
 
-            // Check if this is the first footnote - if so, add a separator
-            const isFirstFootnote = footnoteNumber === 1;
-
-            const footnoteContent = [
-              { type: 'paragraph', content: [] }, // Empty line
-              ...(isFirstFootnote ? [
-                { type: 'horizontalRule' }, // Visual separator for footnotes section
-              ] : []),
-              {
-                type: 'paragraph',
-                attrs: { id: footnoteId },
-                content: [
-                  {
-                    type: 'text',
-                    marks: [{ type: 'superscript' }],
-                    text: `[${footnoteNumber}]`
-                  },
-                  { type: 'text', text: ' ' }
-                ]
-              }
-            ];
-
-            editor.chain()
-              .focus()
-              .setTextSelection(docEnd)
-              .insertContent(footnoteContent)
-              .run();
-
-            // 4. Move cursor to end for user to type footnote content
-            setTimeout(() => {
-              const newDocEnd = editor.state.doc.content.size;
+              // Insert footnote reference node at selection end
               editor.chain()
                 .focus()
-                .setTextSelection(newDocEnd - 1)
-                .scrollIntoView()
+                .setTextSelection(to)
+                .insertContent({
+                  type: 'footnoteRef',
+                  attrs: {
+                    target: footnoteId,
+                    number: footnoteNumber
+                  }
+                })
                 .run();
-            }, 50);
-          }}
-          onOpenRag={() => {
-            // TODO: Implement RAG search - could emit event or call store
-            console.log('Open RAG with:', contextMenu.selectedText);
-          }}
-        />
-      )}
-    </div>
+
+              // 3. Add footnote section at document end
+              const docEnd = editor.state.doc.content.size;
+
+              // Check if this is the first footnote - if so, add a separator
+              const isFirstFootnote = footnoteNumber === 1;
+
+              const footnoteContent = [
+                { type: 'paragraph', content: [] }, // Empty line
+                ...(isFirstFootnote ? [
+                  { type: 'horizontalRule' }, // Visual separator for footnotes section
+                ] : []),
+                {
+                  type: 'paragraph',
+                  attrs: { id: footnoteId },
+                  content: [
+                    {
+                      type: 'text',
+                      marks: [{ type: 'superscript' }],
+                      text: `[${footnoteNumber}]`
+                    },
+                    { type: 'text', text: ' ' }
+                  ]
+                }
+              ];
+
+              editor.chain()
+                .focus()
+                .setTextSelection(docEnd)
+                .insertContent(footnoteContent)
+                .run();
+
+              // 4. Move cursor to end for user to type footnote content
+              setTimeout(() => {
+                const newDocEnd = editor.state.doc.content.size;
+                editor.chain()
+                  .focus()
+                  .setTextSelection(newDocEnd - 1)
+                  .scrollIntoView()
+                  .run();
+              }, 50);
+            }}
+            onOpenRag={() => {
+              // TODO: Implement RAG search - could emit event or call store
+              console.log('Open RAG with:', contextMenu.selectedText);
+            }}
+          />
+        )
+      }
+    </div >
   );
 });
 

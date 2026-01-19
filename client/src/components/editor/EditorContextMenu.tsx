@@ -1,6 +1,7 @@
 import { Copy, Scissors, ClipboardPaste, MessageSquareQuote, Search } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Editor } from '@tiptap/react';
+import { useRef, useLayoutEffect, useState } from 'react';
 
 interface EditorContextMenuProps {
   x: number;
@@ -22,6 +23,30 @@ export const EditorContextMenu = ({
   onOpenRag,
 }: EditorContextMenuProps) => {
   const hasSelection = selectedText.length > 0;
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: y, left: x });
+
+  useLayoutEffect(() => {
+    if (menuRef.current) {
+      const { offsetWidth: width, offsetHeight: height } = menuRef.current;
+      const { innerWidth, innerHeight } = window;
+
+      let newTop = y;
+      let newLeft = x;
+
+      // Vertical adjustment (prevent overflow at bottom)
+      if (y + height > innerHeight) {
+        newTop = y - height;
+      }
+
+      // Horizontal adjustment (prevent overflow at right)
+      if (x + width > innerWidth) {
+        newLeft = x - width;
+      }
+
+      setPosition({ top: newTop, left: newLeft });
+    }
+  }, [x, y, selectedText]); // Re-calculate when coords or content changes
 
   return createPortal(
     <>
@@ -30,8 +55,9 @@ export const EditorContextMenu = ({
         onClick={onClose}
       />
       <div
+        ref={menuRef}
         className="fixed z-9999 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
-        style={{ top: y, left: x }}
+        style={{ top: position.top, left: position.left }}
       >
         {/* Text selection actions - only show when text is selected */}
         {hasSelection && (

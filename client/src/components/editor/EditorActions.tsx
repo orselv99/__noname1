@@ -1,4 +1,4 @@
-import { Star, Save, Lock, Unlock } from 'lucide-react';
+import { Star, Save, Lock, Unlock, Printer } from 'lucide-react';
 import { Document } from '../../types';
 
 interface EditorActionsProps {
@@ -7,6 +7,7 @@ interface EditorActionsProps {
   onToggleReadOnly: () => void;
   onToggleFavorite: () => void;
   onSave: () => void;
+  onPrint: () => void;
   isDirty: boolean;
 }
 
@@ -16,6 +17,7 @@ export const EditorActions = ({
   onToggleReadOnly,
   onToggleFavorite,
   onSave,
+  onPrint,
   isDirty
 }: EditorActionsProps) => {
   if (doc.deleted_at) {
@@ -38,13 +40,22 @@ export const EditorActions = ({
       <button
         onClick={onToggleFavorite}
         className={`p-2 rounded-lg hover:bg-zinc-800 transition-colors ${doc.is_favorite ? 'text-yellow-400' : 'text-zinc-400 hover:text-white'}`}
+        title={doc.is_favorite ? "Remove from Favorites" : "Add to Favorites"}
       >
         <Star size={18} className={doc.is_favorite ? 'fill-current' : ''} />
+      </button>
+      <button
+        onClick={onPrint}
+        className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white"
+        title="Print Document"
+      >
+        <Printer size={18} />
       </button>
       <button
         onClick={onSave}
         disabled={!isDirty}
         className={`p-2 rounded-lg transition-colors ${!isDirty ? 'text-zinc-700 cursor-not-allowed' : 'hover:bg-zinc-800 text-zinc-400 hover:text-white'}`}
+        title="Save Document"
       >
         <Save size={18} />
       </button>
