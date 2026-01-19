@@ -174,8 +174,8 @@ function ResultItem({ result, type, hoverColor, onSelect }: { result: any, type:
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Similarity Score - Hide for Web */}
-          {type !== 'web' && result.metadata.similarity !== undefined && (
+          {/* Similarity Score */}
+          {result.metadata.similarity !== undefined && (
             <span className="text-[9px] text-zinc-500 font-mono">
               {result.metadata.similarity.toFixed(0)}%
             </span>

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
-import { SingleTabEditor } from './SingleTabEditor';
+import { Editor } from './Editor';
 import { FileText } from 'lucide-react';
 
 /**
@@ -24,7 +24,7 @@ export const EditorContainer = memo(() => {
   return (
     <div className="relative w-full h-full">
       {tabs.map((tab) => (
-        <SingleTabEditor
+        <Editor
           key={tab.docId}
           docId={tab.docId}
           isActive={tab.id === activeTabId}

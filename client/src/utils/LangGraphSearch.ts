@@ -59,21 +59,6 @@ export const executeSearch = async (
 
     const logs: StepLog[] = [];
 
-    // 1. Private Scan
-    logs.push({ message: "private 문서를 확인중입니다" });
-    report({ local: { status: 'running', logs: [...logs] } });
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    // 2. Dept Scan
-    logs.push({ message: "내가 갖고있는 부서의 문서를 확인중입니다" });
-    report({ local: { status: 'running', logs: [...logs] } });
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    // 3. Project Scan
-    logs.push({ message: "내가 갖고있는 프로젝트의 문서를 확인중입니다" });
-    report({ local: { status: 'running', logs: [...logs] } });
-    await new Promise(resolve => setTimeout(resolve, 800));
-
     try {
       // Execute actual search
       const localResults: any[] = await invoke("search_local", {
@@ -95,6 +80,27 @@ export const executeSearch = async (
           tags: r.tags
         }
       }));
+
+      // 1. Private Scan
+      logs.push({ message: "개인 문서를 확인중입니다" });
+      report({ local: { status: 'running', logs: [...logs] } });
+      await new Promise(resolve => setTimeout(resolve, 800));
+      logs[0].subItems = [`${results.filter(r => r.metadata.group_name === 'Private').length} 개의 문서가 확인됬습니다`];
+      report({ local: { status: 'running', logs: [...logs] } });
+
+      // 2. Dept Scan
+      logs.push({ message: "부서 문서를 확인중입니다" });
+      report({ local: { status: 'running', logs: [...logs] } });
+      await new Promise(resolve => setTimeout(resolve, 800));
+      logs[1].subItems = [`${results.filter(r => r.metadata.group_name === 'Department').length} 개의 문서가 확인됬습니다`];
+      report({ local: { status: 'running', logs: [...logs] } });
+
+      // 3. Project Scan
+      logs.push({ message: "프로젝트 문서를 확인중입니다" });
+      report({ local: { status: 'running', logs: [...logs] } });
+      await new Promise(resolve => setTimeout(resolve, 800));
+      logs[2].subItems = [`${results.filter(r => r.metadata.group_name === 'Project').length} 개의 문서가 확인됬습니다`];
+      report({ local: { status: 'running', logs: [...logs] } });
 
       // Report findings
       if (results.length > 0) {
@@ -121,25 +127,13 @@ export const executeSearch = async (
 
     const logs: StepLog[] = [];
 
-    // 1. Dept Scan
-    logs.push({ message: "내가 소속된 부서의 문서를 확인중입니다" });
-    report({ server: { status: 'running', logs: [...logs] } });
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    logs[0].subItems = ["0 개의 문서가 확인됬습니다"];
-    report({ server: { status: 'running', logs: [...logs] } });
-
-    // 2. Project Scan
-    logs.push({ message: "내가 소속된 프로젝트의 문서를 확인중입니다" });
-    report({ server: { status: 'running', logs: [...logs] } });
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    logs[1].subItems = ["0 개의 문서가 확인됬습니다"]; // Mock for now
-    report({ server: { status: 'running', logs: [...logs] } });
-
     try {
       const serverResults: any[] = await invoke("search_server", {
         query: state.query,
         limit: 3
       });
+
+      console.log('🔍 [Debug] Server RAG Raw Results:', serverResults);
 
       const results = serverResults.map((r) => ({
         source: 'server' as const,
@@ -149,10 +143,25 @@ export const executeSearch = async (
           id: r.document_id,
           title: r.title || r.summary || "Untitled",
           group_name: r.group_name || "Server",
+          group_type: r.group_type,
           similarity: r.similarity || 0,
           tags: r.tags ? r.tags.join(", ") : ""
         }
       }));
+
+      // 1. Dept Scan
+      logs.push({ message: "내 부서의 문서를 확인중입니다" });
+      report({ server: { status: 'running', logs: [...logs] } });
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      logs[0].subItems = [`${results.filter(r => r.metadata.group_type === 0).length} 개의 문서가 확인됬습니다`];
+      report({ server: { status: 'running', logs: [...logs] } });
+
+      // 2. Project Scan
+      logs.push({ message: "내 프로젝트의 문서를 확인중입니다" });
+      report({ server: { status: 'running', logs: [...logs] } });
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      logs[1].subItems = [`${results.filter(r => r.metadata.group_type === 1).length} 개의 문서가 확인됬습니다`];
+      report({ server: { status: 'running', logs: [...logs] } });
 
       // Report findings
       if (results.length > 0) {

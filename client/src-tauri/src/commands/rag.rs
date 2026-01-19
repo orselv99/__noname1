@@ -853,6 +853,10 @@ struct ServerDocument {
   summary: String,
   #[serde(rename = "tag_evidences")]
   tag_evidences: Option<Vec<ServerTagEvidence>>,
+  #[serde(rename = "group_id")]
+  group_id: Option<String>,
+  #[serde(rename = "group_type")]
+  group_type: Option<i32>,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -926,12 +930,12 @@ pub async fn search_server(
           title: Some(doc.title.clone()),
           group_name: Some("Server".to_string()),
           tags,
-          // Defaults for server results
+          // Use server response values
           parent_id: None,
-          document_state: 1, // Default active?
+          document_state: 3, // Published (since it's on server)
           visibility_level: 1,
-          group_type: 0,
-          group_id: None,
+          group_type: doc.group_type.unwrap_or(0),
+          group_id: doc.group_id.clone(),
           size: None,
           media_size: None,
           current_version: 0,
@@ -943,10 +947,11 @@ pub async fn search_server(
         });
 
         println!(
-          "DEBUG: Server result '{}' (dist: {:.4}, similarity: {:.1}%)",
+          "DEBUG: Server result '{}' (dist: {:.4}, similarity: {:.1}%, group_type: {})",
           doc.title,
           item.score,
-          ((1.0 - item.score / 2.0) * 100.0).clamp(0.0, 100.0)
+          ((1.0 - item.score / 2.0) * 100.0).clamp(0.0, 100.0),
+          doc.group_type.unwrap_or(0)
         );
       }
     }
@@ -955,8 +960,36 @@ pub async fn search_server(
   Ok(results)
 }
 
+/// Helper to calculate cosine distance between two vectors
+fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
+  if a.len() != b.len() || a.is_empty() {
+    return 2.0; // Maximum distance for invalid vectors
+  }
+
+  let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+  let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+  let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+  if norm_a == 0.0 || norm_b == 0.0 {
+    return 2.0;
+  }
+
+  let cosine_sim = dot / (norm_a * norm_b);
+  // Convert similarity [-1, 1] to distance [0, 2]
+  1.0 - cosine_sim
+}
+
 #[tauri::command]
-pub async fn search_web(query: String) -> Result<Vec<SearchResult>, String> {
+pub async fn search_web(
+  auth_state: State<'_, Mutex<AuthState>>,
+  query: String,
+) -> Result<Vec<SearchResult>, String> {
+  // Get token for embedding API
+  let token = {
+    let auth = auth_state.lock().unwrap();
+    auth.token.clone().ok_or("Not authenticated")?
+  };
+
   let url = format!(
     "https://html.duckduckgo.com/html/?q={}",
     urlencoding::encode(&query)
@@ -969,57 +1002,133 @@ pub async fn search_web(query: String) -> Result<Vec<SearchResult>, String> {
   let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
   let html = res.text().await.map_err(|e| e.to_string())?;
 
-  let document = scraper::Html::parse_document(&html);
-  let result_selector = scraper::Selector::parse(".result").unwrap();
-  let title_selector = scraper::Selector::parse(".result__a").unwrap();
-  let snippet_selector = scraper::Selector::parse(".result__snippet").unwrap();
+  // Collect raw results in a separate block so `document` is dropped before async operations
+  let raw_results: Vec<(String, String, String)> = {
+    let document = scraper::Html::parse_document(&html);
+    let result_selector = scraper::Selector::parse(".result").unwrap();
+    let title_selector = scraper::Selector::parse(".result__a").unwrap();
+    let snippet_selector = scraper::Selector::parse(".result__snippet").unwrap();
 
-  let mut results = Vec::new();
-  for element in document.select(&result_selector).take(5) {
-    let title = element
-      .select(&title_selector)
-      .next()
-      .map(|e| e.text().collect::<String>())
-      .unwrap_or_default();
-    let link = element
-      .select(&title_selector)
-      .next()
-      .and_then(|e| e.value().attr("href"))
-      .unwrap_or_default()
-      .to_string();
-    let snippet = element
-      .select(&snippet_selector)
-      .next()
-      .map(|e| e.text().collect::<String>())
-      .unwrap_or_default();
+    let mut results = Vec::new();
+    for element in document.select(&result_selector).take(5) {
+      let title = element
+        .select(&title_selector)
+        .next()
+        .map(|e| e.text().collect::<String>())
+        .unwrap_or_default();
+      let link = element
+        .select(&title_selector)
+        .next()
+        .and_then(|e| e.value().attr("href"))
+        .unwrap_or_default()
+        .to_string();
+      let snippet = element
+        .select(&snippet_selector)
+        .next()
+        .map(|e| e.text().collect::<String>())
+        .unwrap_or_default();
 
-    if !title.is_empty() && !link.is_empty() {
-      results.push(SearchResult {
-        document_id: link,
-        distance: 0.0,
-        similarity: 100.0, // Web results are assumed relevant
-        content: snippet,
-        summary: Some(title.clone()),
-        title: Some(title),
-        group_name: Some("Web".to_string()),
-        tags: vec!["web".to_string()],
-        // Defaults for web results
-        parent_id: None,
-        document_state: 0,
-        visibility_level: 0,
-        group_type: 0,
-        group_id: None,
-        size: None,
-        media_size: None,
-        current_version: 0,
-        version: 0,
-        is_favorite: false,
-        created_at: None,
-        updated_at: None,
-        accessed_at: None,
-      });
+      if !title.is_empty() && !link.is_empty() {
+        results.push((title, link, snippet));
+      }
     }
+    results
+  };
+
+  if raw_results.is_empty() {
+    return Ok(Vec::new());
   }
+
+  // Generate query embedding
+  let query_embedding = match generate_embedding(&query, &token).await {
+    Ok(emb) => emb,
+    Err(e) => {
+      println!("DEBUG: Failed to generate query embedding: {}", e);
+      // Return results without similarity if embedding fails
+      return Ok(
+        raw_results
+          .into_iter()
+          .map(|(title, link, snippet)| SearchResult {
+            document_id: link,
+            distance: 0.0,
+            similarity: 50.0, // Default similarity when embedding fails
+            content: snippet,
+            summary: Some(title.clone()),
+            title: Some(title),
+            group_name: Some("Web".to_string()),
+            tags: vec!["web".to_string()],
+            parent_id: None,
+            document_state: 0,
+            visibility_level: 0,
+            group_type: 0,
+            group_id: None,
+            size: None,
+            media_size: None,
+            current_version: 0,
+            version: 0,
+            is_favorite: false,
+            created_at: None,
+            updated_at: None,
+            accessed_at: None,
+          })
+          .collect(),
+      );
+    }
+  };
+
+  // Generate embeddings for each result and calculate similarity
+  let mut results = Vec::new();
+  for (title, link, snippet) in raw_results {
+    // Combine title and snippet for embedding
+    let combined_text = format!("{} {}", title, snippet);
+
+    let (distance, similarity) = match generate_embedding(&combined_text, &token).await {
+      Ok(result_embedding) => {
+        let dist = cosine_distance(&query_embedding, &result_embedding);
+        let sim = ((1.0 - dist / 2.0) * 100.0).clamp(0.0, 100.0);
+        println!(
+          "DEBUG: Web result '{}' - distance: {:.4}, similarity: {:.1}%",
+          title, dist, sim
+        );
+        (dist, sim)
+      }
+      Err(e) => {
+        println!("DEBUG: Failed to embed result '{}': {}", title, e);
+        (1.0, 50.0) // Default values on error
+      }
+    };
+
+    results.push(SearchResult {
+      document_id: link,
+      distance,
+      similarity,
+      content: snippet,
+      summary: Some(title.clone()),
+      title: Some(title),
+      group_name: Some("Web".to_string()),
+      tags: vec!["web".to_string()],
+      parent_id: None,
+      document_state: 0,
+      visibility_level: 0,
+      group_type: 0,
+      group_id: None,
+      size: None,
+      media_size: None,
+      current_version: 0,
+      version: 0,
+      is_favorite: false,
+      created_at: None,
+      updated_at: None,
+      accessed_at: None,
+    });
+  }
+
+  // Sort by similarity (highest first)
+  results.sort_by(|a, b| {
+    b.similarity
+      .partial_cmp(&a.similarity)
+      .unwrap_or(std::cmp::Ordering::Equal)
+  });
 
   Ok(results)
 }

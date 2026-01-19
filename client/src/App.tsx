@@ -74,6 +74,15 @@ function AppContent() {
     return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, []);
 
+  // Disable global context menu
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => document.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
+
   // Tab Menu State
   // Tab Menu State
   const { tabs, setActiveTab } = useDocumentStore();

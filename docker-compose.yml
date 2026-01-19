@@ -102,7 +102,7 @@ services:
     # SECURITY: Do NOT expose postgres port externally!
     # Use internal docker network only
     # ports:
-    #   - "5432:5432"
+    #   - "1119:5432"
     networks:
       - fiery-net
     healthcheck:

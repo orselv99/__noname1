@@ -584,6 +584,8 @@ func (s *server) SearchDocuments(ctx context.Context, req *pb.SearchDocumentsReq
 				UpdatedAt:    d.UpdatedAt,
 				CreatedAt:    d.CreatedAt,
 				OwnerId:      d.OwnerID,
+				GroupId:      d.GroupID,
+				GroupType:    d.GroupType,
 			},
 			Score: d.Distance, // Actual cosine distance from pgvector
 		})
