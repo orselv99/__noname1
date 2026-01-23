@@ -20,7 +20,7 @@
 //! - `ExtractInfoResult`: extract_info 커맨드 반환값
 //! - `DocumentState`, `VisibilityLevel`, `GroupType`: 문서 상태 열거형
 //! ==========================================================================
-// AI commands module for document processing
+// AI 커맨드 모듈 (문서 처리용)
 use rusqlite::Connection;
 use std::sync::Mutex;
 use tauri::State;
@@ -137,7 +137,7 @@ pub fn bytes_to_embedding(bytes: &[u8]) -> Vec<f32> {
 /// # 반환값
 /// (summary, tags) 튜플
 fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<DocumentTag>) {
-  // 1. Try to find markdown code block first
+  // 1. 마크다운 코드 블록 우선 검색
   let json_str = if let Some(start_marker) = content.find("```") {
     let code_start = start_marker + 3;
     // Check if it has a lang identifier like "json"
@@ -180,13 +180,13 @@ fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<Docume
       println!("Failed to parse AI JSON: {}", e);
       println!("Raw AI content: {}", content);
 
-      // Fallback: Try to manually extract summary if JSON failed
+      // Fallback: JSON 파싱 실패 시 수동으로 요약 추출 시도
       let summary = if let Some(sum_start) = cleaned_json.find("\"summary\"") {
         if let Some(colon) = cleaned_json[sum_start..].find(':') {
           let val_start = sum_start + colon + 1;
           if let Some(quote_start) = cleaned_json[val_start..].find('"') {
             let actual_start = val_start + quote_start + 1;
-            // Find end quote (ignoring escaped?) - naive for now
+            // 끝 따옴표 찾기 (이스케이프 무시 등은 현재 미구현 - 단순 검색)
             if let Some(quote_end) = cleaned_json[actual_start..].find('"') {
               cleaned_json[actual_start..actual_start + quote_end].to_string()
             } else {
@@ -202,7 +202,7 @@ fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<Docume
         String::new()
       };
 
-      // Fallback: Try to manually extract tags
+      // Fallback: 태그 수동 추출 시도
       let mut tags = Vec::new();
       let mut search_start = 0;
 
@@ -224,15 +224,15 @@ fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<Docume
           }
         }
 
-        // Extract Evidence Value (Look ahead near this tag)
+        // 근거(Evidence) 값 추출 (해당 태그 근처에서 검색)
         let mut evidence_val = String::new();
         // Limit search for evidence to avoid jumping to next item's evidence if missing?
         // Just search forward.
         if !tag_val.is_empty() {
           if let Some(evi_key_idx) = cleaned_json[current_pos..].find("\"evidence\"") {
             let absolute_evi_idx = current_pos + evi_key_idx;
-            // heuristic: if evidence is too far (e.g. > 200 chars), maybe it belongs to next?
-            // But for now simple sequential is better than nothing.
+            // 휴리스틱: 근거가 너무 멀리 떨어져 있으면(예: 200자 이상) 다음 항목일 가능성?
+            // 현재는 단순하게 순차 검색.
             if let Some(colon) = cleaned_json[absolute_evi_idx..].find(':') {
               let val_start = absolute_evi_idx + colon + 1;
               if let Some(quote_start) = cleaned_json[val_start..].find('"') {
@@ -256,7 +256,7 @@ fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<Docume
           });
         }
 
-        // Advance search_start
+        // 검색 시작 위치 전진
         // Ensure we move forward significantly
         if current_pos > search_start {
           search_start = current_pos;
@@ -269,7 +269,7 @@ fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<Docume
         return (summary, tags);
       }
 
-      // Ultimate Fallback: Return raw content if it's not too long and looks like text
+      // 최후의 수단: 내용이 너무 길지 않고 코드가 아니면 원본 반환
       if content.len() < 500 && !content.contains("```") {
         (content.to_string(), Vec::new())
       } else {
@@ -279,8 +279,8 @@ fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<Docume
   }
 }
 
-/// Clean up HTML and Markdown syntax for AI prompt context
-/// Keeps important markers like bold (converted to brackets)
+/// AI 프롬프트 컨텍스트를 위해 HTML 및 마크다운 구문 정리
+/// 굵게(bold) 같은 중요한 마커는 유지 (대괄호로 변환)
 fn clean_input_text(input: &str) -> String {
   // 1. HTML Tag 제거
   let mut no_html = String::with_capacity(input.len());
@@ -299,13 +299,13 @@ fn clean_input_text(input: &str) -> String {
     }
   }
 
-  // 2. Markdown
-  // Keep bold emphasis by converting **text** to [text]
+  // 2. 마크다운 처리
+  // **text** 강조를 [text]로 변환하여 유지
   let mut s = no_html
-    .replace("```", " ") // Remove code blocks
-    .replace("__", "") // Remove underline markers
-    .replace("==", "") // Remove highlight markers
-    .replace("~~", ""); // Remove strikethrough
+    .replace("```", " ") // 코드 블록 제거
+    .replace("__", "") // 밑줄 제거
+    .replace("==", "") // 하이라이트 제거
+    .replace("~~", ""); // 취소선 제거
 
   // 3. [편집], [1], [주석] 등 이런거 제거
   if let Ok(re_noise) = Regex::new(r"\[.*?\]") {
@@ -324,7 +324,7 @@ fn clean_input_text(input: &str) -> String {
     .filter(|&c| c != '*' && c != '#' && c != '`')
     .collect();
 
-  // 3. Collapse whitespace
+  // 3. 공백 축소 (연속된 공백을 하나로)
   let mut final_res = String::with_capacity(s.len());
   let mut last_ws = false;
   for c in s.chars() {
@@ -346,7 +346,7 @@ fn clean_input_text(input: &str) -> String {
 // Database Operations
 // ============================================================================
 
-/// DocumentState enum matching server acl.proto
+/// 서버 acl.proto와 일치하는 문서 상태 열거형
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(i32)]
 pub enum DocumentState {
@@ -356,7 +356,7 @@ pub enum DocumentState {
   Published = 3,
 }
 
-/// VisibilityLevel enum matching server acl.proto
+/// 서버 acl.proto와 일치하는 공개 수준 열거형
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(i32)]
 pub enum VisibilityLevel {
@@ -367,7 +367,7 @@ pub enum VisibilityLevel {
   Public = 4,
 }
 
-/// GroupType enum for document categorization
+/// 문서 분류를 위한 그룹 타입 열거형
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(i32)]
 pub enum GroupType {
@@ -377,14 +377,14 @@ pub enum GroupType {
   Private = 2,
 }
 
-/// Calculate SHA-256 hash of content for change detection
+/// 변경 감지를 위한 콘텐츠 SHA-256 해시 계산
 fn calculate_content_hash(content: &str) -> String {
   let mut hasher = Sha256::new();
   hasher.update(content.as_bytes());
   format!("{:x}", hasher.finalize())
 }
 
-/// Check if we already have AI data for this content hash
+/// 해당 콘텐츠 해시에 대한 AI 데이터가 이미 존재하는지 확인
 fn check_existing_ai_data(
   conn: &Connection,
   document_id: &str,
@@ -518,7 +518,7 @@ fn save_document_tags(
   user_id: &str,
   tags: &[DocumentTag],
 ) -> Result<(), String> {
-  // Clear existing tags first (full replace strategy for active tags)
+  // 기존 태그 먼저 삭제 (전체 교체 전략)
   conn
     .execute(
       "DELETE FROM document_tags WHERE document_id = ?1",
@@ -529,7 +529,7 @@ fn save_document_tags(
   for tag in tags {
     let tag_id = Uuid::new_v4().to_string();
 
-    // Encrypt tag, evidence, and created_at
+    // 태그, 근거, 생성일 암호화
     let tag_enc = encrypt_content(user_id, &tag.tag)?;
     let evidence_enc = tag
       .evidence
@@ -550,7 +550,7 @@ fn save_document_tags(
   Ok(())
 }
 
-/// Get current timestamp as ISO 8601 string
+/// 현재 시간을 ISO 8601 문자열로 반환
 fn chrono_now() -> String {
   chrono::Utc::now().to_rfc3339()
 }
@@ -563,18 +563,18 @@ fn chrono_now() -> String {
 pub async fn extract_info(
   auth_state: State<'_, Mutex<AuthState>>,
   db_state: State<'_, Mutex<DatabaseState>>,
-  text: String,            // Plain text used for AI analysis
-  content: Option<String>, // HTML content used for saving (to preserve formatting)
+  text: String,            // AI 분석에 사용할 평문 텍스트
+  content: Option<String>, // 저장 시 원본 서식 유지를 위한 HTML 콘텐츠
   title: Option<String>,
   id: Option<String>,
 ) -> Result<ExtractInfoResult, String> {
-  // Get user_id from auth state
+  // 인증 상태에서 user_id 가져오기
   let user_id = {
     let auth = auth_state.lock().unwrap();
     auth.user_id.clone().ok_or("Not authenticated")?
   };
 
-  // Prepend Title to text for better context in Embedding and Summary
+  // 임베딩 및 요약의 맥락을 돕기 위해 텍스트 앞에 제목 추가
   let text = if let Some(ref t) = title {
     if !t.trim().is_empty() {
       format!("{}\n\n{}", t, text)
@@ -585,15 +585,15 @@ pub async fn extract_info(
     text
   };
 
-  // Calculate content hash
+  // 콘텐츠 해시 계산
   let content_hash = calculate_content_hash(&text);
 
-  // Check for existing AI data (Optimization)
-  // Use provided ID or generate a new one
+  // 기존 AI 데이터 확인 (최적화)
+  // 제공된 ID 사용 또는 새로 생성
   let doc_id = id.unwrap_or_else(|| Uuid::new_v4().to_string());
 
-  // NOTE: In a 'save' flow, we usually know the ID.
-  // If this is just 'extract_info', we are generating a draft.
+  // 참고: '저장' 흐름에서는 보통 ID를 알고 있습니다.
+  // 이 커맨드가 단순 '정보 추출'용이라면 초안을 생성하는 것입니다.
   // However, if we want to check PREVIOUSLY generated data for the SAME content, we need to query by content_hash OR doc_id?
   // Since this is a specialized extract command, let's check the DB.
 
@@ -606,7 +606,7 @@ pub async fn extract_info(
     }
   }
 
-  // 1. Generate embedding
+  // 1. 임베딩 생성
   let chunk_size = 2000;
   let chunks: Vec<_> = text
     .chars()
@@ -630,7 +630,7 @@ pub async fn extract_info(
       .await
       .map_err(|e| format!("Failed to parse embedding response: {}", e))?;
 
-    // Extract the first embedding from the 2D array
+    // 2D 배열에서 첫 번째 임베딩 추출
     // Response: [{"index": 0, "embedding": [[...floats...]]}]
     if let Some(item) = response.first() {
       if let Some(embedding) = item.embedding.first() {
@@ -647,7 +647,7 @@ pub async fn extract_info(
     return Err("No embeddings generated".to_string());
   }
 
-  // Mean pooling
+  // 평균 풀링 (Mean Pooling)
   let vector_dim = all_vectors[0].len();
   let num_chunks = all_vectors.len() as f32;
   let mut mean_vector = vec![0.0; vector_dim];
@@ -661,11 +661,11 @@ pub async fn extract_info(
     mean_vector[i] /= num_chunks;
   }
 
-  // L2 normalize
+  // L2 정규화
   let norm = mean_vector.iter().map(|x| x * x).sum::<f32>().sqrt();
   let normalized_vector: Vec<f32> = mean_vector.iter().map(|&x| x / norm).collect();
 
-  // 2. Generate summary and tags
+  // 2. 요약 및 태그 생성
   println!("[AI] Starting document analysis...");
   let cleaned_text = clean_input_text(&text);
   let text_len = cleaned_text.len();
@@ -681,7 +681,7 @@ pub async fn extract_info(
   // {{"tag":"semantic_tag_3","evidence":"verbatim_sentence_3"}}]
   // }}
 
-  // Gemma 2 prompt format (no system turn - embed instructions in user message)
+  // Gemma 2 프롬프트 형식 (시스템 턴 없음 - 사용자 메시지에 지시 포함)
   let prompt = format!(
     r#"<start_of_turn>user
 You are a professional document analyzer specializing in high-density information extraction.
@@ -774,7 +774,7 @@ Document:
     ai_content
   );
 
-  // Handle empty AI response gracefully
+  // 빈 AI 응답 예외 처리
   let (summary, tags) = if ai_content.trim().is_empty() {
     println!("[AI] Warning: Empty response");
     (String::new(), Vec::new())
@@ -788,7 +788,7 @@ Document:
     result
   };
 
-  // 3. Encrypt content, title, summary, size, and created_at
+  // 3. 콘텐츠, 제목, 요약, 크기, 생성일 암호화
   let content_enc = encrypt_content(&user_id, content.as_deref().unwrap_or(&text))?;
   let title_enc = title
     .as_ref()

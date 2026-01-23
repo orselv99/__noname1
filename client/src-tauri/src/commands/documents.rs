@@ -240,10 +240,9 @@ pub async fn save_document(
 
   // Calculate media size from content
   let mut media_size_bytes = 0;
-  // Regex to find data URLs: src="data:image/png;base64,..."
-  // Simply summing up base64 lengths and converting to binary size
-  // Note: This matches the frontend logic
-  let re = regex::Regex::new(r#"src="data:[^;]+;base64,([^"]+)""#).unwrap();
+  // Data URL을 찾기 위한 정규식: src="data:image/png;base64,..."
+  // Base64 길이 합계를 계산하여 바이너리 크기로 변환
+  // 참고: 프론트엔드 로직과 일치시킴
   for cap in re.captures_iter(&req.content) {
     if let Some(base64_part) = cap.get(1) {
       media_size_bytes += (base64_part.as_str().len() as f64 * 0.75).floor() as u64;
@@ -319,8 +318,8 @@ pub async fn save_document(
         }
       }
 
-      // 4. Save Revision (Snapshot) (DB 함수 사용)
-      // Constraints: No Private Docs (2), No Version 0
+      // 4. 리비전(스냅샷) 저장 (DB 함수 사용)
+      // 제약조건: 개인 문서(2) 제외, 버전 0 제외
       let current_version = req.version.unwrap_or(0);
       if req.group_type != 2 && current_version > 0 {
         let revision_id = Uuid::new_v4().to_string();
@@ -337,28 +336,24 @@ pub async fn save_document(
         })?;
       }
 
-      // 4. Server RAG Sync (if Published)
+      // 4. 서버 RAG 동기화 (발행된 경우)
       if req.document_state == 3 {
         // Published
-        // Spawn async task to not block save?
-        // But we are in async fn, so we can await.
-        // However, we hold DB lock. We should DROP DB lock before network call?
-        // NO, we are iterating `req.tags` which is owned.
-        // But we need `embedding` from `document_ai_data`.
+        // 비동기 태스크로 스폰하여 저장을 차단하지 않게 할 수 있지만,
+        // 현재는 async 함수이므로 await 가능.
+        // DB 락을 보유 중이므로 네트워크 호출 전 락 해제가 이상적이나,
+        // req.tags 등 소유권을 가진 데이터를 사용하므로 현재 구조 유지.
 
         // Reuse conn to fetch embedding (DB 함수 사용)
         let embedding_blob = get_document_embedding(conn, &doc_id);
 
-        // fetch tags from req (latest) or DB?
-        // req.tags might be None if client didn't send them (partial update?).
-        // But in `documentStore.ts`, we send everything.
-        // Use `req.tags` if present, else empty? Or fetch from DB?
-        // Safe to assume `req.tags` contains current tags if `saveDocument` sends full object.
-        // But if `save_document` is called with partial... `documentStore` sends object spread `...doc`.
+        // req(최신)에서 태그를 가져올지 DB에서 가져올지 결정
+        // req.tags가 None이면(부분 업데이트?) 비어있을 수 있음.
+        // 하지만 documentStore.ts에서는 전체 객체를 보내므로 req.tags 사용이 안전.
 
         let tags_to_send = req.tags.clone().unwrap_or_default();
 
-        // Pass plaintext data to RAG sync for searchability
+        // 검색 가능성을 위해 평문 데이터를 RAG 동기화에 전달
         (
           embedding_blob,
           tags_to_send,
@@ -382,16 +377,14 @@ pub async fn save_document(
     }
   }; // End of DB lock scope
 
-  // Perform RAG Sync if we have data and state is Published (checked via returned tuple)
-  // Actually we need to check state again or use the tuple.
-  // If embedding_blob is Some, it means we attempted fetch.
-  // But embedding might be missing even if Published.
-  // Let's use `req.document_state` check again.
+  // 데이터가 있고 상태가 Published이며 Private이 아닌 경우 RAG 동기화 수행
+  // 실제로는 상태를 다시 확인하거나 튜플을 사용해야 함.
+  // embedding_blob이 있다는 것은 fetch를 시도했다는 뜻.
+  // 다시 req.document_state 확인.
 
-  // Perform RAG Sync if we have data and state is Published, AND NOT Private
-  if req.document_state == 3 && req.group_type != 2 {
-    // Prepare Payload
-    // We need auth token
+  // 데이터가 있고 상태가 '발행됨'이며 '개인' 그룹이 아닌 경우 RAG 동기화 수행
+    // 페이로드 준비
+    // 인증 토큰 필요
     let token = {
       let auth = auth_state.lock().unwrap();
       auth.token.clone()
@@ -406,16 +399,16 @@ pub async fn save_document(
         Vec::new()
       };
 
-      // Clean content (remove images) for server-side embedding
-      // 1. Remove Markdown images: ![alt](url)
+      // 서버 사이드 임베딩을 위해 콘텐츠 정리 (이미지 제거)
+      // 1. 마크다운 이미지 제거: ![alt](url)
       let re_md = regex::Regex::new(r"(?s)!\[.*?\]\(.*?\)").unwrap();
       let no_md = re_md.replace_all(&req.content, "");
 
-      // 2. Remove HTML images: <img ... >
+      // 2. HTML 이미지 제거: <img ... >
       let re_html = regex::Regex::new(r"(?s)<img[^>]*>").unwrap();
       let cleaned_content = re_html.replace_all(&no_md, "");
 
-      // Construct JSON - Send plaintext data for server-side search
+      // JSON 구성 - 서버 사이드 검색을 위해 평문 데이터 전송
       let payload = serde_json::json!({
           "title": _rag_data.3,
           "summary": _rag_data.2.clone().unwrap_or_default(),
@@ -426,14 +419,14 @@ pub async fn save_document(
               })
           }).collect::<Vec<_>>(),
           "embedding": embedding_vec,
-          "content": cleaned_content.to_string(), // Send cleaned plaintext content
+          "content": cleaned_content.to_string(), // 정리된 평문 콘텐츠 전송
           "group_id": req.group_id,
           "group_type": req.group_type,
           "created_at": _rag_data.4,
           "updated_at": _rag_data.5
       });
 
-      // Send Request
+      // 요청 전송
       let client = reqwest::Client::new();
       let res = client
         .post(&format!("{}/api/v1/docs", config::get_api_url()))
@@ -461,7 +454,7 @@ pub async fn save_document(
               status, body
             ));
           } else {
-            // Parse response to see if we got an embedding back
+            // 응답 파싱하여 임베딩이 반환되었는지 확인
             if let Ok(json_body) = r.json::<serde_json::Value>().await {
               if let Some(embedding_val) = json_body.get("embedding") {
                 if let Some(embedding_arr) = embedding_val.as_array() {
@@ -471,7 +464,7 @@ pub async fn save_document(
                     .collect();
 
                   if !embedding.is_empty() {
-                    // Save returned embedding to local DB
+                    // 로컬 DB에 반환된 임베딩 저장
                     let db = db_state.lock().unwrap();
                     if let Some(ref conn) = db.conn {
                       let embedding_bytes: Vec<u8> = embedding
@@ -626,7 +619,7 @@ pub async fn list_documents(
 
   let db = db_state.lock().unwrap();
   if let Some(ref conn) = db.conn {
-    // Prepare Query (unchanged logic)
+    // 쿼리 준비 (로직 동일)
     let mut query = "SELECT 
             d.id, d.user_id, d.document_state, d.visibility_level, d.group_type, d.group_id,
             d.title, d.content, d.summary, d.created_at, d.updated_at, d.accessed_at, d.size, d.is_favorite,
@@ -638,7 +631,7 @@ pub async fn list_documents(
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
     params.push(Box::new(user_id.clone()));
 
-    // Group filters
+    // 그룹 필터
     if let Some(gt) = group_type {
       query.push_str(&format!(" AND d.group_type = {}", gt));
     }
@@ -647,7 +640,7 @@ pub async fn list_documents(
       params.push(Box::new(gid.clone()));
     }
 
-    // Incremental Sync
+    // 증분 동기화 (Incremental Sync)
     if let Some(last_sync) = last_synced_at {
       query.push_str(" AND d.last_synced_at >= ?");
       params.push(Box::new(last_sync));
@@ -655,7 +648,7 @@ pub async fn list_documents(
 
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
 
-    // 1. Fetch basic document info
+    // 1. 기본 문서 정보 조회
     let rows = stmt
       .query_map(rusqlite::params_from_iter(params.iter()), |row| {
         let id: String = row.get(0)?;
@@ -711,7 +704,7 @@ pub async fn list_documents(
 
     let mut docs = Vec::new();
 
-    // 2. Process and fetch tags
+    // 2. 태그 처리 및 조회
     for raw in raw_docs {
       // Fetch tags for this doc (DB 함수 사용)
       let tags_raw = get_document_tags_raw(conn, &raw.id)?;
@@ -723,7 +716,7 @@ pub async fn list_documents(
         }
       }
 
-      // Decrypt doc fields
+      // 문서 필드 복호화
       let title = decrypt_content(&raw.user_id, &raw.title_blob).unwrap_or_default();
       let content = decrypt_content(&raw.user_id, &raw.content_blob).unwrap_or_default();
       let summary = raw

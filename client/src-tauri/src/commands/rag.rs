@@ -156,7 +156,7 @@ async fn generate_embedding(text: &str, token: &str) -> Result<Vec<f32>, String>
   let client = reqwest::Client::new();
   let url = format!("{}/api/v1/embedding", config::get_api_url());
 
-  // Gateway expects { "text": "..." }
+  // Gateway는 { "text": "..." } 형식을 기대함
   let res = client
     .post(&url)
     .header("Authorization", format!("Bearer {}", token))
@@ -382,8 +382,8 @@ pub async fn search_local(
 
       let dist = raw.distance;
 
-      // Hybrid Search: Apply keyword boost
-      // If query substring is found in title or content, reduce distance
+      // 하이브리드 검색: 키워드 부스트 적용
+      // 쿼리 문자열이 제목이나 본문에 포함되면 거리(distance)를 줄여서 유사도를 높임
       let query_lower = query.to_lowercase();
       let title_lower = title.clone().unwrap_or_default().to_lowercase();
       let content_lower = content.to_lowercase();
@@ -392,18 +392,18 @@ pub async fn search_local(
       let mut boost_reason = String::new();
 
       if title_lower.contains(&query_lower) {
-        boosted_dist -= 0.15; // Strong boost for title match
+        boosted_dist -= 0.15; // 제목 일치 시 강력한 부스트
         boost_reason = format!("title match (-0.15)");
       } else if content_lower.contains(&query_lower) {
-        boosted_dist -= 0.08; // Moderate boost for content match
+        boosted_dist -= 0.08; // 본문 일치 시 중간 부스트
         boost_reason = format!("content match (-0.08)");
       }
 
-      // Clamp to prevent negative distance
+      // 음수 거리 방지 (Clamp)
       boosted_dist = boosted_dist.max(0.0);
 
-      // Threshold check (cosine distance: 0.0 = identical, 2.0 = opposite)
-      // Lower threshold = stricter filtering (0.4 = ~80% similarity required)
+      // 임계값 확인 (코사인 거리: 0.0 = 동일, 2.0 = 정반대)
+      // 낮은 임계값 = 더 엄격한 필터링 (0.4 = 약 80% 유사도 요구)
       let threshold = 0.4;
       if boosted_dist > threshold {
         println!(
@@ -416,7 +416,7 @@ pub async fn search_local(
         continue;
       }
 
-      // Calculate similarity percentage from BOOSTED distance
+      // 부스트 적용된 거리로부터 유사도 퍼센트 계산
       let similarity = ((1.0 - boosted_dist / 2.0) * 100.0).clamp(0.0, 100.0);
       println!(
         "DEBUG: Included '{}' (orig: {:.4}, boost: {}, final: {:.4}, similarity: {:.1}%)",
@@ -431,7 +431,7 @@ pub async fn search_local(
         similarity
       );
 
-      // Resolve Group Name (Use fetched name or Fallback)
+      // 그룹 이름 해결 (가져온 이름 사용 또는 폴백)
       let group_name = raw.group_name.or_else(|| match raw.group_type {
         0 => Some("Department".to_string()),
         1 => Some("Project".to_string()),
@@ -439,10 +439,9 @@ pub async fn search_local(
         _ => Some("Unknown".to_string()),
       });
 
-      // Fetch tags (Use DB function)
-      let mut tags = Vec::new();
-      let tags_raw = get_document_tags_raw(conn, &raw.document_id)?; // Reusing documents.rs helper? No, we imported it.
-      // Wait, get_document_tags_raw returns (tag_blob, evidence_blob).
+      // 태그 가져오기 (DB 함수 사용)
+      let tags_raw = get_document_tags_raw(conn, &raw.document_id)?;
+      // get_document_tags_raw는 (tag_blob, evidence_blob) 튜플을 반환함
       for (t_blob, _) in tags_raw {
          if let Ok(t) = decrypt_content(&user_id, &t_blob) {
             tags.push(t);
@@ -493,11 +492,11 @@ pub async fn ask_ai(
     (uid, tok)
   };
 
-  // Ensure session exists
+  // 세션 존재 확인
   let active_chat_id = if let Some(id) = chat_id {
     id
   } else {
-    // Create new session
+    // 새 세션 생성
     let db = db_state.lock().unwrap();
     if let Some(ref conn) = db.conn {
       let chat = create_chat_session(conn, &user_id, Some(question.chars().take(30).collect()))
@@ -508,7 +507,7 @@ pub async fn ask_ai(
     }
   };
 
-  // Save User Message
+  // 사용자 메시지 저장
   {
     let db = db_state.lock().unwrap();
     if let Some(ref conn) = db.conn {
@@ -516,10 +515,10 @@ pub async fn ask_ai(
     }
   }
 
-  // 1. Clean and Embed Question
+  // 1. 질문 정리 및 임베딩
   let cleaned_question = clean_input_text(&question);
 
-  // Use new generate_embedding with token
+  // 토큰을 사용하여 새 generate_embedding 호출
   let query_vec = generate_embedding(&cleaned_question, &token).await?;
   let query_bytes: Vec<u8> = query_vec.iter().flat_map(|f| f.to_le_bytes()).collect();
 
@@ -528,8 +527,8 @@ pub async fn ask_ai(
   {
     let db = db_state.lock().unwrap();
     if let Some(ref conn) = db.conn {
-      // 1. Search DB (DB 함수 사용 - limit 3)
-      // Note: ask_ai uses a limit of 3
+      // 1. DB 검색 (DB 함수 사용 - 제한 3개)
+      // 참고: ask_ai는 상위 3개만 사용
       let raw_results = search_similar_documents_db(conn, &query_bytes, &user_id, 3).unwrap_or_default();
 
       for raw in raw_results {
@@ -541,7 +540,7 @@ pub async fn ask_ai(
           .title_blob
           .and_then(|b| decrypt_content(&user_id, &b).ok());
 
-        // Fetch tags (Use DB function)
+        // 태그 가져오기 (DB 함수 사용)
         let mut tags = Vec::new();
         if let Ok(tags_raw) = get_document_tags_raw(conn, &raw.document_id) {
             for (t_blob, _) in tags_raw {
@@ -558,9 +557,9 @@ pub async fn ask_ai(
           content,
           summary,
           title,
-          group_name: None, // Default for ask_ai
+          group_name: None, // ask_ai에서는 기본값
           tags,
-          // Defaults for ask_ai (lightweight) or use raw data where available
+          // ask_ai 기본값 (가볍게 처리) 또는 가능한 경우 원본 데이터 사용
           parent_id: raw.parent_id,
           document_state: raw.document_state,
           visibility_level: raw.visibility_level,
@@ -581,7 +580,7 @@ pub async fn ask_ai(
 
   let mut context_text = String::new();
   for (i, res) in results.iter().enumerate() {
-    // Clean HTML content before passing to LLM
+    // LLM에 전달하기 전 HTML 내용 정리
     let cleaned_content = clean_input_text(&res.content);
     let safe_content: String = cleaned_content.chars().take(2000).collect();
     let summary_text = res.summary.as_deref().unwrap_or("요약 없음");
@@ -604,7 +603,7 @@ pub async fn ask_ai(
     context_text = "관련 문서를 찾을 수 없습니다".to_string();
   }
 
-  // Gamma 2 prompt format
+  // Gemma 2 프롬프트 형식
   let prompt = format!(
     r#"<start_of_turn>user
 당신은 사용자의 질문에 답변하는 AI 비서입니다.
@@ -637,7 +636,7 @@ pub async fn ask_ai(
   // Focused on `search_local`.
 
   Ok(AskAiResponse {
-    answer: "Use LangGraph for answer".to_string(), // Placeholder if we move logic to front
+    answer: "답변 생성을 위해 LangGraph를 사용하세요".to_string(), // 로직이 프론트로 이동함에 따른 플레이스홀더
     chat_id: active_chat_id,
   })
 }
