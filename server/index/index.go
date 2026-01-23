@@ -40,8 +40,26 @@ type AiJsonResult struct {
 	Analysis []AiAnalysisItem `json:"analysis"`
 }
 
+// OpenAI 호환 /completions API 응답 구조체
+type CompletionChoice struct {
+	Index        int     `json:"index"`
+	Text         string  `json:"text"`
+	FinishReason *string `json:"finish_reason"`
+}
+
+type CompletionUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+}
+
 type CompletionResponse struct {
-	Content string `json:"content"`
+	ID      string             `json:"id"`
+	Object  string             `json:"object"`
+	Created int64              `json:"created"`
+	Model   string             `json:"model"`
+	Choices []CompletionChoice `json:"choices"`
+	Usage   *CompletionUsage   `json:"usage,omitempty"`
 }
 
 // generateCompletion calls llama-server /completion to generate summary and tags
@@ -54,70 +72,76 @@ func generateCompletion(content string) (string, []TagEvidence, error) {
 	// Clean input text (remove markdown, HTML, etc.)
 	cleanedText := cleanInputText(content)
 
+	fmt.Printf("completion cleaned text: %s", cleanedText)
+
 	// Limit text length
-	if len([]rune(cleanedText)) > 3000 {
-		cleanedText = string([]rune(cleanedText)[:3000])
+	if len([]rune(cleanedText)) > 1000 {
+		cleanedText = string([]rune(cleanedText)[:1000])
 	}
 
-	// Gemma 2 prompt format
+	// Gemma 2 prompt format - optimized for compact JSON output
 	prompt := fmt.Sprintf(`<start_of_turn>user
-You are a professional document analyzer specializing in high-density information extraction.
-Your task is to identify the core identity of the provided text and summarize it precisely in Korean.
-Follow these instructions strictly:
-1. Summary: Write a concise one-sentence summary that captures the "core intent" or "main conclusion" of the text. 
-   - Format: "이 문서는 [subject]에 대해 설명합니다."
-2. Tags (Semantic Keywords): Identify exactly 3 essential keywords.
-   - Do NOT use generic category names (e.g., 개요, 특징, 결론).
-   - DO select keywords that represent the "Unique Value Proposition" or "Core Concept" that distinguishes this document from others.
-   - Each tag should be a high-density noun or a short phrase (e.g., "자연선택적 진화" instead of "진화").
-3. Evidences (Contextual Justification): For each tag, extract the most "definition-heavy" verbatim sentence.
-   - The sentence must clearly explain the significance or the reason why the tag was chosen.
-   - Do not truncate or modify the sentence; it must be 100%% verbatim.
-JSON format:{"summary":"...", "analysis":[{"tag":"...", "evidence":"..."}, ...]}
-
+Analyze the document and Output the JSON in a single line without any unnecessary spaces or newlines.
+Rules:
+1. summary: One Korean sentence starting with "이 문서는" describing the core topic.
+2. analysis: Exactly 3 items with tag (specific keyword, not generic) and evidence (verbatim quote from text).
+Output format: {"summary":"...","analysis":[{"tag":"...","evidence":"..."},{"tag":"...","evidence":"..."},{"tag":"...","evidence":"..."}]}
+IMPORTANT: Output ONLY the JSON. No explanation. No extra spaces or newlines.
 Document:
 %s<end_of_turn>
 <start_of_turn>model
 `, cleanedText)
 
-	// Prepare request body with JSON schema
 	reqBody := map[string]interface{}{
+		"model":       "google/gemma-2-2b-it",
 		"prompt":      prompt,
-		"n_predict":   1024,
+		"max_tokens":  512, // reduced - compact JSON needs fewer tokens
 		"temperature": 0.1,
 		"top_k":       40,
 		"top_p":       0.9,
-		"stop":        []string{"<end_of_turn>", "\n\n\n"},
-		"json_schema": map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"summary": map[string]string{"type": "string"},
-				"analysis": map[string]interface{}{
-					"type": "array",
-					"items": map[string]interface{}{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"tag":      map[string]string{"type": "string"},
-							"evidence": map[string]string{"type": "string"},
+		"stop":        []string{"<end_of_turn>", "}\n", "\n\n\n"},
+		// vLLM(OpenAI 호환)의 Structured Outputs 방식
+		"response_format": map[string]interface{}{
+			"type": "json_schema",
+			"json_schema": map[string]interface{}{
+				"name":   "document_analysis", // 스키마 이름 필수
+				"strict": true,                // 모델이 스키마를 엄격히 따르도록 설정
+				"schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"summary": map[string]string{"type": "string"},
+						"analysis": map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{
+								"type": "object",
+								"properties": map[string]interface{}{
+									"tag":      map[string]string{"type": "string"},
+									"evidence": map[string]string{"type": "string"},
+								},
+								"required":             []string{"tag", "evidence"},
+								"additionalProperties": false, // strict mode 필수 설정
+							},
+							"minItems": 3,
+							"maxItems": 3,
 						},
-						"required": []string{"tag", "evidence"},
 					},
-					"minItems": 3,
-					"maxItems": 3,
+					"required":             []string{"summary", "analysis"},
+					"additionalProperties": false, // strict mode 필수 설정
 				},
 			},
-			"required": []string{"summary", "analysis"},
 		},
 	}
 
 	jsonPayload, err := json.Marshal(reqBody)
+	fmt.Printf("DEBUG: Completion request payload: %s\n", string(jsonPayload))
+
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to marshal completion request: %w", err)
 	}
 
 	fmt.Println("DEBUG: Sending completion request to", llamaAddr)
 
-	resp, err := http.Post(llamaAddr+"/completion", "application/json", bytes.NewBuffer(jsonPayload))
+	resp, err := http.Post(llamaAddr+"/completions", "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return "", nil, fmt.Errorf("completion request failed: %w", err)
 	}
@@ -132,16 +156,33 @@ Document:
 		return "", nil, fmt.Errorf("llama server error: %s - %s", resp.Status, string(bodyBytes))
 	}
 
+	// DEBUG: Log raw response to diagnose structure
+	fmt.Printf("DEBUG: Raw completion response: %s\n", string(bodyBytes))
+
 	// Parse response
 	var completionResp CompletionResponse
 	if err := json.Unmarshal(bodyBytes, &completionResp); err != nil {
 		return "", nil, fmt.Errorf("failed to parse completion response: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Completion response (%d chars): %s\n", len(completionResp.Content), completionResp.Content)
+	// choices 배열에서 첫 번째 항목의 text 추출
+	if len(completionResp.Choices) == 0 {
+		return "", nil, fmt.Errorf("completion response has no choices")
+	}
+
+	responseText := strings.TrimSpace(completionResp.Choices[0].Text)
+	fmt.Printf("DEBUG: Completion text (%d chars): [%s]\n", len(responseText), responseText)
+
+	// Check for empty response
+	if responseText == "" {
+		return "", nil, fmt.Errorf("completion response text is empty")
+	}
+
+	// Prepend the JSON prefix since we used prompt prefilling with {"summary":"
+	fmt.Printf("DEBUG: Full JSON to parse: [%s]\n", responseText)
 
 	// Parse AI JSON result
-	summary, tags := parseAiResponse(completionResp.Content)
+	summary, tags := parseAiResponse(responseText)
 
 	return summary, tags, nil
 }
@@ -178,6 +219,7 @@ func cleanInputText(input string) string {
 }
 
 // parseAiResponse extracts summary and tags from AI JSON response
+// Handles incomplete/truncated JSON from token limit cutoffs
 func parseAiResponse(content string) (string, []TagEvidence) {
 	// Try to find JSON in content
 	jsonStr := content
@@ -192,16 +234,38 @@ func parseAiResponse(content string) (string, []TagEvidence) {
 			jsonStr = content[start : start+endIdx]
 		}
 	} else if startIdx := strings.Index(content, "{"); startIdx != -1 {
+		// Find the last closing brace, but if none exists, take from first opening brace
 		if endIdx := strings.LastIndex(content, "}"); endIdx != -1 {
 			jsonStr = content[startIdx : endIdx+1]
+		} else {
+			// No closing brace found - JSON is truncated
+			jsonStr = content[startIdx:]
 		}
 	}
 
 	jsonStr = strings.TrimSpace(jsonStr)
 
+	// Early return for empty JSON
+	if jsonStr == "" {
+		fmt.Printf("DEBUG: No JSON found in AI response\n")
+		return "", nil
+	}
+
+	// Attempt to repair truncated JSON by counting braces/brackets
+	jsonStr = repairTruncatedJSON(jsonStr)
+
+	fmt.Printf("DEBUG: Repaired JSON to parse: [%s]\n", jsonStr)
+
 	var result AiJsonResult
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
 		fmt.Printf("DEBUG: Failed to parse AI JSON: %v\n", err)
+
+		// Try to extract analysis array directly if top-level parse fails
+		tags := extractAnalysisFromTruncated(jsonStr)
+		if len(tags) > 0 {
+			fmt.Printf("DEBUG: Recovered %d tags from truncated JSON\n", len(tags))
+			return "", tags
+		}
 		return "", nil
 	}
 
@@ -214,6 +278,138 @@ func parseAiResponse(content string) (string, []TagEvidence) {
 	}
 
 	return result.Summary, tags
+}
+
+// repairTruncatedJSON attempts to fix incomplete JSON by adding missing closing braces/brackets
+func repairTruncatedJSON(jsonStr string) string {
+	// Count unbalanced braces and brackets
+	openBraces := 0
+	openBrackets := 0
+	inString := false
+	prevChar := rune(0)
+
+	for _, c := range jsonStr {
+		if c == '"' && prevChar != '\\' {
+			inString = !inString
+		}
+		if !inString {
+			switch c {
+			case '{':
+				openBraces++
+			case '}':
+				openBraces--
+			case '[':
+				openBrackets++
+			case ']':
+				openBrackets--
+			}
+		}
+		prevChar = c
+	}
+
+	// If unbalanced, try to close them
+	if openBraces > 0 || openBrackets > 0 {
+		// Remove trailing incomplete content (partial strings, commas, etc.)
+		jsonStr = strings.TrimRight(jsonStr, " \t\n\r,\"")
+
+		// Check if we're in the middle of a string value
+		quoteCount := strings.Count(jsonStr, "\"") - strings.Count(jsonStr, "\\\"")
+		if quoteCount%2 != 0 {
+			// Odd number of quotes - close the string
+			jsonStr += "\""
+		}
+
+		// Add missing closing brackets and braces
+		for i := 0; i < openBrackets; i++ {
+			jsonStr += "]"
+		}
+		for i := 0; i < openBraces; i++ {
+			jsonStr += "}"
+		}
+	}
+
+	return jsonStr
+}
+
+// extractAnalysisFromTruncated tries to extract analysis items even from broken JSON
+func extractAnalysisFromTruncated(jsonStr string) []TagEvidence {
+	var tags []TagEvidence
+
+	// Find analysis array start
+	analysisStart := strings.Index(jsonStr, `"analysis"`)
+	if analysisStart == -1 {
+		return nil
+	}
+
+	// Find the opening bracket of the array
+	bracketStart := strings.Index(jsonStr[analysisStart:], "[")
+	if bracketStart == -1 {
+		return nil
+	}
+
+	analysisContent := jsonStr[analysisStart+bracketStart:]
+
+	// Try to find complete tag-evidence pairs using regex-like approach
+	// Look for patterns like {"tag":"...", "evidence":"..."} or {"evidence":"...", "tag":"..."}
+	currentPos := 0
+	for {
+		objStart := strings.Index(analysisContent[currentPos:], "{")
+		if objStart == -1 {
+			break
+		}
+		objStart += currentPos
+
+		// Find matching closing brace
+		objEnd := findMatchingBrace(analysisContent[objStart:])
+		if objEnd == -1 {
+			break
+		}
+		objEnd += objStart
+
+		objStr := analysisContent[objStart : objEnd+1]
+
+		var item AiAnalysisItem
+		if err := json.Unmarshal([]byte(objStr), &item); err == nil && item.Tag != "" {
+			tags = append(tags, TagEvidence{
+				Tag:      item.Tag,
+				Evidence: item.Evidence,
+			})
+		}
+
+		currentPos = objEnd + 1
+	}
+
+	return tags
+}
+
+// findMatchingBrace finds the position of the closing brace for an object starting with {
+func findMatchingBrace(s string) int {
+	if len(s) == 0 || s[0] != '{' {
+		return -1
+	}
+
+	depth := 0
+	inString := false
+	prevChar := rune(0)
+
+	for i, c := range s {
+		if c == '"' && prevChar != '\\' {
+			inString = !inString
+		}
+		if !inString {
+			if c == '{' {
+				depth++
+			} else if c == '}' {
+				depth--
+				if depth == 0 {
+					return i
+				}
+			}
+		}
+		prevChar = c
+	}
+
+	return -1
 }
 
 func (s *server) IndexDocument(ctx context.Context, req *pb.IndexDocumentRequest) (*pb.IndexDocumentResponse, error) {
@@ -350,12 +546,10 @@ type EmbeddingResponse struct {
 // 임베딩 생성 함수 (Llama Server 연동)
 // 임베딩 생성 함수 (Llama Server 연동)
 func generateEmbedding(text string) ([]float32, error) {
-	// 1. Remove Markdown Images/Media (![alt](url))
-	// Regex: !\[.*?\]\(.*?\) with (?s) to match newlines
-	re := regexp.MustCompile(`(?s)!\[.*?\]\(.*?\)`)
-	cleanedText := re.ReplaceAllString(text, "")
+	// Clean input text (remove markdown, HTML, etc.)
+	cleanedText := cleanInputText(text)
 
-	fmt.Printf("cleaned text: %s", cleanedText)
+	fmt.Printf("embedding cleaned text: %s", cleanedText)
 
 	// 2. Chunking (Thunking)
 	// Context limit is capped at 2048 by model. Safe chunk size: 500 runes (~400 tokens) to fit in 512 batch.
@@ -385,13 +579,13 @@ func generateEmbedding(text string) ([]float32, error) {
 	var count int
 
 	for _, chunk := range chunks {
-		payload := map[string]string{"content": chunk}
+		payload := map[string]string{"input": chunk}
 		jsonPayload, err := json.Marshal(payload)
 		if err != nil {
 			continue // Skip failed chunk? or return error?
 		}
 
-		resp, err := http.Post(llamaAddr+"/embedding", "application/json", bytes.NewBuffer(jsonPayload))
+		resp, err := http.Post(llamaAddr+"/embeddings", "application/json", bytes.NewBuffer(jsonPayload))
 		if err != nil {
 			fmt.Printf("Error requesting embedding for chunk: %v\n", err)
 			continue

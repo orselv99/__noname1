@@ -1,3 +1,25 @@
+//! ==========================================================================
+//! ai.rs - AI 분석 커맨드 (요약, 태그, 임베딩)
+//! ==========================================================================
+//!
+//! C++ 개발자를 위한 설명:
+//! - 문서 내용을 AI로 분석하여 요약 및 키워드(태그) 추출
+//! - 벡터 임베딩 생성으로 유사 문서 검색 지원
+//! - 결과는 암호화되어 로컬 SQLite에 저장
+//!
+//! AI 처리 흐름:
+//! ┌─────────────────────────────────────────────────────────┐
+//! │  1. 텍스트 전처리 (HTML/마크다운 제거)                   │
+//! │  2. 임베딩 생성 (청킹 → 평균 풀링 → L2 정규화)           │
+//! │  3. 요약/태그 생성 (LLM 완성 API)                       │
+//! │  4. 결과 암호화 후 DB 저장                              │
+//! └─────────────────────────────────────────────────────────┘
+//!
+//! 주요 구조체:
+//! - `DocumentTag`: 태그 + 근거 텍스트
+//! - `ExtractInfoResult`: extract_info 커맨드 반환값
+//! - `DocumentState`, `VisibilityLevel`, `GroupType`: 문서 상태 열거형
+//! ==========================================================================
 // AI commands module for document processing
 use rusqlite::Connection;
 use std::sync::Mutex;
@@ -15,64 +37,105 @@ use crate::config;
 // Types and Responses
 // ============================================================================
 
-// llama.cpp /embedding response: [{"index": 0, "embedding": [[...floats...]]}]
+// ============================================================================
+// 임베딩 API 응답 구조체
+// ============================================================================
+
+/// llama.cpp /embedding 엔드포인트 응답 항목
+///
+/// 서버 응답 형식: [{"index": 0, "embedding": [[...float32...]]}]
+/// 2D 배열 형식으로 반환됨 (llama.cpp 특성)
 #[derive(serde::Deserialize, Debug)]
 struct LlamaEmbeddingItem {
-  pub index: i32,
-  pub embedding: Vec<Vec<f32>>, // 2D array
+    /// 챭크 인덱스 (0부터 시작)
+    #[allow(dead_code)]
+    pub index: i32,
+    /// 임베딩 벡터 (2D 배열 - 첫 번째 요소가 실제 벡터)
+    pub embedding: Vec<Vec<f32>>,
 }
 
-// Alias for response array
+/// 임베딩 API 응답 타입 별칭
 type LlamaEmbeddingResponse = Vec<LlamaEmbeddingItem>;
 
+// ============================================================================
+// AI 분석 결과 구조체
+// ============================================================================
+
+/// 문서 태그 (키워드 + 근거)
+///
+/// AI가 추출한 핵심 키워드와 해당 키워드의 근거가 되는 원문
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct DocumentTag {
-  pub tag: String,
-  pub evidence: Option<String>,
+    /// 태그 이름 (예: "자연선택", "진화론")
+    pub tag: String,
+    /// 근거 텍스트: 원문에서 발취한 문장
+    pub evidence: Option<String>,
 }
 
+/// extract_info 커맨드 반환값
+///
+/// AI 분석 결과를 프론트엔드에 전달
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ExtractInfoResult {
-  pub document_id: String,
-  pub summary: String,
-  pub tags: Vec<DocumentTag>,
+    /// 생성/업데이트된 문서 ID
+    pub document_id: String,
+    /// AI 생성 요약 (1문장)
+    pub summary: String,
+    /// AI 추출 태그 목록 (3개)
+    pub tags: Vec<DocumentTag>,
 }
 
+/// AI JSON 응답 내 개별 분석 항목 (내부용)
 #[derive(serde::Deserialize)]
 struct AiJsonItem {
-  tag: String,
-  evidence: String,
+    tag: String,
+    evidence: String,
 }
 
+/// AI JSON 응답 전체 구조 (내부용)
 #[derive(serde::Deserialize)]
 struct AiJsonResult {
-  summary: String,
-  analysis: Vec<AiJsonItem>,
+    summary: String,
+    analysis: Vec<AiJsonItem>,
 }
 
-// Encryption logic moved to crypto.rs
 // ============================================================================
-// Embedding Helpers
+// 임베딩 변환 헬퍼 함수
 // ============================================================================
 
-/// Convert Vec<f32> to bytes for BLOB storage
+/// 임베딩 벡터를 바이트 배열로 변환 (DB BLOB 저장용)
+///
+/// float32 배열을 little-endian 바이트로 직렬화
+/// C++ 비교: memcpy(벡터, &float_arr, sizeof(float) * len)
 fn embedding_to_bytes(embedding: &[f32]) -> Vec<u8> {
-  embedding.iter().flat_map(|f| f.to_le_bytes()).collect()
+    embedding.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
-/// Convert bytes back to Vec<f32>
+/// 바이트 배열을 임베딩 벡터로 변환 (DB BLOB 읽기용)
+///
+/// little-endian 바이트를 float32 배열로 역직렬화
 pub fn bytes_to_embedding(bytes: &[u8]) -> Vec<f32> {
-  bytes
-    .chunks_exact(4)
-    .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-    .collect()
+    bytes
+        .chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect()
 }
 
 // ============================================================================
-// AI Response Parsing
+// AI 응답 파싱
 // ============================================================================
 
-/// Parse AI response to extract summary and tags with evidence
+/// AI 응답에서 요약과 태그 추출
+///
+/// LLM 응답에서 JSON을 파싱하여 요약과 태그 배열 추출
+/// 마크다운 코드 블록 내 JSON 또는 외부 중괄호 JSON 파싱 시도
+///
+/// # 매개변수
+/// - `content`: LLM 원시 응답 텍스트
+/// - `_original_text`: 원문 (미사용 - 향후 폴백용)
+///
+/// # 반환값
+/// (summary, tags) 튜플
 fn parse_ai_response(content: &str, _original_text: &str) -> (String, Vec<DocumentTag>) {
   // 1. Try to find markdown code block first
   let json_str = if let Some(start_marker) = content.find("```") {

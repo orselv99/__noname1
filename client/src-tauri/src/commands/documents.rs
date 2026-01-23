@@ -1,3 +1,25 @@
+//! ==========================================================================
+//! documents.rs - 문서 CRUD 커맨드
+//! ==========================================================================
+//!
+//! C++ 개발자를 위한 설명:
+//! - 문서 저장/목록/조회/삭제/복원 등 핵심 문서 관리 기능
+//! - 모든 민감 데이터는 AES-256-GCM으로 암호화하여 저장
+//! - 서버 동기화: 발행(Published) 상태에서만 서버에 RAG 데이터 전송
+//!
+//! 주요 기능:
+//! - `save_document`: 문서 저장/수정 + 리비전 생성 + 서버 동기화
+//! - `list_documents`: 그룹별/증분 동기화 문서 목록
+//! - `get_document`: 단일 문서 조회
+//! - `delete_document`: 소프트 삭제 (휴지통으로)
+//! - `restore_document`: 휴지통에서 복원
+//! - `empty_trash`: 영구 삭제
+//!
+//! 열거형:
+//! - `DocumentState`: Draft(1), Feedback(2), Published(3)
+//! - `VisibilityLevel`: Hidden(1), Metadata(2), Snippet(3), Public(4)
+//! - `GroupType`: Department(0), Project(1), Private(2)
+//! ==========================================================================
 use crate::commands::auth::AuthState;
 use crate::config;
 use crate::crypto::{decrypt_content, encrypt_content};
@@ -9,82 +31,177 @@ use std::sync::Mutex;
 use tauri::State;
 use uuid::Uuid;
 
+// ============================================================================
+// 열거형 정의 (서버 acl.proto와 동기화)
+// ============================================================================
+
+/// 문서 상태
+///
+/// 서버와 동기화: server/pb/acl.proto의 DocumentState와 동일
+/// #[repr(i32)]: 메모리 레이아웃을 i32로 고정 (C++ enum class : int 유사)
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
 #[repr(i32)]
 pub enum DocumentState {
-  #[default]
-  Draft = 1,
-  Feedback = 2,
-  Published = 3,
+    /// 초안 (1): 로컬에만 존재, 서버 검색 불가
+    #[default]
+    Draft = 1,
+    /// 피드백 (2): 검토 중
+    Feedback = 2,
+    /// 발행됨 (3): 서버에 RAG 데이터 동기화, 검색 가능
+    Published = 3,
 }
 
+/// 문서 공개 수준
+///
+/// 다른 사용자가 검색 시 얼마나 많은 정보를 볼 수 있는지 결정
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
 #[repr(i32)]
 pub enum VisibilityLevel {
-  #[default]
-  Hidden = 1,
-  Metadata = 2,
-  Snippet = 3,
-  Public = 4,
+    /// 숨김 (1): 검색 결과에 노출 안 됨
+    #[default]
+    Hidden = 1,
+    /// 메타데이터 (2): 제목만 노출
+    Metadata = 2,
+    /// 스니펫 (3): 제목 + 요약 노출
+    Snippet = 3,
+    /// 공개 (4): 전체 내용 노출
+    Public = 4,
 }
 
+/// 문서 그룹 유형
+///
+/// 문서가 속한 조직 단위를 구분
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
 #[repr(i32)]
 pub enum GroupType {
-  Department = 0,
-  Project = 1,
-  #[default]
-  Private = 2,
+    /// 부서 (0): 회사 조직도 기반
+    Department = 0,
+    /// 프로젝트 (1): 프로젝트 팀 기반
+    Project = 1,
+    /// 개인 (2): 본인만 접근 가능 (서버 동기화 안 됨)
+    #[default]
+    Private = 2,
 }
 
+// ============================================================================
+// DTO 구조체 (Data Transfer Object)
+// ============================================================================
+
+/// 문서 태그 (AI 추출 또는 사용자 지정)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DocumentTag {
-  pub tag: String,
-  pub evidence: Option<String>,
+    /// 태그 이름 (예: "자연선택", "진화론")
+    pub tag: String,
+    /// 근거 텍스트: 원문에서 발취한 문장
+    pub evidence: Option<String>,
 }
 
+/// 문서 객체 (프론트엔드와 교환되는 전체 문서 정보)
+///
+/// 주의: 프론트엔드로 전달 시 복호화된 평문 상태
+/// DB 저장 시에는 암호화된 BLOB 상태
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Document {
-  pub id: String,
-  pub user_id: String,
-  pub creator_name: Option<String>,
-  pub title: String,
-  pub content: String,
-  pub document_state: i32,
-  pub visibility_level: i32,
-  pub group_type: i32,
-  pub group_id: Option<String>,
-  pub parent_id: Option<String>, // Added for hierarchy
-  pub summary: Option<String>,
-  pub created_at: Option<String>,
-  pub updated_at: Option<String>,
-  pub last_synced_at: Option<i64>, // Renamed from updated_at_ts
-  pub accessed_at: Option<String>,
-  pub size: Option<String>,
-  pub is_favorite: bool,
-  pub tags: Option<Vec<DocumentTag>>,
-  pub deleted_at: Option<String>, // Added for Soft Delete
-  pub media_size: Option<String>, // Added for Media Size Persistence
-  pub version: i32,
+    /// 문서 고유 ID (UUID v4)
+    pub id: String,
+    /// 소유자 ID
+    pub user_id: String,
+    /// 작성자 이름 (users 테이블에서 JOIN)
+    pub creator_name: Option<String>,
+    /// 제목 (암호화 대상)
+    pub title: String,
+    /// 본문 HTML (암호화 대상)
+    pub content: String,
+    /// 문서 상태 (DocumentState 열거형 값)
+    pub document_state: i32,
+    /// 공개 수준 (VisibilityLevel 열거형 값)
+    pub visibility_level: i32,
+    /// 그룹 유형 (GroupType 열거형 값)
+    pub group_type: i32,
+    /// 그룹 ID (부서/프로젝트 ID, Private일 경우 None)
+    pub group_id: Option<String>,
+    /// 상위 폴더 ID (계층 구조용)
+    pub parent_id: Option<String>,
+    /// 요약 (사용자 입력 또는 AI 생성, 암호화 대상)
+    pub summary: Option<String>,
+    /// 생성 시간 (ISO 8601, 암호화 대상)
+    pub created_at: Option<String>,
+    /// 수정 시간 (ISO 8601, 암호화 대상)
+    pub updated_at: Option<String>,
+    /// 마지막 동기화 타임스탬프 (평문, 증분 동기화용)
+    pub last_synced_at: Option<i64>,
+    /// 마지막 접근 시간 (암호화 대상)
+    pub accessed_at: Option<String>,
+    /// 텍스트 크기 (bytes, 암호화 대상)
+    pub size: Option<String>,
+    /// 즐겨찾기 여부
+    pub is_favorite: bool,
+    /// 태그 목록
+    pub tags: Option<Vec<DocumentTag>>,
+    /// 삭제 시간 (소프트 삭제 - 휴지통)
+    pub deleted_at: Option<String>,
+    /// 미디어 크기 (Base64 이미지 합계, 암호화 대상)
+    pub media_size: Option<String>,
+    /// 버전 번호 (리비전 추적용)
+    pub version: i32,
 }
 
+/// 문서 저장 요청 DTO
+///
+/// 프론트엔드에서 invoke('save_document', { req: {...} })로 전달
 #[derive(Deserialize)]
 pub struct SaveDocumentRequest {
-  pub id: Option<String>,
-  pub title: String,
-  pub content: String,
-  pub summary: Option<String>,
-  pub group_type: i32,
-  pub group_id: Option<String>,
-  pub parent_id: Option<String>, // Added for hierarchy
-  pub document_state: i32,
-  pub visibility_level: i32,
-  pub is_favorite: Option<bool>,
-  pub version: Option<i32>,
-  pub tags: Option<Vec<DocumentTag>>,
-  pub creator_name: Option<String>,
+    /// 문서 ID (None이면 새 문서 생성, Some이면 업데이트)
+    pub id: Option<String>,
+    /// 제목 (평문 - Rust에서 암호화)
+    pub title: String,
+    /// 본문 HTML (평문 - Rust에서 암호화)
+    pub content: String,
+    /// 사용자 요약 (선택적)
+    pub summary: Option<String>,
+    /// 그룹 유형 (0=부서, 1=프로젝트, 2=개인)
+    pub group_type: i32,
+    /// 그룹 ID (부서/프로젝트 UUID)
+    pub group_id: Option<String>,
+    /// 상위 폴더 ID
+    pub parent_id: Option<String>,
+    /// 문서 상태 (1=초안, 2=피드백, 3=발행)
+    pub document_state: i32,
+    /// 공개 수준 (1=숨김, 2=메타, 3=스니펫, 4=공개)
+    pub visibility_level: i32,
+    /// 즐겨찾기 여부
+    pub is_favorite: Option<bool>,
+    /// 버전 번호 (리비전 생성용)
+    pub version: Option<i32>,
+    /// 태그 목록
+    pub tags: Option<Vec<DocumentTag>>,
+    /// 작성자 이름 (리비전에 저장)
+    pub creator_name: Option<String>,
 }
 
+// ============================================================================
+// Tauri 커맨드: 문서 저장
+// ============================================================================
+
+/// 문서 저장/수정 커맨드
+///
+/// # 처리 흐름
+/// 1. 인증 확인 → user_id 추출
+/// 2. 모든 민감 필드 암호화 (제목, 본문, 요약, 날짜 등)
+/// 3. DB에 UPSERT (INSERT ... ON CONFLICT DO UPDATE)
+/// 4. 태그 저장 (기존 태그 삭제 → 새로 삽입)
+/// 5. 리비전 생성 (Private 아니고 version > 0일 때)
+/// 6. 서버 동기화 (Published, 비Private일 때 RAG 데이터 전송)
+///
+/// # 서버 동기화 실패 시
+/// - 문서 상태를 Draft로 롤백 + 버전 번호 감소
+///
+/// # 프론트엔드 호출 예시
+/// ```typescript
+/// const doc = await invoke('save_document', {
+///   req: { title: '제목', content: '<p>내용</p>', documentState: 3, ... }
+/// });
+/// ```
 #[tauri::command]
 pub async fn save_document(
   auth_state: State<'_, Mutex<AuthState>>,

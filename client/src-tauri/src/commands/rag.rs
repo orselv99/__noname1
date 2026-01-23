@@ -1,3 +1,26 @@
+//! ==========================================================================
+//! rag.rs - RAG 챗봇 및 검색 커맨드
+//! ==========================================================================
+//!
+//! C++ 개발자를 위한 설명:
+//! - RAG(Retrieval Augmented Generation): 문서 검색 기반 AI 응답
+//! - 벡터 유사도 검색 (sqlite-vec) + 키워드 부스팅 하이브리드 검색
+//! - 채팅 세션 및 메시지 암호화 저장
+//!
+//! 주요 기능:
+//! - `search_local`: 로컬 DB에서 유사 문서 검색 (코사인 거리)
+//! - `ask_ai`: RAG 질의응답 (검색 + LLM 생성)
+//! - `create_new_chat`: 새 채팅 세션 생성
+//! - `get_rag_chats`: 채팅 목록 조회
+//! - `get_rag_messages`: 채팅 메시지 조회
+//! - `add_rag_message`: 메시지 추가
+//! - `delete_rag_chat`: 채팅 삭제
+//! - `update_chat_title`: 채팅 제목 수정
+//!
+//! 검색 알고리즘:
+//! - 코사인 거리 기반 벡터 검색 (임계값: 0.4)
+//! - 키워드 매칭 부스트 (제목: -0.15, 본문: -0.08)
+//! ==========================================================================
 use crate::commands::auth::AuthState;
 use crate::config;
 use crate::crypto::{decrypt_content, encrypt_content};
@@ -9,38 +32,68 @@ use std::sync::Mutex;
 use tauri::State;
 use uuid::Uuid;
 
-// Re-defining embedding struct to match ai.rs
+// ============================================================================
+// 임베딩 및 채팅 구조체
+// ============================================================================
+
+/// llama.cpp 임베딩 응답 구조체 (ai.rs와 동일)
 #[derive(serde::Deserialize, Debug)]
 struct LlamaEmbeddingItem {
-  pub embedding: Vec<Vec<f32>>,
+    pub embedding: Vec<Vec<f32>>,
 }
 
 type LlamaEmbeddingResponse = Vec<LlamaEmbeddingItem>;
 
+/// RAG 채팅 세션
+///
+/// 사용자의 대화 세션 정보 (제목, 생성/수정 시간)
+/// 모든 필드는 DB에서 암호화되어 저장됨
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct RagChat {
-  pub id: String,
-  pub title: String,
-  pub created_at: String,
-  pub updated_at: String,
+    /// 채팅 세션 ID (UUID v4)
+    pub id: String,
+    /// 채팅 제목 (암호화 대상)
+    pub title: String,
+    /// 생성 시간 (ISO 8601, 암호화 대상)
+    pub created_at: String,
+    /// 수정 시간 (ISO 8601, 암호화 대상)
+    pub updated_at: String,
 }
 
+/// RAG 메시지
+///
+/// 채팅 세션 내 개별 메시지 (사용자/AI 응답)
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct RagMessage {
-  pub id: String,
-  pub chat_id: String,
-  pub role: String,
-  pub content: String,
-  pub timestamp: i64,
+    /// 메시지 ID (UUID v4)
+    pub id: String,
+    /// 소속 채팅 세션 ID
+    pub chat_id: String,
+    /// 역할: "user" 또는 "assistant" (암호화 대상)
+    pub role: String,
+    /// 메시지 내용 (암호화 대상)
+    pub content: String,
+    /// 정렬용 타임스탬프 (평문 - 페이지네이션용)
+    pub timestamp: i64,
 }
 
+/// ask_ai 커맨드 반환값
 #[derive(serde::Serialize, Debug)]
 pub struct AskAiResponse {
-  pub answer: String,
-  pub chat_id: String,
+    /// AI 응답 내용
+    pub answer: String,
+    /// 사용된 채팅 세션 ID (새로 생성되었을 수 있음)
+    pub chat_id: String,
 }
 
-/// Naive clean up of HTML and Markdown syntax
+// ============================================================================
+// 텍스트 전처리 함수
+// ============================================================================
+
+/// HTML/마크다운 정리 (AI 입력용)
+///
+/// HTML 태그, 마크다운 기호, 연속 공백 제거
+/// AI 임베딩 및 프롬프트에 순수 텍스트만 전달
 fn clean_input_text(input: &str) -> String {
   let mut no_html = String::with_capacity(input.len());
   let mut inside_tag = false;
@@ -83,7 +136,18 @@ fn clean_input_text(input: &str) -> String {
   final_res.trim().to_string()
 }
 
-/// Helper to generate embedding for a string using Server API
+// ============================================================================
+// 임베딩 생성 헬퍼
+// ============================================================================
+
+/// 서버 API로 임베딩 생성
+///
+/// 텍스트를 서버에 전송하여 벡터 임베딩 생성
+/// 로컬 LLM 대신 서버 API 사용 (사이드카 비활성화 시)
+///
+/// # 매개변수
+/// - `text`: 임베딩할 텍스트
+/// - `token`: JWT 인증 토큰
 async fn generate_embedding(text: &str, token: &str) -> Result<Vec<f32>, String> {
   let client = reqwest::Client::new();
   let url = format!("{}/api/v1/embedding", config::get_api_url());
@@ -132,38 +196,71 @@ async fn generate_embedding(text: &str, token: &str) -> Result<Vec<f32>, String>
   Err("No embedding found in response".to_string())
 }
 
-/// Search result struct
+// ============================================================================
+// 검색 결과 구조체
+// ============================================================================
+
+/// 벡터 검색 결과
+///
+/// search_local 커맨드 반환값
+/// 코사인 거리 + 키워드 부스팅으로 유사도 계산
 #[derive(Debug, serde::Serialize)]
 pub struct SearchResult {
-  document_id: String,
-  distance: f32,
-  similarity: f32, // Similarity percentage (0-100)
-  content: String,
-  summary: Option<String>,
-  title: Option<String>,
-  tags: Vec<String>,
-  // Additional metadata
-  parent_id: Option<String>,
-  document_state: i32,
-  visibility_level: i32,
-  group_type: i32,
-  group_id: Option<String>,
-  group_name: Option<String>,
-  size: Option<String>,
-  media_size: Option<String>,
-  current_version: i32,
-  version: i32,
-  is_favorite: bool,
-  created_at: Option<String>,
-  updated_at: Option<String>,
-  accessed_at: Option<String>,
+    /// 문서 ID
+    document_id: String,
+    /// 코사인 거리 (0.0 = 동일, 2.0 = 반대)
+    distance: f32,
+    /// 유사도 퍼센트 (0-100, 거리에서 변환)
+    similarity: f32,
+    /// 문서 내용 (복호화됨)
+    content: String,
+    /// AI 생성 요약
+    summary: Option<String>,
+    /// 문서 제목
+    title: Option<String>,
+    /// 태그 목록
+    tags: Vec<String>,
+    /// 상위 폴더 ID
+    parent_id: Option<String>,
+    /// 문서 상태 (1=초안, 2=피드백, 3=발행)
+    document_state: i32,
+    /// 공개 수준
+    visibility_level: i32,
+    /// 그룹 유형 (0=부서, 1=프로젝트, 2=개인)
+    group_type: i32,
+    /// 그룹 ID
+    group_id: Option<String>,
+    /// 그룹 이름 (JOIN으로 해석)
+    group_name: Option<String>,
+    /// 텍스트 크기
+    size: Option<String>,
+    /// 미디어 크기
+    media_size: Option<String>,
+    /// 현재 버전
+    current_version: i32,
+    /// 리비전 버전
+    version: i32,
+    /// 즐겨찾기 여부
+    is_favorite: bool,
+    /// 생성 시간
+    created_at: Option<String>,
+    /// 수정 시간
+    updated_at: Option<String>,
+    /// 접근 시간
+    accessed_at: Option<String>,
 }
 
-/// Helper to create a new chat session
+// ============================================================================
+// 채팅 세션/메시지 헬퍼 함수
+// ============================================================================
+
+/// 새 채팅 세션 생성
+///
+/// 제목, 생성/수정 시간을 암호화하여 DB에 저장
 fn create_chat_session(
-  conn: &Connection,
-  user_id: &str,
-  title: Option<String>,
+    conn: &Connection,
+    user_id: &str,
+    title: Option<String>,
 ) -> Result<RagChat, String> {
   let id = Uuid::new_v4().to_string();
   let now = chrono::Utc::now();

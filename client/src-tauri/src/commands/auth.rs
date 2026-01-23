@@ -1,3 +1,13 @@
+//! ==========================================================================
+//! auth.rs - 인증 커맨드 (로그인, 로그아웃, 비밀번호, 테넌트)
+//! ==========================================================================
+//!
+//! C++ 개발자를 위한 설명:
+//! - 프론트엔드에서 invoke('login', { email, password })로 호출
+//! - 온라인 로그인 실패 시 오프라인 캐시로 폴백
+//! - 멀티테넌트: 하나의 이메일이 여러 조직에 속할 수 있음
+//! ==========================================================================
+
 use crate::config;
 use crate::database::{self, CachedUser, DatabaseState};
 
@@ -5,391 +15,484 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
+// ============================================================================
+// 인증 상태 구조체
+// ============================================================================
+
+/// 앱 전역 인증 상태
+///
+/// Tauri의 State<Mutex<AuthState>>로 관리됨
+/// 로그인 성공 시 토큰, 테넌트, 사용자 정보 저장
+///
+/// C++ 비교: 싱글톤 세션 매니저
 #[derive(Default)]
 pub struct AuthState {
-  pub token: Option<String>,
-  pub tenant_id: Option<String>,
-  pub email: Option<String>,
-  pub user_id: Option<String>,
-  pub username: Option<String>,
+    /// JWT 액세스 토큰 (오프라인 모드에서는 None)
+    pub token: Option<String>,
+    /// 현재 로그인한 테넌트(조직) ID
+    pub tenant_id: Option<String>,
+    /// 로그인한 이메일
+    pub email: Option<String>,
+    /// 사용자 고유 ID (UUID)
+    pub user_id: Option<String>,
+    /// 표시 이름
+    pub username: Option<String>,
 }
 
+// ============================================================================
+// 요청/응답 DTO (Data Transfer Object)
+// ============================================================================
+
+/// 로그인 API 요청 본문
 #[derive(Serialize, Deserialize)]
 struct LoginRequest {
-  email: String,
-  password: String,
+    email: String,
+    password: String,
 }
 
+/// 로그인 API 응답
+///
+/// 서버 응답과 오프라인 캐시 모두 이 구조체로 통일
+/// #[serde(default)]: 필드가 없으면 기본값 사용
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LoginResponse {
-  pub access_token: String,
-  #[serde(default)]
-  pub force_change_password: bool,
-  #[serde(default)]
-  pub tenant_id: String,
-  #[serde(default)]
-  pub role: String,
-  #[serde(default)]
-  pub is_offline: bool,
-  // Extended user info from server
-  #[serde(default)]
-  pub user_id: String,
-  #[serde(default)]
-  pub username: String,
-  #[serde(default)]
-  pub position_id: Option<String>,
-  #[serde(default)]
-  pub position_name: Option<String>,
-  #[serde(default)]
-  pub phone_numbers: Vec<String>,
-  #[serde(default)]
-  pub contact: Option<String>,
-  #[serde(default)]
-  pub birthday: Option<String>,
-  #[serde(default)]
-  pub created_at: Option<String>,
-  #[serde(default)]
-  pub updated_at: Option<String>,
-  #[serde(default)]
-  pub department: Option<DepartmentInfo>,
-  #[serde(default)]
-  pub joined_projects: Vec<ProjectInfo>,
+    /// JWT 액세스 토큰
+    pub access_token: String,
+    /// 비밀번호 변경 필요 여부 (첫 로그인, 관리자 리셋 등)
+    #[serde(default)]
+    pub force_change_password: bool,
+    /// 테넌트(조직) ID
+    #[serde(default)]
+    pub tenant_id: String,
+    /// 역할 (user, admin 등)
+    #[serde(default)]
+    pub role: String,
+    /// 오프라인 로그인 여부
+    #[serde(default)]
+    pub is_offline: bool,
+
+    // 확장 사용자 정보
+    #[serde(default)]
+    pub user_id: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub position_id: Option<String>,
+    #[serde(default)]
+    pub position_name: Option<String>,
+    #[serde(default)]
+    pub phone_numbers: Vec<String>,
+    #[serde(default)]
+    pub contact: Option<String>,
+    #[serde(default)]
+    pub birthday: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub department: Option<DepartmentInfo>,
+    #[serde(default)]
+    pub joined_projects: Vec<ProjectInfo>,
 }
 
+/// 부서 정보
 #[derive(Serialize, Deserialize, Clone)]
 pub struct DepartmentInfo {
-  pub id: String,
-  pub name: String,
-  #[serde(rename = "default_visibility_level")]
-  pub visibility: i32, // Mapped from default_visibility_level
+    pub id: String,
+    pub name: String,
+    /// 기본 공개 수준 (#[serde(rename)]: JSON 필드명 매핑)
+    #[serde(rename = "default_visibility_level")]
+    pub visibility: i32,
 }
 
+/// 비밀번호 변경 요청
 #[derive(Serialize, Deserialize)]
 struct ChangePasswordRequest {
-  current_password: String,
-  new_password: String,
+    current_password: String,
+    new_password: String,
 }
 
-// Tenant lookup response types
+/// 테넌트 정보 (이메일로 조회 시)
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TenantInfo {
-  pub tenant_id: String,
-  pub name: String,
+    pub tenant_id: String,
+    pub name: String,
 }
 
+/// 프로젝트 정보
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ProjectInfo {
-  pub id: String,
-  pub name: String,
-  #[serde(default, rename = "default_visibility_level")]
-  pub visibility: i32,
+    pub id: String,
+    pub name: String,
+    #[serde(default, rename = "default_visibility_level")]
+    pub visibility: i32,
 }
 
+/// 테넌트 조회 응답 (내부용)
 #[derive(Serialize, Deserialize)]
 struct LookupTenantResponse {
-  tenants: Vec<TenantInfo>,
+    tenants: Vec<TenantInfo>,
 }
 
+// ============================================================================
+// Tauri 커맨드: 로그인
+// ============================================================================
+
+/// 로그인 커맨드
+///
+/// # 동작 흐름
+/// 1. 서버에 로그인 요청
+/// 2. 성공: 상태 업데이트 + 캐시 저장
+/// 3. 실패: 오프라인 캐시로 폴백 시도
+///
+/// # 매개변수
+/// - `app`: Tauri 앱 핸들
+/// - `state`: 인증 상태 (Mutex로 보호)
+/// - `db_state`: 데이터베이스 상태
+/// - `email`: 로그인 이메일
+/// - `password`: 비밀번호
+/// - `tenant_id`: 선택적 테넌트 ID (멀티테넌트 환경)
+///
+/// # 프론트엔드 호출 예시
+/// ```typescript
+/// const result = await invoke('login', {
+///   email: 'user@example.com',
+///   password: 'secret',
+///   tenantId: 'org-123'  // 선택적
+/// });
+/// ```
 #[tauri::command]
 pub async fn login(
-  app: AppHandle,
-  state: State<'_, Mutex<AuthState>>,
-  db_state: State<'_, Mutex<DatabaseState>>,
-  email: String,
-  password: String,
-  tenant_id: Option<String>, // Now accepts optional tenant_id
+    app: AppHandle,
+    state: State<'_, Mutex<AuthState>>,
+    db_state: State<'_, Mutex<DatabaseState>>,
+    email: String,
+    password: String,
+    tenant_id: Option<String>,
 ) -> Result<LoginResponse, String> {
-  let client = reqwest::Client::new();
+    let client = reqwest::Client::new();
 
-  // Build login request with tenant_id header if provided
-  let mut request = client
-    .post(&format!("{}/api/v1/auth/login", config::get_api_url()))
-    .json(&LoginRequest {
-      email: email.clone(),
-      password: password.clone(),
-    });
-
-  if let Some(ref tid) = tenant_id {
-    request = request.header("X-Tenant-ID", tid);
-  }
-
-  let online_result = request.send().await;
-
-  match online_result {
-    Ok(res) if res.status().is_success() => {
-      // Online login successful
-      let login_res: LoginResponse = res.json().await.map_err(|e| e.to_string())?;
-
-      // Update State
-      {
-        let mut auth = state.lock().unwrap();
-        auth.token = Some(login_res.access_token.clone());
-        auth.tenant_id = Some(login_res.tenant_id.clone());
-        auth.email = Some(email.clone());
-        auth.user_id = Some(login_res.user_id.clone());
-        auth.username = Some(login_res.username.clone());
-      }
-
-      // Cache user for offline use
-      {
-        let db = db_state.lock().unwrap();
-        if let Some(ref conn) = db.conn {
-          // Convert phone_numbers Vec to comma-separated string for SQLite
-          let phone_numbers_str = if login_res.phone_numbers.is_empty() {
-            None
-          } else {
-            Some(login_res.phone_numbers.join(","))
-          };
-
-          let cached_user = CachedUser {
-            id: login_res.user_id.clone(),
+    // 로그인 요청 빌드 (테넌트 ID 헤더 포함)
+    let mut request = client
+        .post(&format!("{}/api/v1/auth/login", config::get_api_url()))
+        .json(&LoginRequest {
             email: email.clone(),
-            password_hash: String::new(), // Will be hashed in save_user
-            username: login_res.username.clone(),
-            tenant_id: login_res.tenant_id.clone(),
-            role: login_res.role.clone(),
-            position_id: login_res.position_id.clone(),
-            department_id: login_res.department.as_ref().map(|d| d.id.clone()),
-            contact: login_res.contact.clone(),
-            birthday: login_res.birthday.clone(),
-            phone_numbers: phone_numbers_str,
-            force_change_password: login_res.force_change_password,
-            created_at: login_res.created_at.clone(),
-            updated_at: login_res.updated_at.clone(),
-          };
+            password: password.clone(),
+        });
 
-          if let Err(e) = database::save_user(conn, &cached_user, &password) {
-            println!("Warning: Failed to cache user: {}", e);
-          }
+    if let Some(ref tid) = tenant_id {
+        request = request.header("X-Tenant-ID", tid);
+    }
+
+    let online_result = request.send().await;
+
+    match online_result {
+        // 온라인 로그인 성공
+        Ok(res) if res.status().is_success() => {
+            let login_res: LoginResponse = res.json().await.map_err(|e| e.to_string())?;
+
+            // 전역 상태 업데이트
+            {
+                let mut auth = state.lock().unwrap();
+                auth.token = Some(login_res.access_token.clone());
+                auth.tenant_id = Some(login_res.tenant_id.clone());
+                auth.email = Some(email.clone());
+                auth.user_id = Some(login_res.user_id.clone());
+                auth.username = Some(login_res.username.clone());
+            }
+
+            // 오프라인 캐시에 저장 (다음 번 오프라인 로그인용)
+            {
+                let db = db_state.lock().unwrap();
+                if let Some(ref conn) = db.conn {
+                    let phone_numbers_str = if login_res.phone_numbers.is_empty() {
+                        None
+                    } else {
+                        Some(login_res.phone_numbers.join(","))
+                    };
+
+                    let cached_user = CachedUser {
+                        id: login_res.user_id.clone(),
+                        email: email.clone(),
+                        password_hash: String::new(), // save_user에서 해싱
+                        username: login_res.username.clone(),
+                        tenant_id: login_res.tenant_id.clone(),
+                        role: login_res.role.clone(),
+                        position_id: login_res.position_id.clone(),
+                        department_id: login_res.department.as_ref().map(|d| d.id.clone()),
+                        contact: login_res.contact.clone(),
+                        birthday: login_res.birthday.clone(),
+                        phone_numbers: phone_numbers_str,
+                        force_change_password: login_res.force_change_password,
+                        created_at: login_res.created_at.clone(),
+                        updated_at: login_res.updated_at.clone(),
+                    };
+
+                    if let Err(e) = database::save_user(conn, &cached_user, &password) {
+                        println!("Warning: 사용자 캐시 실패: {}", e);
+                    }
+                }
+            }
+
+            Ok(login_res)
         }
-      }
 
-      Ok(login_res)
-    }
-    Ok(res) => {
-      // Online login failed (wrong credentials, etc.)
-      let err_text = res.text().await.unwrap_or("Unknown error".to_string());
+        // 온라인 로그인 실패 (인증 오류 등)
+        Ok(res) => {
+            let err_text = res.text().await.unwrap_or("Unknown error".to_string());
+            // 오프라인 폴백 시도
+            try_offline_login(&app, &state, &db_state, &email, &password, Some(&err_text))
+        }
 
-      // Try offline login as fallback
-      try_offline_login(&app, &state, &db_state, &email, &password, Some(&err_text))
+        // 네트워크 오류
+        Err(e) => {
+            println!("Warning: 온라인 로그인 실패 (네트워크): {}", e);
+            try_offline_login(&app, &state, &db_state, &email, &password, None)
+        }
     }
-    Err(e) => {
-      // Network error - try offline login
-      println!("Warning: Online login failed (network): {}", e);
-      try_offline_login(&app, &state, &db_state, &email, &password, None)
-    }
-  }
 }
 
-/// Attempt offline login using cached credentials
+// ============================================================================
+// 오프라인 로그인 헬퍼
+// ============================================================================
+
+/// 오프라인 캐시로 로그인 시도
+///
+/// 로컬 SQLite에 저장된 자격 증명으로 검증
 fn try_offline_login(
-  app: &AppHandle,
-  state: &State<'_, Mutex<AuthState>>,
-  db_state: &State<'_, Mutex<DatabaseState>>,
-  email: &str,
-  password: &str,
-  online_error: Option<&str>,
+    _app: &AppHandle,
+    state: &State<'_, Mutex<AuthState>>,
+    db_state: &State<'_, Mutex<DatabaseState>>,
+    email: &str,
+    password: &str,
+    online_error: Option<&str>,
 ) -> Result<LoginResponse, String> {
-  let db = db_state.lock().unwrap();
+    let db = db_state.lock().unwrap();
 
-  if let Some(ref conn) = db.conn {
-    match database::verify_offline_login(conn, email, password) {
-      Ok(user) => {
-        // Update state
-        {
-          let mut auth = state.lock().unwrap();
-          auth.token = None; // No token for offline mode
-          auth.tenant_id = Some(user.tenant_id.clone());
-          auth.email = Some(email.to_string());
-          auth.user_id = Some(user.id.clone());
-          auth.username = Some(user.username.clone());
+    if let Some(ref conn) = db.conn {
+        match database::verify_offline_login(conn, email, password) {
+            Ok(user) => {
+                // 상태 업데이트
+                {
+                    let mut auth = state.lock().unwrap();
+                    auth.token = None; // 오프라인 모드: 토큰 없음
+                    auth.tenant_id = Some(user.tenant_id.clone());
+                    auth.email = Some(email.to_string());
+                    auth.user_id = Some(user.id.clone());
+                    auth.username = Some(user.username.clone());
+                }
+
+                println!("Debug: 오프라인 로그인 성공: {}", email);
+
+                // 전화번호 변환 (CSV → Vec)
+                let phone_numbers = user
+                    .phone_numbers
+                    .as_ref()
+                    .map(|s| s.split(',').map(|p| p.to_string()).collect())
+                    .unwrap_or_default();
+
+                Ok(LoginResponse {
+                    access_token: String::new(),
+                    force_change_password: user.force_change_password,
+                    tenant_id: user.tenant_id,
+                    role: user.role,
+                    is_offline: true,
+                    user_id: user.id,
+                    username: user.username,
+                    position_id: user.position_id,
+                    position_name: None,
+                    phone_numbers,
+                    contact: user.contact,
+                    birthday: user.birthday,
+                    created_at: user.created_at,
+                    updated_at: user.updated_at,
+                    joined_projects: Vec::new(),
+                    department: user.department_id.map(|id| DepartmentInfo {
+                        id,
+                        name: "Offline Department".to_string(),
+                        visibility: 1,
+                    }),
+                })
+            }
+            Err(offline_err) => {
+                // 온라인/오프라인 모두 실패
+                if let Some(online_err) = online_error {
+                    Err(online_err.to_string())
+                } else {
+                    Err(format!("오프라인 로그인 실패: {}", offline_err))
+                }
+            }
         }
-
-        println!("Debug: Offline login successful for: {}", email);
-
-        // Convert phone_numbers from comma-separated back to Vec
-        let phone_numbers = user
-          .phone_numbers
-          .as_ref()
-          .map(|s| s.split(',').map(|p| p.to_string()).collect())
-          .unwrap_or_default();
-
-        Ok(LoginResponse {
-          access_token: String::new(),
-          force_change_password: user.force_change_password,
-          tenant_id: user.tenant_id,
-          role: user.role,
-          is_offline: true,
-          user_id: user.id,
-          username: user.username,
-          position_id: user.position_id,
-          position_name: None,
-          // department_id/name removed
-          phone_numbers,
-          contact: user.contact,
-          birthday: user.birthday,
-          created_at: user.created_at,
-          updated_at: user.updated_at,
-          joined_projects: Vec::new(), // Offline: empty for now
-          department: user.department_id.map(|id| DepartmentInfo {
-            id,
-            name: "Offline Department".to_string(), // TODO: Cache dept name
-            visibility: 1,                          // Default to Hidden if unknown
-          }),
-        })
-      }
-      Err(offline_err) => {
-        // Both online and offline failed
-        if let Some(online_err) = online_error {
-          Err(online_err.to_string())
-        } else {
-          Err(format!("Offline login failed: {}", offline_err))
-        }
-      }
-    }
-  } else {
-    // No database connection
-    if let Some(online_err) = online_error {
-      Err(online_err.to_string())
     } else {
-      Err("Network error and no offline data available".to_string())
+        // DB 연결 없음
+        if let Some(online_err) = online_error {
+            Err(online_err.to_string())
+        } else {
+            Err("네트워크 오류, 오프라인 데이터 없음".to_string())
+        }
     }
-  }
 }
 
+// ============================================================================
+// Tauri 커맨드: 비밀번호 변경
+// ============================================================================
+
+/// 비밀번호 변경 커맨드
+///
+/// 서버에서 변경 후 로컬 캐시도 업데이트
 #[tauri::command]
 pub async fn change_password(
-  db_state: State<'_, Mutex<DatabaseState>>,
-  state: State<'_, Mutex<AuthState>>,
-  current_password: String,
-  new_password: String,
+    db_state: State<'_, Mutex<DatabaseState>>,
+    state: State<'_, Mutex<AuthState>>,
+    current_password: String,
+    new_password: String,
 ) -> Result<bool, String> {
-  let (token, tenant_id, email) = {
-    let auth = state.lock().unwrap();
-    match &auth.token {
-      Some(t) => (t.clone(), auth.tenant_id.clone(), auth.email.clone()),
-      None => return Err("Not authenticated".to_string()),
-    }
-  };
+    let (token, tenant_id, email) = {
+        let auth = state.lock().unwrap();
+        match &auth.token {
+            Some(t) => (t.clone(), auth.tenant_id.clone(), auth.email.clone()),
+            None => return Err("인증되지 않음".to_string()),
+        }
+    };
 
-  let client = reqwest::Client::new();
-  let mut request = client
-    .post(&format!(
-      "{}/api/v1/auth/change-password",
-      config::get_api_url()
-    ))
-    .header("Authorization", format!("Bearer {}", token));
-
-  if let Some(tid) = &tenant_id {
-    request = request.header("X-Tenant-ID", tid);
-  }
-
-  let res = request
-    .json(&ChangePasswordRequest {
-      current_password,
-      new_password: new_password.clone(),
-    })
-    .send()
-    .await
-    .map_err(|e| e.to_string())?;
-
-  if !res.status().is_success() {
-    let err_text = res.text().await.unwrap_or("Unknown error".to_string());
-    return Err(err_text);
-  }
-
-  // Update cached password
-  if let Some(email) = email {
-    let db = db_state.lock().unwrap();
-    if let Some(ref conn) = db.conn {
-      if let Err(e) = database::update_cached_password(conn, &email, &new_password) {
-        println!("Warning: Failed to update cached password: {}", e);
-      }
-    }
-  }
-
-  Ok(true)
-}
-
-#[tauri::command]
-pub async fn logout(app: AppHandle, state: State<'_, Mutex<AuthState>>) -> Result<(), String> {
-  let token = {
-    let auth = state.lock().unwrap();
-    auth.token.clone()
-  };
-
-  if let Some(t) = token {
     let client = reqwest::Client::new();
-    // Fire and forget logout request
-    let _ = client
-      .post(&format!("{}/api/v1/auth/logout", config::get_api_url()))
-      .header("Authorization", format!("Bearer {}", t))
-      .send()
-      .await;
-  }
+    let mut request = client
+        .post(&format!(
+            "{}/api/v1/auth/change-password",
+            config::get_api_url()
+        ))
+        .header("Authorization", format!("Bearer {}", token));
 
-  let mut auth = state.lock().unwrap();
-  auth.token = None;
-  auth.tenant_id = None;
-  auth.email = None;
-  auth.user_id = None;
-  auth.username = None;
-  Ok(())
+    if let Some(tid) = &tenant_id {
+        request = request.header("X-Tenant-ID", tid);
+    }
+
+    let res = request
+        .json(&ChangePasswordRequest {
+            current_password,
+            new_password: new_password.clone(),
+        })
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let err_text = res.text().await.unwrap_or("Unknown error".to_string());
+        return Err(err_text);
+    }
+
+    // 로컬 캐시 비밀번호 업데이트
+    if let Some(email) = email {
+        let db = db_state.lock().unwrap();
+        if let Some(ref conn) = db.conn {
+            if let Err(e) = database::update_cached_password(conn, &email, &new_password) {
+                println!("Warning: 캐시 비밀번호 업데이트 실패: {}", e);
+            }
+        }
+    }
+
+    Ok(true)
 }
 
-/// Lookup tenants by email - returns list of tenants the email belongs to
+// ============================================================================
+// Tauri 커맨드: 로그아웃
+// ============================================================================
+
+/// 로그아웃 커맨드
+///
+/// 서버에 로그아웃 요청 후 로컬 상태 초기화
+#[tauri::command]
+pub async fn logout(_app: AppHandle, state: State<'_, Mutex<AuthState>>) -> Result<(), String> {
+    let token = {
+        let auth = state.lock().unwrap();
+        auth.token.clone()
+    };
+
+    // 서버에 로그아웃 알림 (실패해도 무시)
+    if let Some(t) = token {
+        let client = reqwest::Client::new();
+        let _ = client
+            .post(&format!("{}/api/v1/auth/logout", config::get_api_url()))
+            .header("Authorization", format!("Bearer {}", t))
+            .send()
+            .await;
+    }
+
+    // 로컬 상태 초기화
+    let mut auth = state.lock().unwrap();
+    auth.token = None;
+    auth.tenant_id = None;
+    auth.email = None;
+    auth.user_id = None;
+    auth.username = None;
+    Ok(())
+}
+
+// ============================================================================
+// Tauri 커맨드: 테넌트 관리
+// ============================================================================
+
+/// 이메일로 테넌트 목록 조회
+///
+/// 멀티테넌트: 하나의 이메일이 여러 조직에 속할 수 있음
+/// 로그인 전에 호출하여 테넌트 선택 UI 표시
 #[tauri::command]
 pub async fn lookup_tenants(email: String) -> Result<Vec<TenantInfo>, String> {
-  let client = reqwest::Client::new();
+    let client = reqwest::Client::new();
 
-  let url = format!(
-    "{}/api/v1/auth/lookup-tenant?email={}",
-    config::get_api_url(),
-    urlencoding::encode(&email)
-  );
+    let url = format!(
+        "{}/api/v1/auth/lookup-tenant?email={}",
+        config::get_api_url(),
+        urlencoding::encode(&email)
+    );
 
-  let res = client
-    .get(&url)
-    .send()
-    .await
-    .map_err(|e| format!("Network error: {}", e))?;
+    let res = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("네트워크 오류: {}", e))?;
 
-  if !res.status().is_success() {
-    let err_text = res
-      .text()
-      .await
-      .unwrap_or_else(|_| "Unknown error".to_string());
-    return Err(err_text);
-  }
+    if !res.status().is_success() {
+        let err_text = res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(err_text);
+    }
 
-  let response: LookupTenantResponse = res.json().await.map_err(|e| e.to_string())?;
-  Ok(response.tenants)
+    let response: LookupTenantResponse = res.json().await.map_err(|e| e.to_string())?;
+    Ok(response.tenants)
 }
 
-/// Get saved tenant from local DB (for auto-login without tenant lookup)
+/// 로컬 캐시에서 저장된 테넌트 조회
+///
+/// 이전에 로그인한 테넌트를 기억하여 자동 선택
 #[tauri::command]
 pub fn get_saved_tenant(
-  db_state: State<'_, Mutex<DatabaseState>>,
-  email: String,
+    db_state: State<'_, Mutex<DatabaseState>>,
+    email: String,
 ) -> Option<String> {
-  let db = db_state.lock().unwrap();
-  if let Some(ref conn) = db.conn {
-    database::get_saved_tenant(conn, &email)
-  } else {
-    None
-  }
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+        database::get_saved_tenant(conn, &email)
+    } else {
+        None
+    }
 }
 
-/// Clear saved tenant from local DB (on login failure requiring re-selection)
+/// 저장된 테넌트 정보 삭제
+///
+/// 로그인 실패 시 테넌트 재선택 강제
 #[tauri::command]
 pub fn clear_saved_tenant(
-  db_state: State<'_, Mutex<DatabaseState>>,
-  email: String,
+    db_state: State<'_, Mutex<DatabaseState>>,
+    email: String,
 ) -> Result<(), String> {
-  let db = db_state.lock().unwrap();
-  if let Some(ref conn) = db.conn {
-    database::clear_saved_tenant(conn, &email)
-  } else {
-    Ok(()) // No DB connection, nothing to clear
-  }
+    let db = db_state.lock().unwrap();
+    if let Some(ref conn) = db.conn {
+        database::clear_saved_tenant(conn, &email)
+    } else {
+        Ok(())
+    }
 }
