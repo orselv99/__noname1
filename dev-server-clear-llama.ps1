@@ -1,18 +1,15 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "   Fiery Horizon : Backend Dev Environment" -ForegroundColor Cyan
-Write-Host "   (Web Service Excluded for Local Dev)" -ForegroundColor Cyan
+Write-Host "   Fiery Horizon : DB Reset Script" -ForegroundColor Cyan
+Write-Host "   (Clears all database data and volumes)" -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan
 
 # ---------------------------------------------------------
 # Step 1: Generate Protos (Local Reflection)
 # ---------------------------------------------------------
-Write-Host "`n>>> [1/2] Generating Local Protos for IDE Support..." -ForegroundColor Yellow
+Write-Host "`n>>> [1/3] Generating Local Protos for IDE Support..." -ForegroundColor Yellow
 
-# Define the docker command to run protoc
-# - Use 'paths=import' to respect the 'go_package' directive (server/.protos/...)
-# - Output to current directory (.) which maps to project root
 $protoCmd = "apk add --no-cache protobuf-dev && " +
             "go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && " +
             "go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && " +
@@ -28,7 +25,6 @@ $protoCmd = "apk add --no-cache protobuf-dev && " +
             "protoc --proto_path=server/.protos/ --go_out=. --go_opt=paths=import --go-grpc_out=. --go-grpc_opt=paths=import server/.protos/signaling/signaling.proto && " +
             "echo '   -> Proto compilation successful.'"
 
-# Run Docker command (golang:alpine)
 try {
     docker run --rm -v "${PWD}:/app" -w /app golang:alpine sh -c "$protoCmd"
     if ($LASTEXITCODE -ne 0) { throw "Docker command failed" }
@@ -38,20 +34,48 @@ try {
 }
 
 # ---------------------------------------------------------
-# Step 2: Run Docker Compose (Backend Only)
+# Step 2: Stop all running containers
 # ---------------------------------------------------------
-Write-Host "`n>>> [2/2] Starting Backend Services..." -ForegroundColor Yellow
+Write-Host "`n>>> [2/3] Stopping all running containers..." -ForegroundColor Yellow
 
-# Explicitly list services excluding 'web'
-docker-compose up -d --build gateway auth signaling index-service postgres redis
+docker-compose down
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "   [!] Warning: docker-compose down returned non-zero exit code." -ForegroundColor Yellow
+}
+
+# ---------------------------------------------------------
+# Step 3: Remove the PostgreSQL volume to clear all data
+# ---------------------------------------------------------
+Write-Host "`n>>> [2/3] Removing PostgreSQL volume (pgdata)..." -ForegroundColor Yellow
+
+# Get the full volume name (project_volumename format)
+$volumeName = docker volume ls -q | Where-Object { $_ -match "fiery-horizon.*pgdata" }
+
+if ($volumeName) {
+    docker volume rm $volumeName
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "   -> Volume '$volumeName' removed successfully." -ForegroundColor Green
+    } else {
+        Write-Host "   [!] Failed to remove volume. It may be in use." -ForegroundColor Red
+        exit 1
+    }
+} else {
+    Write-Host "   -> No pgdata volume found. Skipping..." -ForegroundColor Yellow
+}
+
+# ---------------------------------------------------------
+# Step 4: Restart services (fresh DB will be created)
+# ---------------------------------------------------------
+Write-Host "`n>>> [3/3] Restarting backend services with fresh database..." -ForegroundColor Yellow
+
+docker-compose up -d --build gateway auth signaling index-service postgres redis llama-server
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "`n>>> DONE! Backend services are running." -ForegroundColor Green
+    Write-Host "`n>>> DONE! All services restarted with a fresh database." -ForegroundColor Green
     Write-Host "    - Gateway API: http://localhost:8080"
-    Write-Host "`n[!] Ready for Local Web Development:" -ForegroundColor Cyan
-    Write-Host "    1. Open a new terminal"
-    Write-Host "    2. cd web"
-    Write-Host "    3. npm run dev"
+    Write-Host "    - PostgreSQL:  localhost:5432 (fiery_auth, fiery_index)"
+    Write-Host "`n[!] Databases have been reset. All tables will be recreated by GORM auto-migration." -ForegroundColor Cyan
 } else {
     Write-Host "`n   [!] Docker Compose failed." -ForegroundColor Red
     exit 1

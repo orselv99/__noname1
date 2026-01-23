@@ -65,6 +65,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      llama-server:
+        condition: service_started
     networks:
       - fiery-net
 
@@ -101,8 +103,8 @@ services:
       - ./server/docker/init:/docker-entrypoint-initdb.d
     # SECURITY: Do NOT expose postgres port externally!
     # Use internal docker network only
-    ports:
-      - "1119:5432"
+    # ports:
+    #   - "1119:5432"
     networks:
       - fiery-net
     healthcheck:
@@ -116,6 +118,50 @@ services:
     image: redis:alpine
     ports:
       - "6379:6379"
+    networks:
+      - fiery-net
+
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    ports:
+      - "8083:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    volumes:
+      - ./client-ai-service/model:/models
+    command: -m /models/gemma-2-2b-it-Q4_K_M.gguf -c 4096 --host 0.0.0.0 --port 8080 -ngl 99
+    networks:
+      - fiery-net
+  # CPU Only Configuration (For non-GPU environments)
+  # llama-server:
+  #   image: ghcr.io/ggml-org/llama.cpp:server
+  #   ports:
+  #     - "8081:8080"
+  #   volumes:
+  #     - ./client-ai-service/model:/models
+  #   command: -m /models/google_gemma-3-4b-it-IQ3_M.gguf -c 4096 --host 0.0.0.0 --port 8080
+  #   networks:
+  #     - fiery-net
+
+  llama-embedding:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    ports:
+      - "8084:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    volumes:
+      - ./client-ai-service/model:/models
+    command: -m /models/nomic-embed-text-v1.5.Q4_K_M.gguf -c 2048 -b 2048 -ub 2048 --host 0.0.0.0 --port 8080 --embedding -ngl 99
     networks:
       - fiery-net
 
