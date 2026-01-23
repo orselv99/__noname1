@@ -440,6 +440,7 @@ pub async fn search_local(
       });
 
       // 태그 가져오기 (DB 함수 사용)
+      let mut tags = Vec::new();
       let tags_raw = get_document_tags_raw(conn, &raw.document_id)?;
       // get_document_tags_raw는 (tag_blob, evidence_blob) 튜플을 반환함
       for (t_blob, _) in tags_raw {

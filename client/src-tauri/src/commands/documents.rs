@@ -243,6 +243,7 @@ pub async fn save_document(
   // Data URL을 찾기 위한 정규식: src="data:image/png;base64,..."
   // Base64 길이 합계를 계산하여 바이너리 크기로 변환
   // 참고: 프론트엔드 로직과 일치시킴
+  let re = regex::Regex::new(r#"src="data:image/[^;]+;base64,([^"]+)""#).unwrap();
   for cap in re.captures_iter(&req.content) {
     if let Some(base64_part) = cap.get(1) {
       media_size_bytes += (base64_part.as_str().len() as f64 * 0.75).floor() as u64;
@@ -383,6 +384,7 @@ pub async fn save_document(
   // 다시 req.document_state 확인.
 
   // 데이터가 있고 상태가 '발행됨'이며 '개인' 그룹이 아닌 경우 RAG 동기화 수행
+  if req.document_state == 3 && req.group_type != 2 {
     // 페이로드 준비
     // 인증 토큰 필요
     let token = {
