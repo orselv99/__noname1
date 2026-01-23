@@ -1,73 +1,207 @@
-use aes_gcm::{
-  aead::{Aead, KeyInit},
-  Aes256Gcm, Nonce,
-};
-use sha2::{Digest, Sha256};
-use std::time::{SystemTime, UNIX_EPOCH};
+//! ==========================================================================
+//! crypto.rs - AES-256-GCM 암호화/복호화 모듈
+//! ==========================================================================
+//!
+//! C++ 개발자를 위한 설명:
+//! - 사용자별 고유 키로 민감한 데이터(문서 내용, 채팅 등)를 암호화
+//! - AES-256-GCM: 256비트 키 + 인증 태그를 포함하는 AEAD 암호화
+//! - 데이터베이스에 저장되는 모든 민감 정보는 이 모듈로 암호화됨
+//!
+//! 암호화 흐름:
+//! ┌─────────────────────────────────────────────────────────┐
+//! │  user_id  ──SHA-256──▶  256-bit Key                     │
+//! │  plaintext + Key + Nonce ──AES-GCM──▶ ciphertext        │
+//! │  저장 형식: [12-byte Nonce][ciphertext]                  │
+//! └─────────────────────────────────────────────────────────┘
+//!
+//! C++ 비교: OpenSSL의 EVP_aes_256_gcm() 또는 Crypto++의 GCM<AES>
+//!
+//! ⚠️ 현재 상태: 테스트 편의를 위해 암호화 비활성화됨
+//! 프로덕션에서는 주석 처리된 원본 로직을 활성화해야 함!
+//! ==========================================================================
 
-/// Derive a 256-bit key from user_id using SHA-256
+// ============================================================================
+// 외부 크레이트 임포트
+// ============================================================================
+use aes_gcm::{
+  aead::{Aead, KeyInit}, // AEAD 트레이트: 암호화/복호화 인터페이스
+  Aes256Gcm,             // AES-256-GCM 암호화 알고리즘
+  Nonce,                 // 12바이트 논스 (Number used ONCE)
+};
+use sha2::{Digest, Sha256}; // SHA-256 해시 함수
+use std::time::{SystemTime, UNIX_EPOCH}; // 시간 기반 난수 시드용
+
+// ============================================================================
+// 키 파생 함수
+// ============================================================================
+
+/// 사용자 ID로부터 256비트 암호화 키를 파생
+///
+/// # 설명
+/// - 동일한 user_id는 항상 동일한 키를 생성 (결정론적)
+/// - 사용자마다 고유한 암호화 키를 가짐
+/// - 다른 사용자는 서로의 데이터를 복호화할 수 없음
+///
+/// # 매개변수
+/// - `user_id`: 사용자 고유 식별자 (UUID 등)
+///
+/// # 반환값
+/// 32바이트(256비트) 키 배열
+///
+/// # C++ 비교
+/// ```cpp
+/// std::array<uint8_t, 32> derive_key(const std::string& user_id) {
+///     unsigned char hash[SHA256_DIGEST_LENGTH];
+///     SHA256((unsigned char*)user_id.data(), user_id.size(), hash);
+///     std::array<uint8_t, 32> key;
+///     std::copy(hash, hash + 32, key.begin());
+///     return key;
+/// }
+/// ```
 pub fn derive_key(user_id: &str) -> [u8; 32] {
-  let mut hasher = Sha256::new();
-  hasher.update(user_id.as_bytes());
-  hasher.finalize().into()
+  let mut hasher = Sha256::new(); // SHA-256 해시 인스턴스 생성
+  hasher.update(user_id.as_bytes()); // 사용자 ID 바이트를 해시에 입력
+  hasher.finalize().into() // 해시 완료 → [u8; 32] 배열 반환
 }
 
-/// Encrypt text using AES-256-GCM with user_id derived key
+// ============================================================================
+// 암호화 함수
+// ============================================================================
+
+/// AES-256-GCM으로 텍스트 암호화
+///
+/// # 설명
+/// - 사용자 ID로 키를 파생하여 평문을 암호화
+/// - 결과에는 논스(12바이트) + 암호문 + 인증태그가 포함됨
+/// - GCM 모드는 데이터 무결성도 보장 (변조 감지)
+///
+/// # 매개변수
+/// - `user_id`: 키 파생에 사용할 사용자 ID
+/// - `plaintext`: 암호화할 평문 문자열
+///
+/// # 반환값
+/// - `Ok(Vec<u8>)`: [Nonce(12)][Ciphertext] 형식의 암호화된 바이트
+/// - `Err(String)`: 암호화 실패 시 오류 메시지
+///
+/// # C++ 비교
+/// OpenSSL의 EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), ...) 사용과 유사
+#[allow(unused_variables)] // user_id가 현재 미사용 (테스트 모드)
 pub fn encrypt_content(user_id: &str, plaintext: &str) -> Result<Vec<u8>, String> {
-  // [DISABLED FOR TESTING] Return plain text as bytes
+  // ========================================================================
+  // [테스트 모드] 암호화 비활성화 - 평문 그대로 반환
+  // ========================================================================
+  // ⚠️ 프로덕션에서는 아래 주석을 해제하고 이 줄을 제거할 것!
   Ok(plaintext.as_bytes().to_vec())
 
-  // Original encryption logic (commented out for testing):
+  // ========================================================================
+  // [프로덕션 코드] 원본 암호화 로직
+  // ========================================================================
   // let key = derive_key(user_id);
-  // let cipher =
-  //   Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
-
-  // // Generate random nonce (12 bytes)
+  //
+  // // AES-256-GCM 암호화 인스턴스 생성
+  // let cipher = Aes256Gcm::new_from_slice(&key)
+  //     .map_err(|e| format!("암호화 인스턴스 생성 실패: {}", e))?;
+  //
+  // // 12바이트 논스 생성 (매 암호화마다 고유해야 함)
   // let nonce_bytes = generate_nonce();
   // let nonce = Nonce::from_slice(&nonce_bytes);
-
+  //
+  // // 암호화 수행
   // let ciphertext = cipher
-  //   .encrypt(nonce, plaintext.as_bytes())
-  //   .map_err(|e| format!("Encryption failed: {}", e))?;
-
-  // // Prepend nonce to ciphertext for later decryption
+  //     .encrypt(nonce, plaintext.as_bytes())
+  //     .map_err(|e| format!("암호화 실패: {}", e))?;
+  //
+  // // 논스를 암호문 앞에 붙여서 저장 (복호화 시 필요)
   // let mut result = nonce_bytes.to_vec();
   // result.extend(ciphertext);
   // Ok(result)
 }
 
-/// Decrypt content using AES-256-GCM with user_id derived key
-pub fn decrypt_content(user_id: &str, encrypted: &[u8]) -> Result<String, String> {
-  String::from_utf8(encrypted.to_vec()).map_err(|e| format!("Invalid UTF-8: {}", e))
+// ============================================================================
+// 복호화 함수
+// ============================================================================
 
-  // Original decryption logic (commented out for testing):
+/// AES-256-GCM으로 암호문 복호화
+///
+/// # 설명
+/// - encrypt_content()로 암호화된 데이터를 원래 평문으로 복원
+/// - 첫 12바이트는 논스, 나머지는 암호문
+/// - 데이터가 변조되었으면 복호화 실패
+///
+/// # 매개변수
+/// - `user_id`: 키 파생에 사용할 사용자 ID (암호화 시와 동일해야 함)
+/// - `encrypted`: [Nonce(12)][Ciphertext] 형식의 암호화된 바이트
+///
+/// # 반환값
+/// - `Ok(String)`: 복호화된 원본 문자열
+/// - `Err(String)`: 복호화 실패 시 오류 메시지
+#[allow(unused_variables)] // user_id가 현재 미사용 (테스트 모드)
+pub fn decrypt_content(user_id: &str, encrypted: &[u8]) -> Result<String, String> {
+  // ========================================================================
+  // [테스트 모드] 복호화 비활성화 - 바이트를 문자열로 직접 변환
+  // ========================================================================
+  String::from_utf8(encrypted.to_vec()).map_err(|e| format!("유효하지 않은 UTF-8: {}", e))
+
+  // ========================================================================
+  // [프로덕션 코드] 원본 복호화 로직
+  // ========================================================================
+  // // 최소 12바이트(논스) 필요
   // if encrypted.len() < 12 {
-  //   return Err("Invalid encrypted data".to_string());
+  //     return Err("유효하지 않은 암호화 데이터".to_string());
   // }
   //
   // let key = derive_key(user_id);
-  // let cipher =
-  //   Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
+  // let cipher = Aes256Gcm::new_from_slice(&key)
+  //     .map_err(|e| format!("암호화 인스턴스 생성 실패: {}", e))?;
   //
+  // // 첫 12바이트: 논스, 나머지: 암호문
   // let nonce = Nonce::from_slice(&encrypted[..12]);
   // let ciphertext = &encrypted[12..];
   //
+  // // 복호화 수행 (인증 태그도 검증됨)
   // let plaintext = cipher
-  //   .decrypt(nonce, ciphertext)
-  //   .map_err(|e| format!("Decryption failed: {}", e))?;
+  //     .decrypt(nonce, ciphertext)
+  //     .map_err(|e| format!("복호화 실패: {}", e))?;
   //
-  // String::from_utf8(plaintext).map_err(|e| format!("Invalid UTF-8: {}", e))
+  // String::from_utf8(plaintext)
+  //     .map_err(|e| format!("유효하지 않은 UTF-8: {}", e))
 }
 
+// ============================================================================
+// 내부 헬퍼 함수
+// ============================================================================
+
+/// 12바이트 논스(Nonce) 생성
+///
+/// # 설명
+/// - Nonce = Number used ONCE (일회용 번호)
+/// - 동일한 키로 암호화할 때마다 다른 논스를 사용해야 보안 유지
+/// - 현재 구현: 시스템 시간 기반 (간단하지만 충돌 가능성 있음)
+///
+/// # 반환값
+/// 12바이트 논스 배열
+///
+/// # ⚠️ 보안 주의
+/// 프로덕션에서는 rand 크레이트의 암호학적 난수 생성기 사용 권장:
+/// ```rust
+/// use rand::Rng;
+/// let mut nonce = [0u8; 12];
+/// rand::thread_rng().fill(&mut nonce);
+/// ```
+#[allow(dead_code)] // 테스트 모드에서 미사용
 fn generate_nonce() -> [u8; 12] {
   let mut result = [0u8; 12];
+
+  // 현재 시간을 나노초 단위로 가져와 시드로 사용
   let seed = SystemTime::now()
     .duration_since(UNIX_EPOCH)
     .unwrap()
     .as_nanos();
 
+  // 128비트 시간값에서 각 바이트 추출
   for (i, byte) in result.iter_mut().enumerate() {
     *byte = ((seed >> (i * 8)) & 0xFF) as u8;
   }
+
   result
 }

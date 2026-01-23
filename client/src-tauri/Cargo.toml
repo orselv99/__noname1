@@ -1,40 +1,75 @@
+# =============================================================================
+# Cargo.toml - Rust 프로젝트 빌드 설정 파일
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 프로젝트 기본 정보
+# -----------------------------------------------------------------------------
 [package]
-name = "tauri-app"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-edition = "2021"
+name = "tauri-app"                                  # 크레이트(패키지) 이름 - cargo build 시 사용
+version = "0.1.0"                                   # 시맨틱 버저닝 (MAJOR.MINOR.PATCH)
+description = "A Tauri App"                         # 패키지 설명
+authors = ["you"]                                   # 저자 목록
+edition = "2021"                                    # Rust 에디션 - 언어 기능 세트 결정 (C++11, C++17처럼 언어 버전을 의미)
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
+# -----------------------------------------------------------------------------
+# 라이브러리 크레이트 설정
+#
+# Windows에서 바이너리 이름과 라이브러리 이름 충돌 방지를 위해 _lib 접미사 사용
+# 참고: https://github.com/rust-lang/cargo/issues/8519
+# -----------------------------------------------------------------------------
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "tauri_app_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+name = "tauri_app_lib"                              # 라이브러리 이름 (main.rs에서 use tauri_app_lib::run으로 사용)
+crate-type = [
+  "staticlib",                                      # 정적 라이브러리 (.lib / .a) - C/C++ 링킹용
+  "cdylib",                                         # 동적 라이브러리 (.dll / .so) - C ABI 호환
+  "rlib"                                            # Rust 라이브러리 - Rust 프로젝트 간 링킹용
+]
 
+# -----------------------------------------------------------------------------
+# 빌드 전용 의존성 (build.rs 에서만 사용) 
+# -----------------------------------------------------------------------------
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2", features = [] }      # Tauri 빌드 도구
 
+# -----------------------------------------------------------------------------
+# 런타임 의존성
+# -----------------------------------------------------------------------------
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tauri-plugin-shell = "2.3.3"
-reqwest = { version = "0.12", features = ["json", "blocking"] }
-rusqlite = { version = "0.32", features = ["bundled", "blob"] }
-bcrypt = "0.16"
-aes-gcm = "0.10"
-uuid = { version = "1", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
-base64 = "0.22"
-sha2 = "0.10"
-urlencoding = "2"
-sysinfo = "0.30"
-sqlite-vec = "0.1"
-zerocopy = "0.7"
-regex = "1.12.2"
-scraper = "0.25.0"
+# === Tauri 핵심 ===
+tauri = { version = "2", features = [] }            # Tauri 프레임워크 코어
+tauri-plugin-opener = "2"                           # 외부 URL/파일 열기 플러그인
+tauri-plugin-shell = "2.3.3"                        # 셸 명령 실행 플러그인 (sidecar 지원)
 
+# === 직렬화 (c++ nlohmann/json, protobuf, cereal 등과 유사) ===
+serde = { version = "1", features = ["derive"] }    # Rust 표준 직렬화 프레임워크
+                                                    # "derive" 기능: #[derive(Serialize, Deserialize)] 매크로 활성화
+serde_json = "1"                                    # JSON 직렬화/역직렬화
+
+# === 네트워킹 (c++ libcurl, cpr, Boost.Beast 등과 유사) ===
+reqwest = { version = "0.12", features = [
+  "json",                                           # JSON 요청/응답 자동 처리
+  "blocking"                                        # 동기 HTTP 클라이언트 (async 외에 blocking API도 사용)
+]}
+
+# === 데이터베이스 ===
+rusqlite = { version = "0.32", features = [
+  "bundled",                                        # SQLite3 소스코드 포함 빌드 (시스템 SQLite 불필요)
+  "blob"                                            # BLOB 데이터 스트리밍 지원
+]}
+sqlite-vec = "0.1"                                  # SQLite 벡터 확장 - 임베딩 유사도 검색용
+
+# === 암호화 및 보안 (OpenSSL, Crypto++, libsodium 등과 유사) ===
+bcrypt = "0.16"                                     # 비밀번호 해싱 (bcrypt 알고리즘)
+aes-gcm = "0.10"                                    # AES-256-GCM 대칭키 암호화
+sha2 = "0.10"                                       # SHA-256 해시 함수
+
+# === 유틸리티 ===
+uuid = { version = "1", features = ["v4"] }         # UUID v4 생성 (랜덤 기반)
+chrono = { version = "0.4", features = ["serde"] }  # 날짜/시간 처리 + JSON 직렬화
+base64 = "0.22"                                     # Base64 인코딩/디코딩
+urlencoding = "2"                                   # URL 인코딩/디코딩
+sysinfo = "0.30"                                    # 시스템 정보 조회 (프로세스, 메모리 등)
+zerocopy = "0.7"                                    # 제로카피 직렬화 - 바이트 배열 ↔ 구조체 변환
+regex = "1.12.2"                                    # 정규표현식
+scraper = "0.25.0"                                  # HTML 파싱 및 CSS 선택자

@@ -1,6 +1,38 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+//! ==========================================================================
+//! main.rs - Tauri 앱 진입점 (Entry Point)
+//! ==========================================================================
+//!
+//! C++ 개발자를 위한 설명:
+//! - C++의 main() 함수와 동일한 역할
+//! - 실제 앱 로직은 lib.rs의 run() 함수에 위치 (바이너리/라이브러리 분리)
+//!
+//! 왜 main.rs와 lib.rs를 분리하는가?
+//! - lib.rs: 테스트, 벤치마크, 다른 크레이트에서 재사용 가능
+//! - main.rs: 실행파일 진입점만 담당 (최소한의 코드)
+//! - C++ 비교: DLL의 DllMain + EXE의 main 분리와 유사
+//! ==========================================================================
+
+// ============================================================================
+// Windows 콘솔 창 숨김 설정
+// ============================================================================
+// #![cfg_attr(조건, 속성)] - 조건부 컴파일러 속성
+//
+// not(debug_assertions): 릴리스 빌드일 때만 적용
+// windows_subsystem = "windows": Windows GUI 서브시스템 사용 (콘솔 창 숨김)
+//
+// C++ 비교:
+// - Visual Studio 프로젝트 설정의 "Windows (/SUBSYSTEM:WINDOWS)"
+// - 또는 링커 옵션 /SUBSYSTEM:WINDOWS
+//
+// ⚠️ 중요: 이 줄을 제거하면 릴리스 빌드에서 콘솔 창이 함께 나타남!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+/// 앱 진입점
+///
+/// Rust에서 fn main()은 프로그램 시작점입니다.
+/// 실제 Tauri 앱 초기화는 라이브러리 크레이트(lib.rs)의 run() 함수에서 수행합니다.
 fn main() {
+  // lib.rs에 정의된 run() 함수 호출
+  // tauri_app_lib: Cargo.toml의 [lib] name에서 정의한 크레이트 이름
   tauri_app_lib::run()
 }
