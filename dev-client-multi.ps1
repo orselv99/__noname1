@@ -11,7 +11,7 @@ param(
 # 배열의 크기를 카운트로 설정합니다.
 $Count = $UserIds.Count
 
-Write-Host "=== P2P Whiteboard Multi-Instance Test ===" -ForegroundColor Cyan
+Write-Host "=== P2P Multi-Instance Test ===" -ForegroundColor Cyan
 Write-Host "Starting $Count instances for users: $($UserIds -join ', ')..." -ForegroundColor Yellow
 
 for ($i = 0; $i -lt $Count; $i++) {

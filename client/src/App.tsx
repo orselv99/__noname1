@@ -60,7 +60,29 @@ function AppContent() {
   const lastClickTimeRef = useRef(0);
 
   // Auth state
+  const { user, refreshToken } = useAuthStore();
   const [currentPassword, setCurrentPassword] = useState('');
+
+  // Pre-emptive Token Refresh Timer
+  useEffect(() => {
+    if (!user?.access_token || !user?.expires_in) return;
+
+    // Refresh 60 seconds before expiration
+    const refreshTime = (user.expires_in - 60) * 1000;
+
+    if (refreshTime <= 0) {
+      refreshToken();
+      return;
+    }
+
+    console.log(`Scheduling token refresh in ${refreshTime / 1000}s`);
+    const timer = setTimeout(() => {
+      console.log("Executing pre-emptive token refresh...");
+      refreshToken();
+    }, refreshTime);
+
+    return () => clearTimeout(timer);
+  }, [user?.access_token, user?.expires_in, refreshToken]);
 
   // Disable default browser find
   useEffect(() => {
@@ -84,13 +106,11 @@ function AppContent() {
   }, []);
 
   // Tab Menu State
-  // Tab Menu State
   const { tabs, setActiveTab } = useDocumentStore();
   const [showTabMenu, setShowTabMenu] = useState(false);
 
   // Right Panel State
   const [activeRightTab, setActiveRightTab] = useState<'metadata' | 'rag'>('metadata');
-
 
   // Drag to move window
   const handleDragStart = (e: React.MouseEvent) => {
@@ -117,13 +137,6 @@ function AppContent() {
   };
 
   // Left sidebar resize
-  const startResizingLeft = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingLeft.current = true;
-    document.addEventListener('mousemove', handleMouseMoveLeft);
-    document.addEventListener('mouseup', stopResizingLeft);
-  }, []);
-
   const handleMouseMoveLeft = useCallback((e: MouseEvent) => {
     if (!isResizingLeft.current) return;
     const newWidth = e.clientX - 48;
@@ -138,14 +151,14 @@ function AppContent() {
     document.removeEventListener('mouseup', stopResizingLeft);
   }, [handleMouseMoveLeft]);
 
-  // Right sidebar resize
-  const startResizingRight = useCallback((e: React.MouseEvent) => {
+  const startResizingLeft = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    isResizingRight.current = true;
-    document.addEventListener('mousemove', handleMouseMoveRight);
-    document.addEventListener('mouseup', stopResizingRight);
-  }, []);
+    isResizingLeft.current = true;
+    document.addEventListener('mousemove', handleMouseMoveLeft);
+    document.addEventListener('mouseup', stopResizingLeft);
+  }, [handleMouseMoveLeft, stopResizingLeft]);
 
+  // Right sidebar resize
   const handleMouseMoveRight = useCallback((e: MouseEvent) => {
     if (!isResizingRight.current) return;
     const newWidth = window.innerWidth - e.clientX;
@@ -159,6 +172,14 @@ function AppContent() {
     document.removeEventListener('mousemove', handleMouseMoveRight);
     document.removeEventListener('mouseup', stopResizingRight);
   }, [handleMouseMoveRight]);
+
+  const startResizingRight = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRight.current = true;
+    document.addEventListener('mousemove', handleMouseMoveRight);
+    document.addEventListener('mouseup', stopResizingRight);
+  }, [handleMouseMoveRight, stopResizingRight]);
+
 
   // Auth handlers
   const handleLogin = async (email: string, password: string, tenantId?: string) => {

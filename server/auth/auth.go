@@ -160,7 +160,7 @@ func (s *server) RefreshToken(ctx context.Context, req *pb.RefreshTokenRequest) 
 	}
 
 	// 새 액세스 토큰 발급
-	newAccess, newRefresh, _, err := GenerateTokens(user.ID, user.Email, user.Salt)
+	newAccess, newRefresh, exp, err := GenerateTokens(user.ID, user.Email, user.Salt)
 	if err != nil {
 		return nil, err
 	}
@@ -168,6 +168,7 @@ func (s *server) RefreshToken(ctx context.Context, req *pb.RefreshTokenRequest) 
 	return &pb.RefreshTokenResponse{
 		AccessToken:  newAccess,
 		RefreshToken: newRefresh, // Rotation
+		ExpiresIn:    exp,
 	}, nil
 }
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { safeInvoke } from '../utils/safeInvoke';
 import { executeSearch, ThinkingState } from '../utils/LangGraphSearch';
 
 export interface ChatMessage {
@@ -60,7 +60,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   loadChats: async (search?: string) => {
     try {
-      const chats = await invoke<ChatSession[]>('get_rag_chats', { search });
+      const chats = await safeInvoke<ChatSession[]>('get_rag_chats', { search });
       set({ chats });
     } catch (error) {
       console.error('Failed to load chats:', error);
@@ -69,7 +69,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   deleteChat: async (chatId: string) => {
     try {
-      await invoke('delete_rag_chat', { chatId });
+      await safeInvoke('delete_rag_chat', { chatId });
       // If the deleted chat was selected, clear selection
       const { currentChatId, loadChats } = get();
       if (currentChatId === chatId) {
@@ -84,7 +84,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   renameChat: async (chatId: string, newTitle: string) => {
     try {
-      await invoke('update_rag_chat_title', { chatId, newTitle });
+      await safeInvoke('update_rag_chat_title', { chatId, newTitle });
       await get().loadChats();
     } catch (error) {
       console.error('Failed to rename chat:', error);
@@ -94,7 +94,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   selectChat: async (chatId) => {
     set({ currentChatId: chatId, messages: [], hasMore: true, isLoading: true });
     try {
-      const msgs = await invoke<ChatMessage[]>('get_rag_messages', {
+      const msgs = await safeInvoke<ChatMessage[]>('get_rag_messages', {
         chatId,
         limit: PAGE_SIZE,
         before: null
@@ -127,7 +127,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 1. Ensure chat session exists
     if (!currentChatId) {
       try {
-        const chat = await invoke<ChatSession>('create_new_chat', { title: content.substring(0, 30) });
+        const chat = await safeInvoke<ChatSession>('create_new_chat', { title: content.substring(0, 30) });
         currentChatId = chat.id;
         set({ currentChatId });
         get().loadChats();
@@ -141,7 +141,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 2. Persist User Message
     let userMsg: ChatMessage;
     try {
-      userMsg = await invoke<ChatMessage>('add_rag_message', {
+      userMsg = await safeInvoke<ChatMessage>('add_rag_message', {
         chatId: currentChatId,
         role: 'user',
         content
@@ -209,7 +209,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
 
       // 5. Persist Assistant Message
-      const asstMsg = await invoke<ChatMessage>('add_rag_message', {
+      const asstMsg = await safeInvoke<ChatMessage>('add_rag_message', {
         chatId: currentChatId,
         role: 'assistant',
         content: answer
@@ -247,7 +247,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       const oldestMsg = messages[0];
-      const olderMsgs = await invoke<ChatMessage[]>('get_rag_messages', {
+      const olderMsgs = await safeInvoke<ChatMessage[]>('get_rag_messages', {
         chatId: currentChatId,
         limit: PAGE_SIZE,
         before: oldestMsg.timestamp

@@ -86,6 +86,7 @@ pub fn run() {
       // 인증 명령: 로그인, 로그아웃, 비밀번호 변경
       // ----------------------------------------------------------------
       commands::auth::login,
+      commands::auth::refresh_token,
       commands::auth::lookup_tenants,
       commands::auth::get_saved_tenant,
       commands::auth::clear_saved_tenant,

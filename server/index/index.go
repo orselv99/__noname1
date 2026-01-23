@@ -744,16 +744,18 @@ func (s *server) SearchDocuments(ctx context.Context, req *pb.SearchDocumentsReq
 
 	// Raw SQL with cosine distance calculation
 	// <=> is cosine distance operator in pgvector
+	// owner_id != ? 조건을 추가하여 자신의 문서는 검색에서 제외
 	sql := `
 		SELECT 
 			id, title, summary, tag_evidences, updated_at, created_at, owner_id, group_id, group_type,
 			(embedding <=> ?) as distance
 		FROM documents 
+		WHERE owner_id != ?
 		ORDER BY embedding <=> ?
 		LIMIT ?
 	`
 
-	if err := s.db.Raw(sql, queryVector, queryVector, req.Limit).Scan(&docsWithDist).Error; err != nil {
+	if err := s.db.Raw(sql, queryVector, req.OwnerId, queryVector, req.Limit).Scan(&docsWithDist).Error; err != nil {
 		return nil, err
 	}
 

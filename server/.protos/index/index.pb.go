@@ -344,6 +344,7 @@ type SearchDocumentsRequest struct {
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`                      // 최대 결과 수
 	Tags          []string               `protobuf:"bytes,3,rep,name=tags,proto3" json:"tags,omitempty"`                         // 태그 필터
 	UserSalt      string                 `protobuf:"bytes,4,opt,name=user_salt,json=userSalt,proto3" json:"user_salt,omitempty"` // 암호화용 사용자 Salt
+	OwnerId       string                 `protobuf:"bytes,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`    // 요청자 ID (자신 제외 검색용)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -402,6 +403,13 @@ func (x *SearchDocumentsRequest) GetTags() []string {
 func (x *SearchDocumentsRequest) GetUserSalt() string {
 	if x != nil {
 		return x.UserSalt
+	}
+	return ""
+}
+
+func (x *SearchDocumentsRequest) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
 	}
 	return ""
 }
@@ -732,12 +740,13 @@ const file_index_index_proto_rawDesc = "" +
 	"documentId\x12\x1c\n" +
 	"\tembedding\x18\x04 \x03(\x02R\tembedding\x12\x18\n" +
 	"\asummary\x18\x05 \x01(\tR\asummary\x127\n" +
-	"\rtag_evidences\x18\x06 \x03(\v2\x12.index.TagEvidenceR\ftagEvidences\"u\n" +
+	"\rtag_evidences\x18\x06 \x03(\v2\x12.index.TagEvidenceR\ftagEvidences\"\x90\x01\n" +
 	"\x16SearchDocumentsRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x12\n" +
 	"\x04tags\x18\x03 \x03(\tR\x04tags\x12\x1b\n" +
-	"\tuser_salt\x18\x04 \x01(\tR\buserSalt\"Q\n" +
+	"\tuser_salt\x18\x04 \x01(\tR\buserSalt\x12\x19\n" +
+	"\bowner_id\x18\x05 \x01(\tR\aownerId\"Q\n" +
 	"\fSearchResult\x12+\n" +
 	"\bdocument\x18\x01 \x01(\v2\x0f.index.DocumentR\bdocument\x12\x14\n" +
 	"\x05score\x18\x02 \x01(\x02R\x05score\"H\n" +

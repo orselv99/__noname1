@@ -63,6 +63,7 @@ message SearchDocumentsRequest {
   int32 limit = 2;        // 최대 결과 수
   repeated string tags = 3; // 태그 필터
   string user_salt = 4; // 암호화용 사용자 Salt
+  string owner_id = 5; // 요청자 ID (자신 제외 검색용)
 }
 
 // 검색 결과 항목

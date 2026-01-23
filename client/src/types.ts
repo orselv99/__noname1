@@ -89,6 +89,9 @@ export interface UserInfo {
   role: string;
   tenant_id: string;
   department?: DepartmentInfo;
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
 }
 
 export interface LoginResponse extends UserInfo {

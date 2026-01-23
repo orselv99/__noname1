@@ -74,6 +74,7 @@ func main() {
 		auth := api.Group("/auth")
 		{
 			auth.POST("/login", authHandler.Login)
+			auth.POST("/refresh-token", authHandler.RefreshToken)
 			auth.GET("/lookup-tenant", authHandler.LookupTenant)
 			// Password Change for authenticated users
 			auth.POST("/change-password", authMiddleware.Handler(), authHandler.ChangePassword)

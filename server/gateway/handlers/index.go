@@ -123,10 +123,18 @@ func (h *IndexHandler) SearchDocuments(c *gin.Context) {
 		saltStr = "" // Fallback
 	}
 
+	// User ID 가져오기 (본인 문서 제외용)
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok {
+		userIDStr = ""
+	}
+
 	resp, err := h.client.SearchDocuments(ctx, &pb.SearchDocumentsRequest{
 		Query:    query,
 		Limit:    int32(limit),
-		UserSalt: saltStr, // Proto 필드 사용
+		UserSalt: saltStr,   // Proto 필드 사용
+		OwnerId:  userIDStr, // 요청자 ID 전달
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

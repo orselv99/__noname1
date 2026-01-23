@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { invoke } from '@tauri-apps/api/core';
+import { safeInvoke } from '../utils/safeInvoke';
 import { Document, GroupType, SaveDocumentRequest, DocumentState, VisibilityLevel, ListDocumentsResponse, UserInfo } from '../types';
 
 export interface Tab {
@@ -91,7 +91,7 @@ export const useDocumentStore = create<DocumentStore>()(
           const lastOne = get().lastSyncedAt;
           const effectiveLastSync = currentDocs.length > 0 ? lastOne : null;
 
-          const response = await invoke<ListDocumentsResponse>('list_documents', {
+          const response = await safeInvoke<ListDocumentsResponse>('list_documents', {
             groupType: null,
             groupId: null,
             lastSyncedAt: effectiveLastSync
@@ -213,7 +213,7 @@ export const useDocumentStore = create<DocumentStore>()(
             version: newVersion,
             creator_name: doc.creator_name
           };
-          const savedDoc = await invoke<Document>('save_document', { req });
+          const savedDoc = await safeInvoke<Document>('save_document', { req });
 
           // 서버 응답에서 AI 필드(summary, tags)가 누락될 경우 기존 데이터 보존
           // 백엔드에서 부분 업데이트 시 이 필드들을 반환하지 않을 수 있음
@@ -262,7 +262,7 @@ export const useDocumentStore = create<DocumentStore>()(
             visibility_level: updatedDoc.visibility_level,
             is_favorite: updatedDoc.is_favorite
           };
-          await invoke('save_document', { req });
+          await safeInvoke('save_document', { req });
         } catch (error) {
           console.error("Failed to toggle favorite", error);
           // Revert on error
@@ -365,7 +365,7 @@ export const useDocumentStore = create<DocumentStore>()(
             is_favorite: updatedDoc.is_favorite,
             tags: updatedTags,
           };
-          await invoke('save_document', { req });
+          await safeInvoke('save_document', { req });
         } catch (error) {
           console.error('Failed to add tag:', error);
           get().updateDocument(doc);
@@ -397,7 +397,7 @@ export const useDocumentStore = create<DocumentStore>()(
             is_favorite: updatedDoc.is_favorite,
             tags: updatedTags,
           };
-          await invoke('save_document', { req });
+          await safeInvoke('save_document', { req });
         } catch (error) {
           console.error('Failed to remove tag:', error);
           get().updateDocument(doc);
@@ -416,7 +416,7 @@ export const useDocumentStore = create<DocumentStore>()(
         };
 
         try {
-          const newDoc = await invoke<Document>('save_document', { req });
+          const newDoc = await safeInvoke<Document>('save_document', { req });
           set((state) => ({ documents: [...state.documents, newDoc] }));
 
           // Auto open tab
@@ -509,7 +509,7 @@ export const useDocumentStore = create<DocumentStore>()(
         }
 
         try {
-          await invoke('delete_document', { id: docId });
+          await safeInvoke('delete_document', { id: docId });
         } catch (error) {
           console.error('Failed to delete document:', error);
           get().fetchDocuments();
@@ -527,7 +527,7 @@ export const useDocumentStore = create<DocumentStore>()(
         });
 
         try {
-          await invoke('restore_document', { id: docId });
+          await safeInvoke('restore_document', { id: docId });
         } catch (error) {
           console.error('Failed to restore document:', error);
           get().fetchDocuments();
@@ -559,7 +559,7 @@ export const useDocumentStore = create<DocumentStore>()(
         });
 
         try {
-          await invoke('empty_recycle_bin');
+          await safeInvoke('empty_recycle_bin');
         } catch (error) {
           console.error('Failed to empty recycle bin:', error);
           get().fetchDocuments();
@@ -590,7 +590,7 @@ export const useDocumentStore = create<DocumentStore>()(
             visibility_level: doc.visibility_level,
             creator_name: doc.creator_name
           };
-          await invoke('save_document', { req });
+          await safeInvoke('save_document', { req });
         } catch (error) {
           console.error("Failed to rename document:", error);
           get().fetchDocuments();

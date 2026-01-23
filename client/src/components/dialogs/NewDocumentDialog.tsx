@@ -1,8 +1,9 @@
 // ... imports
 import { useState } from 'react';
+import { safeInvoke } from '../../utils/safeInvoke';
 import { X, FileText, FileCode, Table, PenLine, Presentation, BookOpen, ClipboardList, Search, ChevronDown, ChevronRight, Building2, FolderKanban, Folder, FolderPlus, Sparkles, Globe, Loader2, Database, CheckSquare, Square, ExternalLink } from 'lucide-react';
 import { ThinkingAccordion, ThinkingState } from '../ui/ThinkingAccordion';
-import { useDocumentStore } from '../../stores/documentStore';
+// import { useDocumentStore } from '../../stores/documentStore';
 
 interface FolderItem {
   id: string;
@@ -33,6 +34,19 @@ interface WebSearchResult {
   snippet: string;
   url: string;
   selected: boolean;
+  score?: number; // Add score for display
+  source?: 'local' | 'server'; // Add source tag
+}
+
+interface RagSearchResult {
+  document_id: string;
+  distance: number;
+  similarity: number;
+  content: string;
+  summary: string | null;
+  title: string | null;
+  tags: string[];
+  group_name?: string;
 }
 
 const frequentTemplates = [
@@ -53,8 +67,16 @@ const allTemplates = [
   { id: 'checklist', name: 'Checklist', icon: ClipboardList, description: '체크리스트' },
 ];
 
+const getBadgeColor = (source: string | undefined) => {
+  switch (source) {
+    case 'local': return 'bg-purple-900/30 text-purple-400 text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wide';
+    case 'server': return 'bg-blue-900/30 text-blue-400 text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wide';
+    default: return 'bg-zinc-800 text-zinc-500 text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wide';
+  }
+};
+
 export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, onToggleGroup, onToggleFolder, groups }: NewDocumentDialogProps) => {
-  const { documents } = useDocumentStore();
+  //   const { documents } = useDocumentStore();
   const [selectedGroupId, setSelectedGroupId] = useState<string>(groups[0]?.id || '');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
@@ -68,7 +90,7 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
 
   // AI Mode States
   const [webSearchQuery, setWebSearchQuery] = useState('');
-  const [sourceDocIds, setSourceDocIds] = useState<string[]>([]); // Keep for counting
+  //   const [sourceDocIds, setSourceDocIds] = useState<string[]>([]); // Keep for counting
 
   // Doc Search States
   const [docSearchQuery, setDocSearchQuery] = useState('');
@@ -82,11 +104,13 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
 
   // Accordion States (AI Mode)
   const [accordionState, setAccordionState] = useState({
+    title: true,
+    template: true,
     docs: true,
     web: true
   });
 
-  const toggleAccordion = (section: 'docs' | 'web') => {
+  const toggleAccordion = (section: 'title' | 'template' | 'docs' | 'web') => {
     setAccordionState(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
@@ -94,31 +118,64 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
     if (!docSearchQuery.trim()) return;
     setIsSearchingDocs(true);
 
-    // Simulate slight delay for "search" feel
-    await new Promise(r => setTimeout(r, 600));
+    try {
+      // Parallel execution of local and server search
+      const [localResults, serverResults] = await Promise.all([
+        safeInvoke<RagSearchResult[]>('search_local', { query: docSearchQuery, limit: 5 })
+          .catch(e => {
+            console.error("Local search failed:", e);
+            return [];
+          }),
+        safeInvoke<RagSearchResult[]>('search_server', { query: docSearchQuery, limit: 5 })
+          .catch(e => {
+            console.error("Server search failed:", e);
+            return [];
+          })
+      ]);
 
-    // Filter documents from store
-    const results = documents.filter(doc =>
-      doc.title.toLowerCase().includes(docSearchQuery.toLowerCase()) ||
-      (doc.content && doc.content.toLowerCase().includes(docSearchQuery.toLowerCase())) ||
-      (doc.summary && doc.summary.toLowerCase().includes(docSearchQuery.toLowerCase()))
-    ).map(doc => ({
-      id: doc.id,
-      title: doc.title,
-      snippet: doc.summary || (doc.content ? doc.content.substring(0, 100) + '...' : '내용 없음'),
-      url: '', // Empty for internal docs
-      selected: false
-    }));
+      // Combine results
+      const allResults = [
+        ...localResults.map(r => ({ ...r, source: 'local' as const })),
+        ...serverResults.map(r => ({ ...r, source: 'server' as const }))
+      ];
 
-    setDocSearchResults(results);
-    setIsSearchingDocs(false);
-    if (!accordionState.docs) setAccordionState(prev => ({ ...prev, docs: true }));
+      // Deduplicate by ID (taking the one with higher similarity if duplicate)
+      const uniqueMap = new Map<string, typeof allResults[0]>();
+      allResults.forEach(item => {
+        const existing = uniqueMap.get(item.document_id);
+        if (!existing || item.similarity > existing.similarity) {
+          uniqueMap.set(item.document_id, item);
+        }
+      });
+
+      const uniqueResults = Array.from(uniqueMap.values());
+
+      // Sort by similarity (descending)
+      uniqueResults.sort((a, b) => b.similarity - a.similarity);
+
+      const results: WebSearchResult[] = uniqueResults.map(doc => ({
+        id: doc.document_id,
+        title: doc.title || 'Untitled',
+        snippet: doc.summary || (doc.content ? doc.content.substring(0, 100) + '...' : '내용 없음'),
+        url: '',
+        selected: false,
+        score: Math.round(doc.similarity),
+        source: doc.source
+      }));
+
+      setDocSearchResults(results);
+    } catch (error) {
+      console.error("Search failed", error);
+    } finally {
+      setIsSearchingDocs(false);
+      if (!accordionState.docs) setAccordionState(prev => ({ ...prev, docs: true }));
+    }
   };
 
   const toggleDocResult = (id: string) => {
     setDocSearchResults(prev => {
       const next = prev.map(r => r.id === id ? { ...r, selected: !r.selected } : r);
-      setSourceDocIds(next.filter(r => r.selected).map(r => r.id));
+      // setSourceDocIds(next.filter(r => r.selected).map(r => r.id));
       return next;
     });
   };
@@ -126,16 +183,33 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   const handleWebSearch = async () => {
     if (!webSearchQuery.trim()) return;
     setIsSearchingWeb(true);
-    // Mock Search
-    await new Promise(r => setTimeout(r, 1000));
-    setWebSearchResults([
-      { id: '1', title: '2024년 최신 AI 기술 트렌드 분석', snippet: '생성형 AI의 발전과 산업별 도입 현황...', url: 'https://example.com/ai-trends', selected: true },
-      { id: '2', title: 'LLM 기반 서비스 구축 가이드', snippet: 'RAG 아키텍처를 활용한 엔터프라이즈 솔루션...', url: 'https://example.com/llm-guide', selected: true },
-      { id: '3', title: 'AI 에이전트의 미래', snippet: '자율 주행 에이전트와 멀티 모달 모델의 진화...', url: 'https://example.com/agents', selected: false },
-    ]);
-    setIsSearchingWeb(false);
-    // Auto-expand web accordion if closed to show results
-    if (!accordionState.web) setAccordionState(prev => ({ ...prev, web: true }));
+
+    try {
+      const results = await safeInvoke<RagSearchResult[]>('search_web', { query: webSearchQuery });
+
+      const mappedResults: WebSearchResult[] = results.map(r => ({
+        id: r.document_id, // backend sends URL as id
+        title: r.title || 'Untitled',
+        snippet: r.content || '',
+        url: r.document_id,
+        selected: false,
+        score: Math.round(r.similarity),
+        source: 'server' // 'server' implies remote/web context here or I can add 'web' to types if needed, but 'server' badge is blue. 
+        // Actually, let's use a specific logic or re-use 'server' but maybe user wants it distinct? 
+        // The mock had 'url' property.
+        // Let's stick to the interface.
+      }));
+
+      // Pre-select top 2
+      const withSelection = mappedResults.map((r, i) => i < 2 ? { ...r, selected: true } : r);
+      setWebSearchResults(withSelection);
+    } catch (error) {
+      console.error("Web search failed", error);
+    } finally {
+      setIsSearchingWeb(false);
+      // Auto-expand web accordion if closed to show results
+      if (!accordionState.web) setAccordionState(prev => ({ ...prev, web: true }));
+    }
   };
 
   const toggleWebResult = (id: string) => {
@@ -207,7 +281,7 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
     // Doc Reset
     setDocSearchQuery('');
     setDocSearchResults([]);
-    setSourceDocIds([]);
+    // setSourceDocIds([]);
 
     setThinkingState(null);
     onClose();
@@ -259,7 +333,9 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
       <div key={folder.id}>
         <div
           className={`w-full flex items-center group/folder relative pr-2 py-1.5 text-sm transition-colors cursor-pointer ${selectedFolderId === folder.id && selectedGroupId === groupId
-            ? 'bg-blue-500/20 text-blue-400'
+            ? creationMode === 'ai'
+              ? 'bg-purple-500/20 text-purple-400'
+              : 'bg-blue-500/20 text-blue-400'
             : 'text-zinc-400 hover:bg-zinc-800'
             }`}
           style={{ paddingLeft: `${depth * 16 + 28}px` }}
@@ -358,7 +434,9 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
               <div key={group.id}>
                 <div
                   className={`w-full flex items-center group/group relative pr-2 py-1.5 text-sm transition-colors cursor-pointer ${selectedGroupId === group.id && !selectedFolderId
-                    ? 'bg-blue-500/20 text-blue-400'
+                    ? creationMode === 'ai'
+                      ? 'bg-purple-500/20 text-purple-400'
+                      : 'bg-blue-500/20 text-blue-400'
                     : 'text-zinc-400 hover:bg-zinc-800'
                     }`}
                   onClick={() => {
@@ -376,7 +454,7 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
                     {group.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                   </button>
                   {group.type === 'department' ? (
-                    <Building2 size={14} className="text-blue-400 shrink-0 mr-2" />
+                    <Building2 size={14} className={` shrink-0 mr-2 ${creationMode === 'ai' ? 'text-purple-400' : 'text-blue-400'}`} />
                   ) : (
                     <FolderKanban size={14} className="text-purple-400 shrink-0 mr-2" />
                   )}
@@ -402,31 +480,31 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
           {/* Right: Inputs Content */}
           <div className="flex-1 flex flex-col min-h-0 bg-white/5">
             {/* Scrollable Main Content */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
+            <div className="flex-1 overflow-y-scroll custom-scrollbar p-5">
 
-              {/* 1. Template Section (Shared) */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-zinc-400 mb-3">
-                  {creationMode === 'ai' ? '출력 형식 (템플릿)' : '자주 사용하는 템플릿'}
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {frequentTemplates.map(template => (
-                    <button
-                      key={template.id}
-                      onClick={() => setSelectedTemplate(template.id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${selectedTemplate === template.id
-                        ? creationMode === 'ai'
-                          ? 'border-purple-500 bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/50'
-                          : 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/50'
-                        : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-700'
-                        }`}
-                    >
-                      <template.icon size={16} />
-                      <span>{template.name}</span>
-                    </button>
-                  ))}
+              {/* 1. Template Section (Blank Mode Only) */}
+              {creationMode === 'blank' && (
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-zinc-400 mb-3">
+                    자주 사용하는 템플릿
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {frequentTemplates.map(template => (
+                      <button
+                        key={template.id}
+                        onClick={() => setSelectedTemplate(template.id)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${selectedTemplate === template.id
+                          ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/50'
+                          : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-700'
+                          }`}
+                      >
+                        <template.icon size={16} />
+                        <span>{template.name}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* 2. Middle Content (Mode Specific) */}
               <div>
@@ -473,7 +551,79 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
                   /* AI Mode: Accordion Inputs */
                   <div className="space-y-4 animate-in fade-in duration-300">
 
-                    {/* Accordion 1: Reference Docs */}
+                    {/* Accordion 1: Title (Subject) */}
+                    <div className="border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
+                      <button
+                        className="w-full flex items-center justify-between p-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-colors"
+                        onClick={() => toggleAccordion('title')}
+                      >
+                        <div className="flex items-center gap-2">
+                          <PenLine size={16} className="text-zinc-500" />
+                          문서 제목
+                        </div>
+                        {accordionState.title ? <ChevronDown size={14} className="text-zinc-500" /> : <ChevronRight size={14} className="text-zinc-500" />}
+                      </button>
+
+                      {accordionState.title && (
+                        <div className="p-3 border-t border-zinc-800/50 bg-black/20 animate-in fade-in slide-in-from-top-1">
+                          <input
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="작성할 문서의 주제나 제목을 입력하세요..."
+                            className="w-full bg-zinc-800 border border-zinc-700/80 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-zinc-600"
+                            autoFocus
+                            disabled={isGenerating}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Accordion 2: Output Template */}
+                    <div className="border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
+                      <button
+                        className="w-full flex items-center justify-between p-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-colors"
+                        onClick={() => toggleAccordion('template')}
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileText size={16} className="text-zinc-500" />
+                          템플릿
+                          {selectedTemplate && (() => {
+                            const template = frequentTemplates.find(t => t.id === selectedTemplate);
+                            return template ? (
+                              <span className="flex items-center gap-1 text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full font-mono">
+                                <template.icon size={10} />
+                                {template.name}
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
+                        {accordionState.template ? <ChevronDown size={14} className="text-zinc-500" /> : <ChevronRight size={14} className="text-zinc-500" />}
+                      </button>
+
+                      {accordionState.template && (
+                        <div className="p-3 border-t border-zinc-800/50 bg-black/20 animate-in fade-in slide-in-from-top-1">
+                          <div className="flex flex-wrap gap-2">
+                            {frequentTemplates.map(template => (
+                              <button
+                                key={template.id}
+                                onClick={() => setSelectedTemplate(template.id)}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-all ${selectedTemplate === template.id
+                                  ? 'border-purple-500 bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/50'
+                                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800'
+                                  }`}
+                              >
+                                <template.icon size={14} />
+                                <span>{template.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Accordion 3: Reference Docs */}
                     <div className="border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
                       <button
                         className="w-full flex items-center justify-between p-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-colors"
@@ -482,6 +632,11 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
                         <div className="flex items-center gap-2">
                           <Database size={16} className="text-zinc-500" />
                           참조 문서 선택
+                          {docSearchResults.filter(r => r.selected).length > 0 && (
+                            <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full font-mono">
+                              {docSearchResults.filter(r => r.selected).length}
+                            </span>
+                          )}
                         </div>
                         {accordionState.docs ? <ChevronDown size={14} className="text-zinc-500" /> : <ChevronRight size={14} className="text-zinc-500" />}
                       </button>
@@ -513,25 +668,37 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
                               <div className="text-xs text-zinc-500 px-1 flex justify-between items-center">
                                 <span>검색 결과 ({docSearchResults.filter(r => r.selected).length}개 선택)</span>
                               </div>
-                              <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                              <div className="space-y-2 max-h-60 overflow-y-scroll custom-scrollbar pr-1">
                                 {docSearchResults.map(result => (
                                   <div
                                     key={result.id}
                                     onClick={() => toggleDocResult(result.id)}
-                                    className={`p-3 rounded-lg border text-left cursor-pointer transition-all flex items-start gap-3 group ${result.selected
-                                        ? 'bg-purple-500/10 border-purple-500/30 ring-1 ring-purple-500/20'
-                                        : 'bg-zinc-800/30 border-zinc-700/30 hover:bg-zinc-800/80 hover:border-zinc-600'
+                                    className={`w-[356px] p-3 rounded-lg border text-left cursor-pointer transition-all flex items-start gap-3 group ${result.selected
+                                      ? 'bg-purple-500/10 border-purple-500/30 ring-1 ring-purple-500/20'
+                                      : 'bg-zinc-950/50 border-zinc-800 hover:bg-zinc-900/50 hover:border-zinc-700'
                                       }`}
                                   >
                                     <div className={`mt-0.5 shrink-0 ${result.selected ? 'text-purple-400' : 'text-zinc-600 group-hover:text-zinc-400'}`}>
                                       {result.selected ? <CheckSquare size={16} /> : <Square size={16} />}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 mb-0.5">
-                                        {result.url ? <ExternalLink size={14} className="text-zinc-500" /> : <FileText size={14} className="text-zinc-500" />}
-                                        <span className={`text-sm font-medium truncate ${result.selected ? 'text-purple-200' : 'text-zinc-300'}`}>
-                                          {result.title}
-                                        </span>
+                                      <div className="flex items-center justify-between gap-2 mb-1">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          {result.url ? <ExternalLink size={14} className="text-zinc-500" /> : <FileText size={14} className="text-zinc-500" />}
+                                          <span className={`text-sm font-medium truncate ${result.selected ? 'text-purple-200' : 'text-zinc-300'}`}>
+                                            {result.title}
+                                          </span>
+                                          {result.source && (
+                                            <span className={getBadgeColor(result.source)}>
+                                              {result.source}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {result.score !== undefined && (
+                                          <span className="text-[9px] text-zinc-500 font-mono shrink-0">
+                                            {result.score}%
+                                          </span>
+                                        )}
                                       </div>
                                       <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
                                         {result.snippet}
@@ -555,6 +722,11 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
                         <div className="flex items-center gap-2">
                           <Globe size={16} className="text-zinc-500" />
                           웹 검색
+                          {webSearchResults.filter(r => r.selected).length > 0 && (
+                            <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full font-mono">
+                              {webSearchResults.filter(r => r.selected).length}
+                            </span>
+                          )}
                         </div>
                         {accordionState.web ? <ChevronDown size={14} className="text-zinc-500" /> : <ChevronRight size={14} className="text-zinc-500" />}
                       </button>
@@ -582,33 +754,52 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
 
                           {/* Search Results */}
                           {webSearchResults.length > 0 && (
-                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2 w-full overflow-hidden">
                               <div className="text-xs text-zinc-500 px-1 flex justify-between items-center">
                                 <span>검색 결과 ({webSearchResults.filter(r => r.selected).length}개 선택)</span>
                               </div>
-                              <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                              <div className="space-y-2 max-h-60 overflow-y-scroll custom-scrollbar pr-1">
                                 {webSearchResults.map(result => (
                                   <div
                                     key={result.id}
                                     onClick={() => toggleWebResult(result.id)}
-                                    className={`p-3 rounded-lg border text-left cursor-pointer transition-all flex items-start gap-3 group ${result.selected
-                                        ? 'bg-purple-500/10 border-purple-500/30 ring-1 ring-purple-500/20'
-                                        : 'bg-zinc-800/30 border-zinc-700/30 hover:bg-zinc-800/80 hover:border-zinc-600'
+                                    className={`w-[356px] p-3 rounded-lg border text-left cursor-pointer transition-all flex items-start gap-3 group overflow-hidden ${result.selected
+                                      ? 'bg-purple-500/10 border-purple-500/30 ring-1 ring-purple-500/20'
+                                      : 'bg-zinc-950/50 border-zinc-800 hover:bg-zinc-900/50 hover:border-zinc-700'
                                       }`}
                                   >
                                     <div className={`mt-0.5 shrink-0 ${result.selected ? 'text-purple-400' : 'text-zinc-600 group-hover:text-zinc-400'}`}>
                                       {result.selected ? <CheckSquare size={16} /> : <Square size={16} />}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 mb-0.5">
-                                        <span className={`text-sm font-medium truncate ${result.selected ? 'text-purple-200' : 'text-zinc-300'}`}>
-                                          {result.title}
-                                        </span>
-                                        <a href={result.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-zinc-600 hover:text-blue-400 shrink-0">
-                                          <ExternalLink size={12} />
-                                        </a>
+                                      <div className="flex items-center justify-between gap-2 mb-1">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <span className={`text-sm font-medium truncate ${result.selected ? 'text-purple-200' : 'text-zinc-300'}`}>
+                                            {result.title}
+                                          </span>
+                                        </div>
+                                        {result.score !== undefined && (
+                                          <span className="text-[9px] text-zinc-500 font-mono shrink-0">
+                                            {result.score}%
+                                          </span>
+                                        )}
+                                        <button
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            try {
+                                              const { openUrl } = await import('@tauri-apps/plugin-opener');
+                                              await openUrl(result.url);
+                                            } catch (err) {
+                                              console.error('Failed to open URL:', err);
+                                              window.open(result.url, '_blank');
+                                            }
+                                          }}
+                                          className="text-zinc-500 hover:text-purple-500 shrink-0 flex cursor-pointer"
+                                        >
+                                          <ExternalLink size={14} />
+                                        </button>
                                       </div>
-                                      <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
+                                      <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed break-all">
                                         {result.snippet}
                                       </p>
                                     </div>
@@ -632,22 +823,24 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
               </div>
             </div>
 
-            {/* 3. Title Section (Fixed Bottom) */}
-            <div className="px-5 py-4 border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-sm z-10 shrink-0">
-              <label className="block text-sm font-medium text-zinc-400 mb-2">
-                {creationMode === 'ai' ? '문서 제목 (주제)' : '문서 제목'}
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={creationMode === 'ai' ? "작성할 문서의 주제나 제목을 입력하세요..." : "제목을 입력하세요..."}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white text-base focus:outline-none focus:border-blue-500 transition-colors placeholder-zinc-600 shadow-inner"
-                autoFocus
-                disabled={isGenerating}
-              />
-            </div>
+            {/* 3. Title Section (Fixed Bottom) - Only for Blank Mode now */}
+            {creationMode === 'blank' && (
+              <div className="px-5 py-4 border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-sm z-10 shrink-0">
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  문서 제목
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="제목을 입력하세요..."
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white text-base focus:outline-none focus:border-blue-500 transition-colors placeholder-zinc-600 shadow-inner"
+                  autoFocus
+                  disabled={isGenerating}
+                />
+              </div>
+            )}
           </div>
         </div>
 

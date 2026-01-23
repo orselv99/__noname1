@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { UserInfo, LoginResponse } from '../types';
+import { invoke } from '@tauri-apps/api/core';
 
 interface AuthState {
   user: UserInfo | null;
@@ -14,6 +15,7 @@ interface AuthState {
 
   // Actions
   setUser: (user: UserInfo | LoginResponse) => void;
+  refreshToken: () => Promise<void>;
   logout: () => void;
 
   updateTenantName: (id: string, name: string) => void;
@@ -27,7 +29,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       isAuthenticated: false,
       tenants: {},
@@ -97,6 +99,27 @@ export const useAuthStore = create<AuthState>()(
       })),
 
       setTenantNames: (map) => set((state) => ({ tenants: { ...state.tenants, ...map } })),
+
+      refreshToken: async () => {
+        const { user, setUser, logout } = get();
+        // @ts-ignore
+        if (!user?.refresh_token) {
+          return;
+        }
+
+        try {
+          // @ts-ignore
+          const res = await invoke<LoginResponse>('refresh_token', { refreshToken: user.refresh_token });
+
+          // Merge new tokens into existing user object
+          // @ts-ignore
+          const newUser = { ...user, ...res };
+          setUser(newUser);
+        } catch (error) {
+          console.error('Failed to refresh token:', error);
+          logout();
+        }
+      },
     }),
     {
       name: 'auth-storage',

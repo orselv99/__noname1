@@ -18,7 +18,7 @@ type Claims struct {
 
 // GenerateTokens는 AccessToken과 RefreshToken을 생성합니다.
 func GenerateTokens(userID, email, salt string) (string, string, int64, error) {
-	expirationTime := time.Now().Add(1 * time.Hour) // Access Token 1시간
+	expirationTime := time.Now().Add(3 * time.Hour) // Access Token 3시간
 
 	claims := jwt.MapClaims{
 		"user_id": userID,
