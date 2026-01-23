@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader2, Sparkles, Send, Plus, History, MessageSquare, X, Pencil, Database, Globe, ExternalLink, FileText, CheckCircle2, ChevronDown, Calendar, Tag } from 'lucide-react';
+import { Loader2, Sparkles, Send, Plus, History, MessageSquare, X, Pencil, Database, Globe, ExternalLink, FileText, ChevronDown, Calendar, Tag } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useChatStore } from '../../stores/chatStore';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -201,99 +201,7 @@ function ResultItem({ result, type, hoverColor, onSelect }: { result: any, type:
   );
 }
 
-// Helper Component for Thinking Process
-function ThinkingAccordion({ state, status, defaultExpanded = false }: { state: any, status?: string, defaultExpanded?: boolean }) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-
-  if (!state) return null;
-
-  return (
-    <div className="w-full mb-4">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/50 hover:bg-zinc-800 rounded-full transition-colors w-fit"
-      >
-        <Sparkles size={11} className="text-blue-400 shrink-0" />
-        <span className="text-[11px] font-medium text-zinc-300">
-          {status || "생각하는 과정 표시"}
-        </span>
-        <ChevronDown size={12} className={`text-zinc-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isExpanded && (
-        <div className="pl-4 mt-2 border-l border-zinc-800 ml-3 space-y-4 animate-in slide-in-from-top-1 duration-200 font-mono text-left">
-
-          {/* Local Search Step */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className={`text-xs font-bold uppercase tracking-wider ${state.local.status === 'running' ? 'text-yellow-400' : 'text-zinc-500'}`}>
-                Local Docs
-              </div>
-              {state.local.status === 'running' && <Loader2 size={10} className="animate-spin text-yellow-400" />}
-              {state.local.status === 'done' && <CheckCircle2 size={10} className="text-green-500" />}
-            </div>
-            {/* Logs */}
-            <div className="space-y-1 pl-1">
-              {state.local.logs.map((log: any, i: number) => (
-                <div key={i} className="text-[11px] text-zinc-400">
-                  <div>{log.message}</div>
-                  {log.subItems && log.subItems.map((sub: string, j: number) => (
-                    <div key={j} className="text-zinc-500 pl-2 opacity-80">- {sub}</div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Server Search Step */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className={`text-xs font-bold uppercase tracking-wider ${state.server.status === 'running' ? 'text-purple-400' : 'text-zinc-500'}`}>
-                Server Docs
-              </div>
-              {state.server.status === 'running' && <Loader2 size={10} className="animate-spin text-purple-400" />}
-              {state.server.status === 'done' && <CheckCircle2 size={10} className="text-green-500" />}
-            </div>
-            {/* Logs */}
-            <div className="space-y-1 pl-1">
-              {state.server.logs.map((log: any, i: number) => (
-                <div key={i} className="text-[11px] text-zinc-400">
-                  <div>{log.message}</div>
-                  {log.subItems && log.subItems.map((sub: string, j: number) => (
-                    <div key={j} className="text-zinc-500 pl-2 opacity-80">- {sub}</div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Web Search Step */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className={`text-xs font-bold uppercase tracking-wider ${state.web.status === 'running' ? 'text-blue-400' : 'text-zinc-500'}`}>
-                Web Search
-              </div>
-              {state.web.status === 'running' && <Loader2 size={10} className="animate-spin text-blue-400" />}
-              {state.web.status === 'done' && <CheckCircle2 size={10} className="text-green-500" />}
-            </div>
-            {/* Logs */}
-            <div className="space-y-1 pl-1">
-              {state.web.logs.map((log: any, i: number) => (
-                <div key={i} className="text-[11px] text-zinc-400">
-                  <div>{log.message}</div>
-                  {log.subItems && log.subItems.map((sub: string, j: number) => (
-                    <div key={j} className="text-zinc-500 pl-2 opacity-80">- {sub}</div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
-      )}
-    </div>
-  );
-}
+import { ThinkingAccordion } from '../ui/ThinkingAccordion';
 
 export function RagPanel() {
   const [input, setInput] = useState('');
@@ -571,7 +479,7 @@ export function RagPanel() {
                         {/* 1. Thinking Process (Left Aligned, Separate) */}
                         {ragData.thinking_process && (
                           <div className="flex justify-start w-full max-w-[90%]">
-                            <ThinkingAccordion state={ragData.thinking_process} status="Thinking Process" />
+                            <ThinkingAccordion state={ragData.thinking_process as any} status="Thinking Process" />
                           </div>
                         )}
 
@@ -675,10 +583,10 @@ export function RagPanel() {
                     </div>
                   );
                 })}
-                {isLoading && (
+                {isLoading && thinkingProcess && (
                   <div className="flex gap-3 w-full">
                     <ThinkingAccordion
-                      state={thinkingProcess}
+                      state={thinkingProcess as any}
                       status={loadingStatus || "답변 생성 중..."}
                       defaultExpanded={true}
                     />

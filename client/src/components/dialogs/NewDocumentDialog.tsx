@@ -1,5 +1,8 @@
+// ... imports
 import { useState } from 'react';
-import { X, FileText, FileCode, Table, PenLine, Presentation, BookOpen, ClipboardList, Search, ChevronDown, ChevronRight, Building2, FolderKanban, Folder, FolderPlus } from 'lucide-react';
+import { X, FileText, FileCode, Table, PenLine, Presentation, BookOpen, ClipboardList, Search, ChevronDown, ChevronRight, Building2, FolderKanban, Folder, FolderPlus, Sparkles, Globe, Loader2, Database, CheckSquare, Square, ExternalLink } from 'lucide-react';
+import { ThinkingAccordion, ThinkingState } from '../ui/ThinkingAccordion';
+import { useDocumentStore } from '../../stores/documentStore';
 
 interface FolderItem {
   id: string;
@@ -24,6 +27,14 @@ interface NewDocumentDialogProps {
   }[];
 }
 
+interface WebSearchResult {
+  id: string;
+  title: string;
+  snippet: string;
+  url: string;
+  selected: boolean;
+}
+
 const frequentTemplates = [
   { id: 'blank', name: 'Blank', icon: FileText },
   { id: 'note', name: 'Note', icon: PenLine },
@@ -43,37 +54,188 @@ const allTemplates = [
 ];
 
 export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, onToggleGroup, onToggleFolder, groups }: NewDocumentDialogProps) => {
+  const { documents } = useDocumentStore();
   const [selectedGroupId, setSelectedGroupId] = useState<string>(groups[0]?.id || '');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+
+  // Modes
+  const [creationMode, setCreationMode] = useState<'blank' | 'ai'>('blank');
+
+  // Blank Mode States
   const [selectedTemplate, setSelectedTemplate] = useState('blank');
   const [title, setTitle] = useState('');
   const [templateSearch, setTemplateSearch] = useState('');
 
-  const handleCreate = () => {
+  // AI Mode States
+  const [webSearchQuery, setWebSearchQuery] = useState('');
+  const [sourceDocIds, setSourceDocIds] = useState<string[]>([]); // Keep for counting
+
+  // Doc Search States
+  const [docSearchQuery, setDocSearchQuery] = useState('');
+  const [docSearchResults, setDocSearchResults] = useState<WebSearchResult[]>([]);
+  const [isSearchingDocs, setIsSearchingDocs] = useState(false);
+
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSearchingWeb, setIsSearchingWeb] = useState(false);
+  const [webSearchResults, setWebSearchResults] = useState<WebSearchResult[]>([]);
+  const [thinkingState, setThinkingState] = useState<ThinkingState | null>(null);
+
+  // Accordion States (AI Mode)
+  const [accordionState, setAccordionState] = useState({
+    docs: true,
+    web: true
+  });
+
+  const toggleAccordion = (section: 'docs' | 'web') => {
+    setAccordionState(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const handleDocSearch = async () => {
+    if (!docSearchQuery.trim()) return;
+    setIsSearchingDocs(true);
+
+    // Simulate slight delay for "search" feel
+    await new Promise(r => setTimeout(r, 600));
+
+    // Filter documents from store
+    const results = documents.filter(doc =>
+      doc.title.toLowerCase().includes(docSearchQuery.toLowerCase()) ||
+      (doc.content && doc.content.toLowerCase().includes(docSearchQuery.toLowerCase())) ||
+      (doc.summary && doc.summary.toLowerCase().includes(docSearchQuery.toLowerCase()))
+    ).map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      snippet: doc.summary || (doc.content ? doc.content.substring(0, 100) + '...' : '내용 없음'),
+      url: '', // Empty for internal docs
+      selected: false
+    }));
+
+    setDocSearchResults(results);
+    setIsSearchingDocs(false);
+    if (!accordionState.docs) setAccordionState(prev => ({ ...prev, docs: true }));
+  };
+
+  const toggleDocResult = (id: string) => {
+    setDocSearchResults(prev => {
+      const next = prev.map(r => r.id === id ? { ...r, selected: !r.selected } : r);
+      setSourceDocIds(next.filter(r => r.selected).map(r => r.id));
+      return next;
+    });
+  };
+
+  const handleWebSearch = async () => {
+    if (!webSearchQuery.trim()) return;
+    setIsSearchingWeb(true);
+    // Mock Search
+    await new Promise(r => setTimeout(r, 1000));
+    setWebSearchResults([
+      { id: '1', title: '2024년 최신 AI 기술 트렌드 분석', snippet: '생성형 AI의 발전과 산업별 도입 현황...', url: 'https://example.com/ai-trends', selected: true },
+      { id: '2', title: 'LLM 기반 서비스 구축 가이드', snippet: 'RAG 아키텍처를 활용한 엔터프라이즈 솔루션...', url: 'https://example.com/llm-guide', selected: true },
+      { id: '3', title: 'AI 에이전트의 미래', snippet: '자율 주행 에이전트와 멀티 모달 모델의 진화...', url: 'https://example.com/agents', selected: false },
+    ]);
+    setIsSearchingWeb(false);
+    // Auto-expand web accordion if closed to show results
+    if (!accordionState.web) setAccordionState(prev => ({ ...prev, web: true }));
+  };
+
+  const toggleWebResult = (id: string) => {
+    setWebSearchResults(prev => prev.map(r => r.id === id ? { ...r, selected: !r.selected } : r));
+  };
+
+  const simulateAiGeneration = async () => {
+    setIsGenerating(true);
+    setThinkingState({
+      local: { status: 'pending', logs: [] },
+      server: { status: 'pending', logs: [] },
+      web: { status: 'pending', logs: [] }
+    });
+
+    // 1. Local Docs (Mock)
+    const selectedDocs = docSearchResults.filter(r => r.selected);
+    if (selectedDocs.length > 0) {
+      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'running', logs: [{ message: `선택된 문서 ${selectedDocs.length}건 분석 중...` }] } }) : null);
+      await new Promise(r => setTimeout(r, 800));
+      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'done', logs: [{ message: `핵심 내용 추출 완료`, subItems: selectedDocs.map(d => d.title) }] } }) : null);
+    } else {
+      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'idle', logs: [{ message: '참조 문서 미사용' }] } }) : null);
+    }
+
+    // 2. Web Search Processing (using selected results)
+    const selectedWebResults = webSearchResults.filter(r => r.selected);
+    if (selectedWebResults.length > 0) {
+      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'running', logs: [{ message: `선택된 웹 검색 결과 ${selectedWebResults.length}건 분석 중...` }] } }) : null);
+      await new Promise(r => setTimeout(r, 1000));
+      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'done', logs: [{ message: '핵심 정보 추출 완료', subItems: selectedWebResults.map(r => r.title) }] } }) : null);
+    } else {
+      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'idle', logs: [{ message: '웹 검색 결과 미사용' }] } }) : null);
+    }
+
+    // 3. Drafting
+    setThinkingState(prev => prev ? ({ ...prev, server: { status: 'running', logs: [{ message: '초안 작성 중...' }] } }) : null);
+    await new Promise(r => setTimeout(r, 1500));
+    setThinkingState(prev => prev ? ({ ...prev, server: { status: 'done', logs: [{ message: '초안 생성 완료' }] } }) : null);
+
+    setIsGenerating(false);
+    return "AI로 생성된 문서 내용입니다...";
+  };
+
+  const handleCreate = async () => {
     if (!title.trim() || !selectedGroupId) return;
     const group = groups.find(g => g.id === selectedGroupId);
     if (!group) return;
 
-    // Find folder name recursively if selectedFolderId is set
-
+    if (creationMode === 'ai') {
+      await simulateAiGeneration();
+    }
 
     onCreate?.({
       groupId: group.id,
       groupType: group.type,
       folderId: selectedFolderId || undefined,
-      template: selectedTemplate,
+      template: creationMode === 'ai' ? 'blank' : selectedTemplate,
       title: title.trim()
     });
+
+    // Reset States
     setTitle('');
     setSelectedTemplate('blank');
     setTemplateSearch('');
+    setCreationMode('blank');
+    setWebSearchQuery('');
+    setWebSearchResults([]);
+
+    // Doc Reset
+    setDocSearchQuery('');
+    setDocSearchResults([]);
+    setSourceDocIds([]);
+
+    setThinkingState(null);
     onClose();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && title.trim()) {
+    // Prevent Enter submission in Web Search input
+    if (e.target instanceof HTMLInputElement && e.target.placeholder.includes('Web search')) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleWebSearch();
+      }
+      return;
+    }
+
+    // Prevent Enter submission in Web Search input (Korean Check)
+    if (e.target instanceof HTMLInputElement && (e.target.placeholder.includes('검색어') || e.target.placeholder.includes('문서'))) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.target.placeholder.includes('문서')) handleDocSearch();
+        else handleWebSearch();
+      }
+      return;
+    }
+
+    if (e.key === 'Enter' && title.trim() && !isGenerating) {
       handleCreate();
-    } else if (e.key === 'Escape') {
+    } else if (e.key === 'Escape' && !isGenerating) {
       onClose();
     }
   };
@@ -143,21 +305,48 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   return (
     <div
       className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999]"
-      onClick={onClose}
+      onClick={!isGenerating ? onClose : undefined}
     >
       <div
-        className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[80vh]"
+        className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col h-[80vh] min-h-[600px] transition-all"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
-          <h2 className="text-lg font-semibold text-white">새 문서</h2>
-          <button
-            onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-300 p-1"
-          >
-            <X size={18} />
-          </button>
+        {/* Header with Tabs */}
+        <div className="flex flex-col border-b border-zinc-800 shrink-0 bg-zinc-900/95 backdrop-blur">
+          <div className="flex items-center justify-between px-4 py-3">
+            <h2 className="text-lg font-semibold text-white">새 문서 만들기</h2>
+            <button
+              onClick={onClose}
+              disabled={isGenerating}
+              className="text-zinc-500 hover:text-zinc-300 p-1 disabled:opacity-50"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex px-4 gap-6">
+            <button
+              onClick={() => setCreationMode('blank')}
+              disabled={isGenerating}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${creationMode === 'blank'
+                ? 'border-blue-500 text-blue-400'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+            >
+              <FileText size={16} />
+              기본 생성
+            </button>
+            <button
+              onClick={() => setCreationMode('ai')}
+              disabled={isGenerating}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${creationMode === 'ai'
+                ? 'border-purple-500 text-purple-400'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+            >
+              <Sparkles size={16} />
+              AI 초안 작성
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -210,83 +399,253 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
             ))}
           </div>
 
-          {/* Right: Template & Title */}
-          <div className="flex-1 p-5 overflow-y-auto">
-            {/* Template Section */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-zinc-400 mb-3">자주 사용하는 템플릿</label>
-              <div className="flex flex-wrap gap-2">
-                {frequentTemplates.map(template => (
-                  <button
-                    key={template.id}
-                    onClick={() => setSelectedTemplate(template.id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${selectedTemplate === template.id
-                      ? 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/50'
-                      : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-700'
-                      }`}
-                  >
-                    <template.icon size={16} />
-                    <span>{template.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+          {/* Right: Inputs Content */}
+          <div className="flex-1 flex flex-col min-h-0 bg-white/5">
+            {/* Scrollable Main Content */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
 
-            {/* Template Search */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-zinc-400 mb-3">템플릿 검색</label>
-              <div className="relative group">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-blue-400 transition-colors" />
-                <input
-                  type="text"
-                  value={templateSearch}
-                  onChange={(e) => setTemplateSearch(e.target.value)}
-                  placeholder="템플릿을 검색하세요..."
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-10 pr-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors placeholder-zinc-600"
-                />
-              </div>
-
-              {templateSearch && (
-                <div className="mt-2 space-y-1 max-h-48 overflow-y-auto custom-scrollbar border border-zinc-700/50 rounded-lg p-1 bg-zinc-900/50">
-                  {filteredTemplates.map(template => (
+              {/* 1. Template Section (Shared) */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-zinc-400 mb-3">
+                  {creationMode === 'ai' ? '출력 형식 (템플릿)' : '자주 사용하는 템플릿'}
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {frequentTemplates.map(template => (
                     <button
                       key={template.id}
-                      onClick={() => {
-                        setSelectedTemplate(template.id);
-                        setTemplateSearch('');
-                      }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors ${selectedTemplate === template.id
-                        ? 'bg-blue-500/20 text-blue-400'
-                        : 'text-zinc-400 hover:bg-zinc-800'
+                      onClick={() => setSelectedTemplate(template.id)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${selectedTemplate === template.id
+                        ? creationMode === 'ai'
+                          ? 'border-purple-500 bg-purple-500/10 text-purple-400 ring-1 ring-purple-500/50'
+                          : 'border-blue-500 bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/50'
+                        : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-700'
                         }`}
                     >
-                      <template.icon size={18} />
-                      <div className="flex-1">
-                        <div className="font-medium">{template.name}</div>
-                        <div className="text-xs text-zinc-500 mt-0.5">{template.description}</div>
-                      </div>
+                      <template.icon size={16} />
+                      <span>{template.name}</span>
                     </button>
                   ))}
-                  {filteredTemplates.length === 0 && (
-                    <div className="text-center py-4 text-zinc-500 text-sm">
-                      검색 결과가 없습니다
-                    </div>
-                  )}
                 </div>
-              )}
+              </div>
+
+              {/* 2. Middle Content (Mode Specific) */}
+              <div>
+                {creationMode === 'blank' ? (
+                  /* Blank Mode: Template Search */
+                  <div className="animate-in fade-in duration-300">
+                    <label className="block text-sm font-medium text-zinc-400 mb-3">템플릿 검색</label>
+                    <div className="relative group">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-blue-400 transition-colors" />
+                      <input
+                        type="text"
+                        value={templateSearch}
+                        onChange={(e) => setTemplateSearch(e.target.value)}
+                        placeholder="템플릿을 검색하세요..."
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-10 pr-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors placeholder-zinc-600"
+                      />
+                    </div>
+
+                    {templateSearch && (
+                      <div className="mt-2 space-y-1 max-h-48 overflow-y-auto custom-scrollbar border border-zinc-700/50 rounded-lg p-1 bg-zinc-900/50">
+                        {filteredTemplates.map(template => (
+                          <button
+                            key={template.id}
+                            onClick={() => {
+                              setSelectedTemplate(template.id);
+                              setTemplateSearch('');
+                            }}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors ${selectedTemplate === template.id
+                              ? 'bg-blue-500/20 text-blue-400'
+                              : 'text-zinc-400 hover:bg-zinc-800'
+                              }`}
+                          >
+                            <template.icon size={18} />
+                            <div className="flex-1">
+                              <div className="font-medium">{template.name}</div>
+                              <div className="text-xs text-zinc-500 mt-0.5">{template.description}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* AI Mode: Accordion Inputs */
+                  <div className="space-y-4 animate-in fade-in duration-300">
+
+                    {/* Accordion 1: Reference Docs */}
+                    <div className="border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
+                      <button
+                        className="w-full flex items-center justify-between p-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-colors"
+                        onClick={() => toggleAccordion('docs')}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Database size={16} className="text-zinc-500" />
+                          참조 문서 선택
+                        </div>
+                        {accordionState.docs ? <ChevronDown size={14} className="text-zinc-500" /> : <ChevronRight size={14} className="text-zinc-500" />}
+                      </button>
+
+                      {accordionState.docs && (
+                        <div className="p-3 border-t border-zinc-800/50 bg-black/20 animate-in fade-in slide-in-from-top-1">
+                          <div className="flex gap-2 mb-3">
+                            <input
+                              type="text"
+                              value={docSearchQuery}
+                              onChange={(e) => setDocSearchQuery(e.target.value)}
+                              placeholder="문서 검색어 입력... (Enter로 검색)"
+                              className="flex-1 bg-zinc-800 border border-zinc-700/80 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-zinc-600"
+                              disabled={isGenerating}
+                              onKeyDown={handleKeyDown}
+                            />
+                            <button
+                              onClick={handleDocSearch}
+                              disabled={isGenerating || isSearchingDocs || !docSearchQuery}
+                              className="px-3.5 py-2 bg-zinc-800 border border-zinc-700 rounded-lg hover:bg-zinc-700 text-zinc-300 disabled:opacity-50 transition-colors"
+                            >
+                              {isSearchingDocs ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                            </button>
+                          </div>
+
+                          {/* Doc Results */}
+                          {docSearchResults.length > 0 && (
+                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                              <div className="text-xs text-zinc-500 px-1 flex justify-between items-center">
+                                <span>검색 결과 ({docSearchResults.filter(r => r.selected).length}개 선택)</span>
+                              </div>
+                              <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                                {docSearchResults.map(result => (
+                                  <div
+                                    key={result.id}
+                                    onClick={() => toggleDocResult(result.id)}
+                                    className={`p-3 rounded-lg border text-left cursor-pointer transition-all flex items-start gap-3 group ${result.selected
+                                        ? 'bg-purple-500/10 border-purple-500/30 ring-1 ring-purple-500/20'
+                                        : 'bg-zinc-800/30 border-zinc-700/30 hover:bg-zinc-800/80 hover:border-zinc-600'
+                                      }`}
+                                  >
+                                    <div className={`mt-0.5 shrink-0 ${result.selected ? 'text-purple-400' : 'text-zinc-600 group-hover:text-zinc-400'}`}>
+                                      {result.selected ? <CheckSquare size={16} /> : <Square size={16} />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-0.5">
+                                        {result.url ? <ExternalLink size={14} className="text-zinc-500" /> : <FileText size={14} className="text-zinc-500" />}
+                                        <span className={`text-sm font-medium truncate ${result.selected ? 'text-purple-200' : 'text-zinc-300'}`}>
+                                          {result.title}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
+                                        {result.snippet}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Accordion 2: Web Search */}
+                    <div className="border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
+                      <button
+                        className="w-full flex items-center justify-between p-3 text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-colors"
+                        onClick={() => toggleAccordion('web')}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Globe size={16} className="text-zinc-500" />
+                          웹 검색
+                        </div>
+                        {accordionState.web ? <ChevronDown size={14} className="text-zinc-500" /> : <ChevronRight size={14} className="text-zinc-500" />}
+                      </button>
+
+                      {accordionState.web && (
+                        <div className="p-3 border-t border-zinc-800/50 bg-black/20 animate-in fade-in slide-in-from-top-1">
+                          <div className="flex gap-2 mb-3">
+                            <input
+                              type="text"
+                              value={webSearchQuery}
+                              onChange={(e) => setWebSearchQuery(e.target.value)}
+                              placeholder="검색어 입력... (Enter로 검색)"
+                              className="flex-1 bg-zinc-800 border border-zinc-700/80 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500 transition-colors placeholder-zinc-600"
+                              disabled={isGenerating}
+                              onKeyDown={handleKeyDown}
+                            />
+                            <button
+                              onClick={handleWebSearch}
+                              disabled={isGenerating || isSearchingWeb || !webSearchQuery}
+                              className="px-3.5 py-2 bg-zinc-800 border border-zinc-700 rounded-lg hover:bg-zinc-700 text-zinc-300 disabled:opacity-50 transition-colors"
+                            >
+                              {isSearchingWeb ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                            </button>
+                          </div>
+
+                          {/* Search Results */}
+                          {webSearchResults.length > 0 && (
+                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                              <div className="text-xs text-zinc-500 px-1 flex justify-between items-center">
+                                <span>검색 결과 ({webSearchResults.filter(r => r.selected).length}개 선택)</span>
+                              </div>
+                              <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                                {webSearchResults.map(result => (
+                                  <div
+                                    key={result.id}
+                                    onClick={() => toggleWebResult(result.id)}
+                                    className={`p-3 rounded-lg border text-left cursor-pointer transition-all flex items-start gap-3 group ${result.selected
+                                        ? 'bg-purple-500/10 border-purple-500/30 ring-1 ring-purple-500/20'
+                                        : 'bg-zinc-800/30 border-zinc-700/30 hover:bg-zinc-800/80 hover:border-zinc-600'
+                                      }`}
+                                  >
+                                    <div className={`mt-0.5 shrink-0 ${result.selected ? 'text-purple-400' : 'text-zinc-600 group-hover:text-zinc-400'}`}>
+                                      {result.selected ? <CheckSquare size={16} /> : <Square size={16} />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-0.5">
+                                        <span className={`text-sm font-medium truncate ${result.selected ? 'text-purple-200' : 'text-zinc-300'}`}>
+                                          {result.title}
+                                        </span>
+                                        <a href={result.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-zinc-600 hover:text-blue-400 shrink-0">
+                                          <ExternalLink size={12} />
+                                        </a>
+                                      </div>
+                                      <p className="text-xs text-zinc-500 line-clamp-2 leading-relaxed">
+                                        {result.snippet}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Thinking Process UI */}
+                    {thinkingState && (
+                      <div className="pt-2">
+                        <ThinkingAccordion state={thinkingState} status="AI Drafting Process" defaultExpanded={true} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Title Input */}
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-3">문서 제목</label>
+            {/* 3. Title Section (Fixed Bottom) */}
+            <div className="px-5 py-4 border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-sm z-10 shrink-0">
+              <label className="block text-sm font-medium text-zinc-400 mb-2">
+                {creationMode === 'ai' ? '문서 제목 (주제)' : '문서 제목'}
+              </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="제목을 입력하세요..."
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white text-base focus:outline-none focus:border-blue-500 transition-colors placeholder-zinc-600"
+                placeholder={creationMode === 'ai' ? "작성할 문서의 주제나 제목을 입력하세요..." : "제목을 입력하세요..."}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white text-base focus:outline-none focus:border-blue-500 transition-colors placeholder-zinc-600 shadow-inner"
                 autoFocus
+                disabled={isGenerating}
               />
             </div>
           </div>
@@ -296,16 +655,29 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
         <div className="flex gap-3 px-4 py-3 border-t border-zinc-800 shrink-0 bg-zinc-900">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 px-4 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm font-medium"
+            disabled={isGenerating}
+            className="flex-1 py-2.5 px-4 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm font-medium disabled:opacity-50"
           >
             취소
           </button>
           <button
             onClick={handleCreate}
-            disabled={!title.trim()}
-            className="flex-1 py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/20"
+            disabled={!title.trim() || isGenerating}
+            className={`flex-1 py-2.5 px-4 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2 ${creationMode === 'ai'
+              ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/20'
+              : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20'
+              }`}
           >
-            문서 생성
+            {isGenerating ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                작성 중...
+              </>
+            ) : (
+              creationMode === 'ai' ? <>
+                <Sparkles size={16} /> AI로 초안 작성
+              </> : '문서 생성'
+            )}
           </button>
         </div>
       </div>
