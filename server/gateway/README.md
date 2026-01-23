@@ -16,9 +16,9 @@ Gateway는 클라이언트(Tauri/React)로부터 들어오는 HTTP 요청을 받
 1. **Gin 서버 설정**: `main.go` 또는 `gateway/main.go`
 2. **CORS 미들웨어**: Tauri (localhost:1420) 등에서의 접근 허용
 3. **gRPC 클라이언트 연결**: 
-    - `auth-service:50051`
-    - `index-service:50052`
-    - `signaling-service:50053`
+    - `auth:50051`
+    - `index:50052`
+    - `signaling:50053`
 4. **핸들러 구현**: HTTP JSON 요청 -> gRPC 메시지 변환 -> 응답 반환
 
 ## 파일 구조

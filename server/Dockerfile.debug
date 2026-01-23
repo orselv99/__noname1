@@ -30,7 +30,7 @@ RUN protoc --proto_path=/tmp/protos \
 # Output binaries to /bin, source stays in /src
 RUN go build -gcflags="all=-N -l" -o /bin/gateway ./gateway
 RUN go build -gcflags="all=-N -l" -o /bin/auth ./auth
-RUN go build -gcflags="all=-N -l" -o /bin/index-service ./index
+RUN go build -gcflags="all=-N -l" -o /bin/index ./index
 RUN go build -gcflags="all=-N -l" -o /bin/signaling ./signaling
 
 # Expose service ports and debug ports

@@ -69,7 +69,7 @@ if ($volumeName) {
 # ---------------------------------------------------------
 Write-Host "`n>>> [3/3] Restarting backend services with fresh database..." -ForegroundColor Yellow
 
-docker-compose up -d --build gateway auth signaling index-service postgres redis
+docker-compose up -d --build gateway auth signaling index postgres redis
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n>>> DONE! All services restarted with a fresh database." -ForegroundColor Green

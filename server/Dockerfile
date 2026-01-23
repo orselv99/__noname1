@@ -35,7 +35,7 @@ RUN protoc --proto_path=/tmp/protos \
 # Build services
 RUN go build -o /app/bin/gateway ./gateway
 RUN go build -o /app/bin/auth ./auth
-RUN go build -o /app/bin/index-service ./index
+RUN go build -o /app/bin/index ./index
 RUN go build -o /app/bin/signaling ./signaling
 
 # Runner stage
@@ -48,7 +48,7 @@ RUN apk add --no-cache ca-certificates tzdata
 # Copy binaries
 COPY --from=builder /app/bin/gateway .
 COPY --from=builder /app/bin/auth .
-COPY --from=builder /app/bin/index-service .
+COPY --from=builder /app/bin/index .
 COPY --from=builder /app/bin/signaling .
 
 # Expose ports

@@ -12,14 +12,14 @@ services:
       - PG_USER=postgres
       - PG_PASSWORD=zzzzzzzz1!
       - AUTH_SERVICE_ADDR=auth:50051
-      - INDEX_SERVICE_ADDR=index-service:50052
+      - INDEX_SERVICE_ADDR=index:50052
       - SIGNALING_SERVICE_ADDR=signaling:50053
     depends_on:
       postgres:
         condition: service_healthy
       auth:
         condition: service_started
-      index-service:
+      index:
         condition: service_started
       signaling:
         condition: service_started
@@ -49,19 +49,19 @@ services:
     networks:
       - fiery-net
 
-  index-service:
+  index:
     build:
       context: .
       dockerfile: server/Dockerfile
-    command: /app/index-service
+    command: /app/index
     ports:
       - "50052:50052"
     environment:
       - DB_DSN=host=postgres user=postgres password=zzzzzzzz1! dbname=fiery_index port=5432 sslmode=disable
-      # http://llama-server:8080
-      - LLAMA_SERVER_ADDR=http://192.168.0.209:81/v1
-      # http://llama-embedding:8080
-      - LLAMA_EMBEDDING_ADDR=http://192.168.0.209:82/v1
+      - LLAMA_COMPLETION_ADDR=http://llama-completion:8080
+      #- LLAMA_COMPLETION_ADDR=http://192.168.0.209:81/v1
+      - LLAMA_EMBEDDING_ADDR=http://llama-embedding:8080
+      #- LLAMA_EMBEDDING_ADDR=http://192.168.0.209:82/v1
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,6 +116,40 @@ services:
     image: redis:alpine
     ports:
       - "6379:6379"
+    networks:
+      - fiery-net
+
+  llama-completion:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    ports:
+      - "8083:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    volumes:
+      - ./client-ai-service/model:/models
+    command: -m /models/gemma-2-2b-it-Q4_K_M.gguf -c 4096 --host 0.0.0.0 --port 8080 -ngl 99
+    networks:
+      - fiery-net
+
+  llama-embedding:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    ports:
+      - "8084:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    volumes:
+      - ./client-ai-service/model:/models
+    command: -m /models/nomic-embed-text-v1.5.Q4_K_M.gguf -c 2048 -b 2048 -ub 2048 --host 0.0.0.0 --port 8080 --embedding -ngl 99
     networks:
       - fiery-net
 

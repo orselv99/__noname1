@@ -43,7 +43,7 @@ try {
 Write-Host "`n>>> [2/2] Starting Backend Services..." -ForegroundColor Yellow
 
 # Explicitly list services excluding 'web'
-docker-compose up -d --build gateway auth signaling index-service postgres redis llama-server
+docker-compose up -d --build gateway auth signaling index postgres redis llama-completion llama-embedding
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n>>> DONE! Backend services are running." -ForegroundColor Green

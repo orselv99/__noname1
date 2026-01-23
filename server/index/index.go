@@ -62,11 +62,11 @@ type CompletionResponse struct {
 	Usage   *CompletionUsage   `json:"usage,omitempty"`
 }
 
-// generateCompletion calls llama-server /completion to generate summary and tags
+// generateCompletion calls llama-completion /completion to generate summary and tags
 func generateCompletion(content string) (string, []TagEvidence, error) {
-	llamaAddr := os.Getenv("LLAMA_SERVER_ADDR")
+	llamaAddr := os.Getenv("LLAMA_COMPLETION_ADDR")
 	if llamaAddr == "" {
-		llamaAddr = "http://llama-server:8080"
+		llamaAddr = "http://llama-completion:8080"
 	}
 
 	// Clean input text (remove markdown, HTML, etc.)

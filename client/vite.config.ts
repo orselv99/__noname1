@@ -15,7 +15,7 @@ export default defineConfig(async () => ({
   },
   clearScreen: false,
   server: {
-    port: 1420,
+    port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT) : 1420,
     strictPort: true,
     watch: {
       ignored: ['**/src-tauri/**'],

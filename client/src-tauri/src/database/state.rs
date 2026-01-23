@@ -67,5 +67,36 @@ pub fn get_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
   // 폴더가 없으면 생성
   std::fs::create_dir_all(&client_dir).map_err(|e| format!("client 디렉토리 생성 실패: {}", e))?;
 
-  Ok(client_dir.join("fiery_horizon.db"))
+  // 기본 데이터베이스 파일명 설정
+  let mut db_filename = String::from("fiery_horizon.db");
+
+  // --------------------------------------------------------------------------
+  // [Debug Only] 사용자 ID 기반 DB 분리 로직 (환경 변수 버전)
+  // --------------------------------------------------------------------------
+  // #[cfg(debug_assertions)]는 C++의 #ifdef _DEBUG와 유사합니다.
+  // 이 블록 안의 코드는 오직 '디버그 빌드' (cargo build 또는 npm run tauri dev)
+  // 시에만 컴파일러에 의해 포함됩니다. 릴리즈 빌드에서는 완전히 제거됩니다.
+  #[cfg(debug_assertions)]
+  {
+    // std::env::var("APP_USER_ID"): "APP_USER_ID"라는 이름의 환경 변수 값을 읽어옵니다.
+    // CLI 인자 파싱 방식은 프레임워크(Tauri/Vite)의 내부 인자와 충돌할 수 있어,
+    // 더 안전한 환경 변수 방식을 사용합니다.
+    // - Ok(val): 환경 변수가 존재하면 그 값을 val로 반환합니다.
+    // - Err(_): 환경 변수가  없으면 에러를 반환합니다 (여기서는 무시).
+    if let Ok(user_id_env) = std::env::var("APP_USER_ID") {
+      // format! 매크로를 사용하여 새로운 파일명 문자열을 생성합니다.
+      // 예: 환경 변수가 "testuser1"이면 "fiery_horizon_testuser1.db"가 됩니다.
+      db_filename = format!("fiery_horizon_{}.db", user_id_env);
+
+      // 디버그용 로그 출력 (어떤 DB 파일을 쓰는지 확인용)
+      println!(
+        "Debug: 사용자 ID 환경 변수 감지됨 ('{}'). DB 파일명을 '{}'로 변경합니다.",
+        user_id_env, db_filename
+      );
+    }
+  }
+
+  // 최종적으로 결정된 파일명을 경로에 합칩니다.
+  // create_dir_all로 생성된 client_dir 경로 뒤에 파일명을 붙여서 전체 경로를 만듭니다.
+  Ok(client_dir.join(db_filename))
 }
