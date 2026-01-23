@@ -59,6 +59,7 @@ type CompletionResponse struct {
 	Created int64              `json:"created"`
 	Model   string             `json:"model"`
 	Choices []CompletionChoice `json:"choices"`
+	Content string             `json:"content"` // For some quantized models (e.g. Q4_K_M)
 	Usage   *CompletionUsage   `json:"usage,omitempty"`
 }
 
@@ -165,12 +166,19 @@ Document:
 		return "", nil, fmt.Errorf("failed to parse completion response: %w", err)
 	}
 
-	// choices 배열에서 첫 번째 항목의 text 추출
-	if len(completionResp.Choices) == 0 {
-		return "", nil, fmt.Errorf("completion response has no choices")
+	var responseText string
+
+	// 테스트 환경이 달라서 모델응답값이 다름
+	// 유연한 응답 처리: Choices 배열 우선, 없으면 Content 필드 확인
+	if len(completionResp.Choices) > 0 {
+		responseText = strings.TrimSpace(completionResp.Choices[0].Text)
+	} else if completionResp.Content != "" {
+		responseText = strings.TrimSpace(completionResp.Content)
+		fmt.Printf("DEBUG: Using 'content' field from response (likely quantized model)\n")
+	} else {
+		return "", nil, fmt.Errorf("completion response has no choices and no content")
 	}
 
-	responseText := strings.TrimSpace(completionResp.Choices[0].Text)
 	fmt.Printf("DEBUG: Completion text (%d chars): [%s]\n", len(responseText), responseText)
 
 	// Check for empty response
