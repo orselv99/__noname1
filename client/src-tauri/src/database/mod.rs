@@ -33,3 +33,19 @@ pub use auth::{
   clear_saved_tenant, get_saved_tenant, hash_password, save_user, update_cached_password,
   verify_offline_login, verify_password, CachedUser,
 };
+
+// documents 모듈
+pub use documents::{
+  delete_document_tags, get_deleted_document_ids, get_document_descendants, get_document_embedding,
+  get_document_raw, get_document_tags_raw, get_existing_created_at, get_username,
+  hard_delete_document, insert_document_tag, list_documents_query, restore_document_db,
+  rollback_document_state, save_document_embedding, soft_delete_document, update_document_summary,
+  upsert_document, upsert_revision, DocumentRaw, SaveDocumentParams, SaveRevisionParams,
+};
+
+// rag 모듈
+pub use rag::{
+  create_chat_session_db, delete_rag_chat_db, list_rag_chats_db, list_rag_messages_db,
+  save_rag_message_db, search_similar_documents_db, update_chat_timestamp_db, update_chat_title_db,
+  RagChatRaw, RagMessageRaw, SearchResultRaw,
+};

@@ -24,7 +24,11 @@
 use crate::commands::auth::AuthState;
 use crate::config;
 use crate::crypto::{decrypt_content, encrypt_content};
-use crate::database::DatabaseState;
+use crate::database::{
+    create_chat_session_db, delete_rag_chat_db, get_document_tags_raw, list_rag_chats_db,
+    list_rag_messages_db, save_rag_message_db, search_similar_documents_db,
+    update_chat_timestamp_db, update_chat_title_db, DatabaseState,
+};
 use chrono;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::json;
@@ -274,10 +278,8 @@ fn create_chat_session(
   let created_enc = encrypt_content(user_id, &now_str)?;
   let updated_enc = encrypt_content(user_id, &now_str)?;
 
-  conn.execute(
-        "INSERT INTO rag_chats (id, title, created_at, updated_at, updated_at_ts) VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![id, title_enc, created_enc, updated_enc, ts],
-    ).map_err(|e| e.to_string())?;
+  // DB Function Call
+  create_chat_session_db(conn, &id, &title_enc, &created_enc, &updated_enc, ts)?;
 
   Ok(RagChat {
     id,
@@ -304,18 +306,20 @@ fn save_rag_message_to_db(
   let content_enc = encrypt_content(user_id, content)?;
   let created_enc = encrypt_content(user_id, &now_str)?;
 
-  conn.execute(
-        "INSERT INTO rag_messages (id, chat_id, role, content, created_at, timestamp) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![id, chat_id, role_enc, content_enc, created_enc, timestamp],
-    ).map_err(|e| e.to_string())?;
+  // DB Function Call (Insert Message)
+  save_rag_message_db(
+    conn,
+    &id,
+    chat_id,
+    &role_enc,
+    &content_enc,
+    &created_enc,
+    timestamp,
+  )?;
 
   // Update chat updated_at
-  conn
-    .execute(
-      "UPDATE rag_chats SET updated_at = ?1, updated_at_ts = ?2 WHERE id = ?3",
-      rusqlite::params![created_enc, timestamp, chat_id],
-    )
-    .ok();
+  // Ignore error if chat not found (though it should exist)
+  let _ = update_chat_timestamp_db(conn, chat_id, &created_enc, timestamp);
 
   Ok(RagMessage {
     id,
@@ -347,104 +351,36 @@ pub async fn search_local(
 
   let db = db_state.lock().unwrap();
   if let Some(ref conn) = db.conn {
-    let mut stmt = conn
-      .prepare(
-        "SELECT 
-          d.id, 
-          vec_distance_cosine(da.embedding, ?1) as distance, 
-          d.content, 
-          d.summary,
-          d.title,
-          d.parent_id,
-          d.document_state,
-          d.visibility_level,
-          d.group_type,
-          d.group_id,
-          d.size,
-          d.media_size,
-          d.current_version,
-          d.version,
-          d.is_favorite,
-          d.created_at,
-          d.updated_at,
-          d.accessed_at,
-          CASE 
-            WHEN d.group_type = 0 THEN dep.name 
-            WHEN d.group_type = 1 THEN proj.name 
-            ELSE 'Private' 
-          END as group_name
-        FROM document_ai_data da
-        JOIN documents d ON da.document_id = d.id
-        LEFT JOIN departments dep ON d.group_type = 0 AND d.group_id = dep.id
-        LEFT JOIN projects proj ON d.group_type = 1 AND d.group_id = proj.id
-        WHERE d.user_id = ?2
-        ORDER BY distance ASC
-        LIMIT ?3",
-      )
-      .map_err(|e| e.to_string())?;
-
-    let rows = stmt
-      .query_map(rusqlite::params![query_bytes, user_id, limit_val], |row| {
-        Ok((
-          row.get::<_, String>(0)?,
-          row.get::<_, f32>(1)?,
-          row.get::<_, Vec<u8>>(2)?,
-          row.get::<_, Option<Vec<u8>>>(3)?,
-          row.get::<_, Option<Vec<u8>>>(4)?,
-          row.get::<_, Option<String>>(5)?,
-          row.get::<_, i32>(6)?,
-          row.get::<_, i32>(7)?,
-          row.get::<_, i32>(8)?,
-          row.get::<_, Option<String>>(9)?,
-          row.get::<_, Option<Vec<u8>>>(10)?,
-          row.get::<_, Option<Vec<u8>>>(11)?,
-          row.get::<_, i32>(12)?,
-          row.get::<_, i32>(13)?,
-          row.get::<_, i32>(14)? != 0,
-          row.get::<_, Option<Vec<u8>>>(15)?,
-          row.get::<_, Option<Vec<u8>>>(16)?,
-          row.get::<_, Option<Vec<u8>>>(17)?,
-          row.get::<_, Option<String>>(18)?, // group_name from JOIN
-        ))
-      })
-      .map_err(|e| e.to_string())?;
+    // 1. Search DB (DB 함수 사용)
+    let raw_results = search_similar_documents_db(conn, &query_bytes, &user_id, limit_val)?;
 
     let mut results = Vec::new();
-    let mut temp_data = Vec::new();
-    for r in rows {
-      temp_data.push(r.map_err(|e| e.to_string())?);
-    }
 
-    for (
-      doc_id,
-      dist,
-      c_blob,
-      s_blob,
-      t_blob,
-      pid,
-      dstate,
-      vis,
-      gtype,
-      gid,
-      sz_blob,
-      msz_blob,
-      cver,
-      ver,
-      fav,
-      cat_blob,
-      uat_blob,
-      aat_blob,
-      gname_opt,
-    ) in temp_data
-    {
-      let content = decrypt_content(&user_id, &c_blob).unwrap_or_default();
-      let summary = s_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
-      let title = t_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
-      let size = sz_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
-      let media_size = msz_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
-      let created_at = cat_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
-      let updated_at = uat_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
-      let accessed_at = aat_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
+    for raw in raw_results {
+      let content = decrypt_content(&user_id, &raw.content_blob).unwrap_or_default();
+      let summary = raw
+        .summary_blob
+        .and_then(|b| decrypt_content(&user_id, &b).ok());
+      let title = raw
+        .title_blob
+        .and_then(|b| decrypt_content(&user_id, &b).ok());
+      let size = raw
+        .size_blob
+        .and_then(|b| decrypt_content(&user_id, &b).ok());
+      let media_size = raw
+        .media_size_blob
+        .and_then(|b| decrypt_content(&user_id, &b).ok());
+      let created_at = raw
+        .created_at_blob
+        .and_then(|b| decrypt_content(&user_id, &b).ok());
+      let updated_at = raw
+        .updated_at_blob
+        .and_then(|b| decrypt_content(&user_id, &b).ok());
+      let accessed_at = raw
+        .accessed_at_blob
+        .and_then(|b| decrypt_content(&user_id, &b).ok());
+
+      let dist = raw.distance;
 
       // Hybrid Search: Apply keyword boost
       // If query substring is found in title or content, reduce distance
@@ -496,35 +432,25 @@ pub async fn search_local(
       );
 
       // Resolve Group Name (Use fetched name or Fallback)
-      let group_name = gname_opt.or_else(|| match gtype {
+      let group_name = raw.group_name.or_else(|| match raw.group_type {
         0 => Some("Department".to_string()),
         1 => Some("Project".to_string()),
         2 => Some("Private".to_string()),
         _ => Some("Unknown".to_string()),
       });
 
-      // Fetch tags
+      // Fetch tags (Use DB function)
       let mut tags = Vec::new();
-      let mut tag_stmt = conn
-        .prepare("SELECT tag FROM document_tags WHERE document_id = ?1")
-        .map_err(|e| e.to_string())?;
-      let tag_rows = tag_stmt
-        .query_map([&doc_id], |row| {
-          let t_blob: Vec<u8> = row.get(0)?;
-          Ok(t_blob)
-        })
-        .map_err(|e| e.to_string())?;
-
-      for tr in tag_rows {
-        if let Ok(tb) = tr {
-          if let Ok(t) = decrypt_content(&user_id, &tb) {
+      let tags_raw = get_document_tags_raw(conn, &raw.document_id)?; // Reusing documents.rs helper? No, we imported it.
+      // Wait, get_document_tags_raw returns (tag_blob, evidence_blob).
+      for (t_blob, _) in tags_raw {
+         if let Ok(t) = decrypt_content(&user_id, &t_blob) {
             tags.push(t);
-          }
-        }
+         }
       }
 
       results.push(SearchResult {
-        document_id: doc_id,
+        document_id: raw.document_id,
         distance: dist,
         similarity,
         content,
@@ -532,16 +458,16 @@ pub async fn search_local(
         title,
         group_name,
         tags,
-        parent_id: pid,
-        document_state: dstate,
-        visibility_level: vis,
-        group_type: gtype,
-        group_id: gid,
+        parent_id: raw.parent_id,
+        document_state: raw.document_state,
+        visibility_level: raw.visibility_level,
+        group_type: raw.group_type,
+        group_id: raw.group_id,
         size,
         media_size,
-        current_version: cver,
-        version: ver,
-        is_favorite: fav,
+        current_version: raw.current_version,
+        version: raw.version,
+        is_favorite: raw.is_favorite,
         created_at,
         updated_at,
         accessed_at,
@@ -602,79 +528,49 @@ pub async fn ask_ai(
   {
     let db = db_state.lock().unwrap();
     if let Some(ref conn) = db.conn {
-      let mut stmt = conn
-        .prepare(
-          "SELECT d.id, vec_distance_cosine(da.embedding, ?1) as distance, d.content, d.summary, d.title
-                 FROM document_ai_data da
-                 JOIN documents d ON da.document_id = d.id
-                 WHERE d.user_id = ?2
-                 ORDER BY distance ASC
-                 LIMIT 3",
-        )
-        .map_err(|e| e.to_string())?;
+      // 1. Search DB (DB 함수 사용 - limit 3)
+      // Note: ask_ai uses a limit of 3
+      let raw_results = search_similar_documents_db(conn, &query_bytes, &user_id, 3).unwrap_or_default();
 
-      let rows = stmt
-        .query_map(rusqlite::params![query_bytes, user_id], |row| {
-          let doc_id: String = row.get(0)?;
-          let dist: f32 = row.get(1)?;
-          let content_blob: Vec<u8> = row.get(2)?;
-          let summary_blob: Option<Vec<u8>> = row.get(3)?;
-          let title_blob: Option<Vec<u8>> = row.get(4)?;
+      for raw in raw_results {
+        let content = decrypt_content(&user_id, &raw.content_blob).unwrap_or_default();
+        let summary = raw
+          .summary_blob
+          .and_then(|b| decrypt_content(&user_id, &b).ok());
+        let title = raw
+          .title_blob
+          .and_then(|b| decrypt_content(&user_id, &b).ok());
 
-          Ok((doc_id, dist, content_blob, summary_blob, title_blob))
-        })
-        .map_err(|e| e.to_string())?;
-
-      let mut temp_results = Vec::new();
-      for r in rows {
-        temp_results.push(r.map_err(|e| e.to_string())?);
-      }
-
-      for (doc_id, dist, c_blob, s_blob, t_blob) in temp_results {
-        let content = decrypt_content(&user_id, &c_blob).unwrap_or_default();
-        let summary = s_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
-        let title = t_blob.and_then(|b| decrypt_content(&user_id, &b).ok());
-
-        // Fetch tags
+        // Fetch tags (Use DB function)
         let mut tags = Vec::new();
-        let mut tag_stmt = conn
-          .prepare("SELECT tag FROM document_tags WHERE document_id = ?1")
-          .map_err(|e| e.to_string())?;
-        let tag_rows = tag_stmt
-          .query_map([&doc_id], |row| {
-            let t_blob: Vec<u8> = row.get(0)?;
-            Ok(t_blob)
-          })
-          .map_err(|e| e.to_string())?;
-
-        for tr in tag_rows {
-          if let Ok(tb) = tr {
-            if let Ok(t) = decrypt_content(&user_id, &tb) {
-              tags.push(t);
+        if let Ok(tags_raw) = get_document_tags_raw(conn, &raw.document_id) {
+            for (t_blob, _) in tags_raw {
+               if let Ok(t) = decrypt_content(&user_id, &t_blob) {
+                  tags.push(t);
+               }
             }
-          }
         }
 
         results.push(SearchResult {
-          document_id: doc_id,
-          distance: dist,
-          similarity: ((1.0 - dist / 2.0) * 100.0).clamp(0.0, 100.0),
+          document_id: raw.document_id,
+          distance: raw.distance,
+          similarity: ((1.0 - raw.distance / 2.0) * 100.0).clamp(0.0, 100.0),
           content,
           summary,
           title,
           group_name: None, // Default for ask_ai
           tags,
-          // Defaults for ask_ai (lightweight)
-          parent_id: None,
-          document_state: 1,
-          visibility_level: 1,
-          group_type: 0,
-          group_id: None,
+          // Defaults for ask_ai (lightweight) or use raw data where available
+          parent_id: raw.parent_id,
+          document_state: raw.document_state,
+          visibility_level: raw.visibility_level,
+          group_type: raw.group_type,
+          group_id: raw.group_id,
           size: None,
           media_size: None,
-          current_version: 0,
-          version: 0,
-          is_favorite: false,
+          current_version: raw.current_version,
+          version: raw.version,
+          is_favorite: raw.is_favorite,
           created_at: None,
           updated_at: None,
           accessed_at: None,
@@ -798,36 +694,19 @@ pub async fn get_rag_chats(
 
   let db = db_state.lock().unwrap();
   if let Some(ref conn) = db.conn {
-    let mut stmt = conn
-      .prepare(
-        "SELECT id, title, created_at, updated_at FROM rag_chats ORDER BY updated_at_ts DESC",
-      )
-      .map_err(|e| e.to_string())?;
-
-    let rows = stmt
-      .query_map([], |row| {
-        Ok((
-          row.get::<_, String>(0)?,
-          row.get::<_, Vec<u8>>(1)?,
-          row.get::<_, Vec<u8>>(2)?,
-          row.get::<_, Vec<u8>>(3)?,
-        ))
-      })
-      .map_err(|e| e.to_string())?;
+    let raw_chats = list_rag_chats_db(conn)?;
 
     let mut chats = Vec::new();
-    for r in rows {
-      if let Ok((id, t_blob, c_blob, u_blob)) = r {
-        let title = decrypt_content(&user_id, &t_blob).unwrap_or_else(|_| "Unknown".to_string());
-        let created_at = decrypt_content(&user_id, &c_blob).unwrap_or_else(|_| "".to_string());
-        let updated_at = decrypt_content(&user_id, &u_blob).unwrap_or_else(|_| "".to_string());
+    for raw in raw_chats {
+        let title = decrypt_content(&user_id, &raw.title_blob).unwrap_or_else(|_| "Unknown".to_string());
+        let created_at = decrypt_content(&user_id, &raw.created_at_blob).unwrap_or_else(|_| "".to_string());
+        let updated_at = decrypt_content(&user_id, &raw.updated_at_blob).unwrap_or_else(|_| "".to_string());
         chats.push(RagChat {
-          id,
+          id: raw.id,
           title,
           created_at,
           updated_at,
         });
-      }
     }
     Ok(chats)
   } else {
@@ -848,34 +727,19 @@ pub async fn get_rag_messages(
 
   let db = db_state.lock().unwrap();
   if let Some(ref conn) = db.conn {
-    let mut stmt = conn
-      .prepare("SELECT id, role, content, timestamp FROM rag_messages WHERE chat_id = ?1 ORDER BY timestamp ASC")
-      .map_err(|e| e.to_string())?;
-
-    let rows = stmt
-      .query_map([&chat_id], |row| {
-        Ok((
-          row.get::<_, String>(0)?,
-          row.get::<_, Vec<u8>>(1)?,
-          row.get::<_, Vec<u8>>(2)?,
-          row.get::<_, i64>(3)?,
-        ))
-      })
-      .map_err(|e| e.to_string())?;
+    let raw_msgs = list_rag_messages_db(conn, &chat_id)?;
 
     let mut messages = Vec::new();
-    for r in rows {
-      if let Ok((id, r_blob, c_blob, ts)) = r {
-        let role = decrypt_content(&user_id, &r_blob).unwrap_or_else(|_| "unknown".to_string());
-        let content = decrypt_content(&user_id, &c_blob).unwrap_or_else(|_| "".to_string());
+    for raw in raw_msgs {
+        let role = decrypt_content(&user_id, &raw.role_blob).unwrap_or_else(|_| "unknown".to_string());
+        let content = decrypt_content(&user_id, &raw.content_blob).unwrap_or_else(|_| "".to_string());
         messages.push(RagMessage {
-          id,
+          id: raw.id,
           chat_id: chat_id.clone(),
           role,
           content,
-          timestamp: ts,
+          timestamp: raw.timestamp,
         });
-      }
     }
     Ok(messages)
   } else {
@@ -891,12 +755,7 @@ pub async fn delete_rag_chat(
 ) -> Result<(), String> {
   let db = db_state.lock().unwrap();
   if let Some(ref conn) = db.conn {
-    conn
-      .execute("DELETE FROM rag_messages WHERE chat_id = ?1", [&chat_id])
-      .map_err(|e| e.to_string())?;
-    conn
-      .execute("DELETE FROM rag_chats WHERE id = ?1", [&chat_id])
-      .map_err(|e| e.to_string())?;
+    delete_rag_chat_db(conn, &chat_id)?;
     Ok(())
   } else {
     Err("Database not initialized".to_string())
