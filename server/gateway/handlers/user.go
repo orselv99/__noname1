@@ -77,18 +77,21 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 		ids = strings.Split(idsStr, ",")
 	}
 
+	includeAllRoles := c.Query("include_all_roles") == "true"
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	res, err := h.authClient.ListUsers(ctx, &pb.ListUsersRequest{
-		TenantId:     tenantID,
-		Page:         int32(page),
-		PageSize:     int32(limit),
-		DepartmentId: departmentID,
-		Query:        query,
-		SortBy:       sortBy,
-		SortDesc:     sortDesc,
-		Ids:          ids,
+		TenantId:        tenantID,
+		Page:            int32(page),
+		PageSize:        int32(limit),
+		DepartmentId:    departmentID,
+		Query:           query,
+		SortBy:          sortBy,
+		SortDesc:        sortDesc,
+		Ids:             ids,
+		IncludeAllRoles: includeAllRoles,
 	})
 
 	if err != nil {

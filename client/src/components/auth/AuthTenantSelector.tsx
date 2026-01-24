@@ -1,18 +1,18 @@
 import { Building2, X } from 'lucide-react';
 
-interface TenantInfo {
+interface AuthTenantInfo {
   tenant_id: string;
   name: string;
 }
 
-interface TenantSelectorProps {
+interface AuthTenantSelectorProps {
   isOpen: boolean;
-  tenants: TenantInfo[];
+  tenants: AuthTenantInfo[];
   onSelect: (tenantId: string) => void;
   onClose: () => void;
 }
 
-export const TenantSelector = ({ isOpen, tenants, onSelect, onClose }: TenantSelectorProps) => {
+export const AuthTenantSelector = ({ isOpen, tenants, onSelect, onClose }: AuthTenantSelectorProps) => {
   if (!isOpen) return null;
 
   return (

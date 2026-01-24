@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { PasswordStrengthMeter } from './PasswordStrengthMeter';
+import { AuthPasswordStrengthMeter } from './AuthPasswordStrengthMeter';
 
-interface ChangePasswordFormProps {
+interface AuthChangePasswordFormProps {
   onChangePassword: (newPassword: string) => Promise<void>;
   onSkip: () => void;
 }
 
-export const ChangePasswordForm = ({ onChangePassword, onSkip }: ChangePasswordFormProps) => {
+export const AuthChangePasswordForm = ({
+  onChangePassword,
+  onSkip }: AuthChangePasswordFormProps) => {
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,7 +49,7 @@ export const ChangePasswordForm = ({ onChangePassword, onSkip }: ChangePasswordF
             minLength={8}
             disabled={isLoading}
           />
-          <PasswordStrengthMeter password={newPassword} />
+          <AuthPasswordStrengthMeter password={newPassword} />
         </div>
 
         {error && (

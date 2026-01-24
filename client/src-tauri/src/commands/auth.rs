@@ -564,3 +564,152 @@ pub fn clear_saved_tenant(
     Ok(())
   }
 }
+
+// ============================================================================
+// 사용자 목록 조회 (Crew List)
+// ============================================================================
+
+// Server Wire Format (Proto JSON)
+#[derive(Serialize, Deserialize)]
+pub struct RawUserInfo {
+  pub id: String,
+  pub email: String,
+  pub username: String,
+  pub tenant_id: String,
+  #[serde(default)]
+  pub role: i32, // Proto Enum is int
+  #[serde(default)]
+  pub department_id: String,
+  #[serde(default)]
+  pub position_id: String,
+  #[serde(default)]
+  pub position_name: String,
+  #[serde(default)]
+  pub department_name: String,
+  #[serde(default)]
+  pub contact: String,
+  #[serde(default)]
+  pub birthday: String,
+  #[serde(default)]
+  pub phone_numbers: Vec<String>,
+  #[serde(default)]
+  pub created_at: String,
+  #[serde(default)]
+  pub updated_at: String,
+  #[serde(default)]
+  pub last_login_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RawListUsersResponse {
+  pub users: Vec<RawUserInfo>,
+  #[serde(default)]
+  pub total_count: i32,
+}
+
+// Frontend Friendly Format
+#[derive(Serialize, Deserialize, Clone)]
+pub struct UserInfo {
+  pub id: String,
+  pub email: String,
+  pub username: String,
+  pub tenant_id: String,
+  pub role: String,
+  pub department_id: String,
+  pub position_name: String,
+  pub department_name: String,
+  pub contact: String,
+  pub birthday: String,
+  pub phone_numbers: Vec<String>,
+  pub created_at: String,
+  pub updated_at: String,
+  pub last_login_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ListUsersResponse {
+  pub users: Vec<UserInfo>,
+  pub total_count: i32,
+}
+
+fn role_int_to_str(role: i32) -> String {
+  match role {
+    1 => "super".to_string(),
+    2 => "admin".to_string(),
+    3 => "viewer".to_string(),
+    4 => "user".to_string(),
+    _ => "user".to_string(), // Default or unspecified
+  }
+}
+
+#[tauri::command]
+pub async fn list_users(
+  state: State<'_, Mutex<AuthState>>,
+  page: i32,
+  page_size: i32,
+  include_all_roles: bool,
+) -> Result<ListUsersResponse, String> {
+  let (token, tenant_id) = {
+    let auth = state.lock().unwrap();
+    match (&auth.token, &auth.tenant_id) {
+      (Some(t), Some(tid)) => (t.clone(), tid.clone()),
+      _ => return Err("인증되지 않음".to_string()),
+    }
+  };
+
+  let client = reqwest::Client::new();
+
+  let url = format!(
+    "{}/api/v1/users?page={}&page_size={}&include_all_roles={}",
+    config::get_api_url(),
+    page,
+    page_size,
+    include_all_roles
+  );
+
+  let res = client
+    .get(&url)
+    .header("Authorization", format!("Bearer {}", token))
+    .header("X-Tenant-ID", tenant_id)
+    .send()
+    .await
+    .map_err(|e| format!("네트워크 오류: {}", e))?;
+
+  if !res.status().is_success() {
+    let err_text = res.text().await.unwrap_or("Unknown error".to_string());
+    return Err(err_text);
+  }
+
+  // Decode as Raw response first
+  let raw_response: RawListUsersResponse = res
+    .json()
+    .await
+    .map_err(|e| format!("JSON 파싱 오류: {}", e))?;
+
+  // Map to Frontend format
+  let users = raw_response
+    .users
+    .into_iter()
+    .map(|raw| UserInfo {
+      id: raw.id,
+      email: raw.email,
+      username: raw.username,
+      tenant_id: raw.tenant_id,
+      role: role_int_to_str(raw.role),
+      department_id: raw.department_id,
+      position_name: raw.position_name,
+      department_name: raw.department_name,
+      contact: raw.contact,
+      birthday: raw.birthday,
+      phone_numbers: raw.phone_numbers,
+      created_at: raw.created_at,
+      updated_at: raw.updated_at,
+      last_login_at: raw.last_login_at,
+    })
+    .collect();
+
+  Ok(ListUsersResponse {
+    users,
+    total_count: raw_response.total_count,
+  })
+}

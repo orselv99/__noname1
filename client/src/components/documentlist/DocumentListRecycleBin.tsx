@@ -3,7 +3,7 @@ import { Trash2, ChevronUp, ChevronDown, RotateCcw, X, FileText, Search, Eraser 
 import { useConfirm } from '../ConfirmProvider';
 import { useDocumentStore } from '../../stores/documentStore';
 
-export const RecycleBin = () => {
+export const DocumentListRecycleBin = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { documents, restoreDocument, saveDocument, deleteDocument, addTab, emptyRecycleBin } = useDocumentStore();

@@ -93,10 +93,11 @@ func (h *SignalingHandler) HandleWebSocket(c *gin.Context) {
 			// Protobuf -> JSON (WebSocket 사용 편의를 위해) -> Client
 			// 아니면 그냥 필드별로 매핑해서 JSON 전송
 			wsMsg := map[string]interface{}{
-				"type":           in.Type,
-				"source_peer_id": in.SourcePeerId,
-				"sdp":            in.Sdp,
-				"ice_candidate":  in.IceCandidate,
+				"type":            in.Type,
+				"source_peer_id":  in.SourcePeerId,
+				"sdp":             in.Sdp,
+				"ice_candidate":   in.IceCandidate,
+				"presence_status": in.PresenceStatus,
 			}
 
 			if err := conn.WriteJSON(wsMsg); err != nil {

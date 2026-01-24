@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown, Search, List } from 'lucide-react';
+import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown, Search, List, MessageSquare } from 'lucide-react';
 import { isTauri } from './utils/tauri';
 
 // Layout Components
@@ -13,8 +13,9 @@ import { IconBar } from './components/sidebar/IconBar';
 import { DocumentList } from './components/documentlist/DocumentList';
 import { DocumentListSidebarMode as SidebarMode } from './components/documentlist/types';
 import { MetadataPanel } from './components/metadata/MetadataPanel';
-import { RecycleBin } from './components/sidebar/RecycleBin';
+import { DocumentListRecycleBin } from './components/documentlist/DocumentListRecycleBin';
 import { useDocumentStore } from './stores/documentStore';
+import { signalingService } from './services/SignalingService';
 import { useAuthStore } from './stores/authStore';
 import { LoginResponse } from './types';
 
@@ -26,8 +27,8 @@ import { CalendarDialog } from './components/dialogs/CalendarDialog';
 import { ConfirmProvider } from './components/ConfirmProvider';
 
 // Auth Components
-import { LoginForm } from './components/auth/LoginForm';
-import { ChangePasswordForm } from './components/auth/ChangePasswordForm';
+import { AuthLoginForm } from './components/auth/AuthLoginForm';
+import { AuthChangePasswordForm } from './components/auth/AuthChangePasswordForm';
 
 // Editor Components
 import { EditorContainer } from './components/editor/EditorContainer';
@@ -37,6 +38,7 @@ import { EditorTabs } from './components/editor/EditorTabs';
 import { ToastProvider, useToast } from './components/Toast';
 import { StatusBar } from './components/StatusBar';
 import { RagPanel } from './components/sidebar/RagPanel';
+import { CrewPanel } from './components/sidebar/CrewPanel';
 
 // LoginResponse imported from types
 
@@ -113,7 +115,7 @@ function AppContent() {
   const [showTabMenu, setShowTabMenu] = useState(false);
 
   // Right Panel State
-  const [activeRightTab, setActiveRightTab] = useState<'metadata' | 'rag'>('metadata');
+  const [activeRightTab, setActiveRightTab] = useState<'metadata' | 'rag' | 'crew'>('metadata');
 
   // Drag to move window
   const handleDragStart = (e: React.MouseEvent) => {
@@ -207,6 +209,15 @@ function AppContent() {
       setView('change_password');
     } else {
       showToast('Login successful', 'success');
+      // Fetch crew list immediately after login
+      useAuthStore.getState().fetchCrew(true);
+
+      if (data.access_token) {
+        // Connect to Signaling Server
+        // TODO: Configurable URL
+        signalingService.connect('ws://localhost:8080/api/v1/ws/signaling', data.user_id, data.access_token);
+      }
+
       setView('main');
     }
   };
@@ -295,7 +306,7 @@ function AppContent() {
                       onSelectDocument={handleSelectDocument}
                       mode={sidebarMode}
                     />
-                    <RecycleBin />
+                    <DocumentListRecycleBin />
                   </div>
                 )}
               </div>
@@ -407,6 +418,13 @@ function AppContent() {
                       >
                         <Search size={16} />
                       </button>
+                      <button
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'crew' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+                        onClick={() => setActiveRightTab('crew')}
+                        title="Crew Chat"
+                      >
+                        <MessageSquare size={16} />
+                      </button>
                     </div>
                   </div>
 
@@ -415,7 +433,9 @@ function AppContent() {
                   />
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  {activeRightTab === 'metadata' ? <MetadataPanel /> : <RagPanel />}
+                  {activeRightTab === 'metadata' && <MetadataPanel />}
+                  {activeRightTab === 'rag' && <RagPanel />}
+                  {activeRightTab === 'crew' && <CrewPanel />}
                 </div>
               </div>
             )}
@@ -434,7 +454,7 @@ function AppContent() {
               />
             </div>
             <div className="flex-1 flex flex-col items-center justify-center p-8">
-              <ChangePasswordForm
+              <AuthChangePasswordForm
                 onChangePassword={handleChangePassword}
                 onSkip={() => setView('main')}
               />
@@ -453,7 +473,7 @@ function AppContent() {
               />
             </div>
             <div className="flex-1 flex flex-col items-center justify-center p-8">
-              <LoginForm onLogin={handleLogin} />
+              <AuthLoginForm onLogin={handleLogin} />
             </div>
           </div>
         );

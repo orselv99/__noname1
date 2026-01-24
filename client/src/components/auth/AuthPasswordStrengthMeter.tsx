@@ -1,8 +1,8 @@
-interface PasswordStrengthMeterProps {
+interface AuthPasswordStrengthMeterProps {
   password: string;
 }
 
-export const PasswordStrengthMeter = ({ password }: PasswordStrengthMeterProps) => {
+export const AuthPasswordStrengthMeter = ({ password }: AuthPasswordStrengthMeterProps) => {
   const getStrength = (pass: string) => {
     let score = 0;
     if (!pass) return 0;

@@ -40,9 +40,34 @@ func (s *signalingServer) StreamSignals(stream pb.SignalingService_StreamSignals
 
 	// 2. Peer 등록
 	s.peers.Store(peerID, stream)
+
+	// 4. Send Initial Online List to New Peer
+	s.peers.Range(func(key, value interface{}) bool {
+		targetID := key.(string)
+		if targetID == peerID {
+			return true
+		}
+
+		// Send "targetID is online" to new peer
+		err := stream.Send(&pb.SignalResponse{
+			Type:           pb.SignalType_PRESENCE,
+			SourcePeerId:   targetID,
+			PresenceStatus: "online",
+		})
+		if err != nil {
+			log.Printf("Failed to sync presence of %s to %s: %v", targetID, peerID, err)
+		}
+		return true
+	})
+
+	// Broadcast Online Status
+	s.broadcastPresence(peerID, "online")
+
 	defer func() {
 		s.peers.Delete(peerID)
 		log.Printf("Peer disconnected: %s", peerID)
+		// Broadcast Offline Status
+		s.broadcastPresence(peerID, "offline")
 	}()
 
 	// 3. 메시지 루프
@@ -80,4 +105,24 @@ func (s *signalingServer) StreamSignals(stream pb.SignalingService_StreamSignals
 			}
 		}
 	}
+}
+
+func (s *signalingServer) broadcastPresence(peerID, status string) {
+	s.peers.Range(func(key, value interface{}) bool {
+		targetID := key.(string)
+		if targetID == peerID {
+			return true // Skip self
+		}
+
+		stream := value.(pb.SignalingService_StreamSignalsServer)
+		err := stream.Send(&pb.SignalResponse{
+			Type:           pb.SignalType_PRESENCE,
+			SourcePeerId:   peerID,
+			PresenceStatus: status,
+		})
+		if err != nil {
+			log.Printf("Failed to send presence to %s: %v", targetID, err)
+		}
+		return true
+	})
 }

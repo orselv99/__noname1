@@ -31,6 +31,7 @@ const (
 	SignalType_ICE_CANDIDATE SignalType = 3 // ICE Candidate
 	SignalType_JOIN          SignalType = 4 // 방 입장 / 피어 연결 요청
 	SignalType_LEAVE         SignalType = 5 // 연결 종료
+	SignalType_PRESENCE      SignalType = 6 // 상태 업데이트 (Online/Offline)
 )
 
 // Enum value maps for SignalType.
@@ -42,6 +43,7 @@ var (
 		3: "ICE_CANDIDATE",
 		4: "JOIN",
 		5: "LEAVE",
+		6: "PRESENCE",
 	}
 	SignalType_value = map[string]int32{
 		"UNKNOWN":       0,
@@ -50,6 +52,7 @@ var (
 		"ICE_CANDIDATE": 3,
 		"JOIN":          4,
 		"LEAVE":         5,
+		"PRESENCE":      6,
 	}
 )
 
@@ -151,13 +154,14 @@ func (x *SignalRequest) GetIceCandidate() string {
 
 // 시그널링 응답 메시지 (상대방으로부터 수신)
 type SignalResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          SignalType             `protobuf:"varint,1,opt,name=type,proto3,enum=signaling.SignalType" json:"type,omitempty"`
-	SourcePeerId  string                 `protobuf:"bytes,2,opt,name=source_peer_id,json=sourcePeerId,proto3" json:"source_peer_id,omitempty"` // 보낸 피어 ID
-	Sdp           string                 `protobuf:"bytes,3,opt,name=sdp,proto3" json:"sdp,omitempty"`
-	IceCandidate  string                 `protobuf:"bytes,4,opt,name=ice_candidate,json=iceCandidate,proto3" json:"ice_candidate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Type           SignalType             `protobuf:"varint,1,opt,name=type,proto3,enum=signaling.SignalType" json:"type,omitempty"`
+	SourcePeerId   string                 `protobuf:"bytes,2,opt,name=source_peer_id,json=sourcePeerId,proto3" json:"source_peer_id,omitempty"` // 보낸 피어 ID
+	Sdp            string                 `protobuf:"bytes,3,opt,name=sdp,proto3" json:"sdp,omitempty"`
+	IceCandidate   string                 `protobuf:"bytes,4,opt,name=ice_candidate,json=iceCandidate,proto3" json:"ice_candidate,omitempty"`
+	PresenceStatus string                 `protobuf:"bytes,5,opt,name=presence_status,json=presenceStatus,proto3" json:"presence_status,omitempty"` // "online" | "offline"
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SignalResponse) Reset() {
@@ -218,6 +222,13 @@ func (x *SignalResponse) GetIceCandidate() string {
 	return ""
 }
 
+func (x *SignalResponse) GetPresenceStatus() string {
+	if x != nil {
+		return x.PresenceStatus
+	}
+	return ""
+}
+
 var File_signaling_signaling_proto protoreflect.FileDescriptor
 
 const file_signaling_signaling_proto_rawDesc = "" +
@@ -227,12 +238,13 @@ const file_signaling_signaling_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.signaling.SignalTypeR\x04type\x12$\n" +
 	"\x0etarget_peer_id\x18\x02 \x01(\tR\ftargetPeerId\x12\x10\n" +
 	"\x03sdp\x18\x03 \x01(\tR\x03sdp\x12#\n" +
-	"\rice_candidate\x18\x04 \x01(\tR\ficeCandidate\"\x98\x01\n" +
+	"\rice_candidate\x18\x04 \x01(\tR\ficeCandidate\"\xc1\x01\n" +
 	"\x0eSignalResponse\x12)\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.signaling.SignalTypeR\x04type\x12$\n" +
 	"\x0esource_peer_id\x18\x02 \x01(\tR\fsourcePeerId\x12\x10\n" +
 	"\x03sdp\x18\x03 \x01(\tR\x03sdp\x12#\n" +
-	"\rice_candidate\x18\x04 \x01(\tR\ficeCandidate*X\n" +
+	"\rice_candidate\x18\x04 \x01(\tR\ficeCandidate\x12'\n" +
+	"\x0fpresence_status\x18\x05 \x01(\tR\x0epresenceStatus*f\n" +
 	"\n" +
 	"SignalType\x12\v\n" +
 	"\aUNKNOWN\x10\x00\x12\t\n" +
@@ -241,7 +253,8 @@ const file_signaling_signaling_proto_rawDesc = "" +
 	"\x06ANSWER\x10\x02\x12\x11\n" +
 	"\rICE_CANDIDATE\x10\x03\x12\b\n" +
 	"\x04JOIN\x10\x04\x12\t\n" +
-	"\x05LEAVE\x10\x052\\\n" +
+	"\x05LEAVE\x10\x05\x12\f\n" +
+	"\bPRESENCE\x10\x062\\\n" +
 	"\x10SignalingService\x12H\n" +
 	"\rStreamSignals\x12\x18.signaling.SignalRequest\x1a\x19.signaling.SignalResponse(\x010\x01B\x1aZ\x18server/.protos/signalingb\x06proto3"
 

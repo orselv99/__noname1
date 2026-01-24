@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { UserInfo, LoginResponse } from '../types';
+import { UserInfo, LoginResponse, CrewMember, ListUsersResponse } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 
 interface AuthState {
@@ -13,10 +13,16 @@ interface AuthState {
   positions: Record<string, string>;
   projects: Record<string, { name: string; visibility: number }>;
 
+  // Crew List
+  crew: CrewMember[];
+  fetchCrew: (includeAllRoles?: boolean) => Promise<void>;
+  updateCrewPresence: (userId: string, isOnline: boolean) => void;
+
   // Actions
   setUser: (user: UserInfo | LoginResponse) => void;
   refreshToken: () => Promise<void>;
   logout: () => void;
+
 
   updateTenantName: (id: string, name: string) => void;
   updateDepartmentName: (id: string, name: string) => void;
@@ -36,6 +42,7 @@ export const useAuthStore = create<AuthState>()(
       departments: {},
       positions: {},
       projects: {},
+      crew: [],
 
       setUser: (user) => set((state) => {
         console.log('resp', user, 'state', state);
@@ -120,6 +127,29 @@ export const useAuthStore = create<AuthState>()(
           logout();
         }
       },
+
+      fetchCrew: async (includeAllRoles = true) => {
+        try {
+          const res = await invoke<ListUsersResponse>('list_users', {
+            page: 1,
+            pageSize: 1000,
+            includeAllRoles
+          });
+
+          set({ crew: res.users });
+          console.log('Fetched crew:', res.users); // Debug
+        } catch (error) {
+          console.error('Failed to fetch crew:', error);
+        }
+      },
+
+      updateCrewPresence: (userId, isOnline) => set((state) => ({
+        crew: state.crew.map(member =>
+          member.id === userId
+            ? { ...member, is_online: isOnline }
+            : member
+        )
+      })),
     }),
     {
       name: 'auth-storage',

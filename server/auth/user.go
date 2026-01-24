@@ -27,8 +27,10 @@ func (s *server) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.L
 	if req.TenantId != "" {
 		query = query.Where("tenant_id = ?", req.TenantId)
 	}
-	// Exclude super and admin roles from listing
-	query = query.Where("role NOT IN ?", []string{"super", "admin"})
+	// Exclude super and admin roles from listing unless requested
+	if !req.IncludeAllRoles {
+		query = query.Where("role NOT IN ?", []string{"super", "admin"})
+	}
 
 	// Search query filtering
 	if req.Query != "" {

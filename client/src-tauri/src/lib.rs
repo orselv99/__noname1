@@ -92,6 +92,7 @@ pub fn run() {
       commands::auth::clear_saved_tenant,
       commands::auth::change_password,
       commands::auth::logout,
+      commands::auth::list_users,
       // ----------------------------------------------------------------
       // 문서 명령: CRUD, 휴지통, 동기화
       // ----------------------------------------------------------------

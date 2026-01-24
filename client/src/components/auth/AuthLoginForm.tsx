@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { TenantSelector } from './TenantSelector';
+import { AuthTenantSelector } from './AuthTenantSelector';
 import { useAuthStore } from '../../stores/authStore';
 
 interface TenantInfo {
@@ -8,11 +8,11 @@ interface TenantInfo {
   name: string;
 }
 
-interface LoginFormProps {
+interface AuthLoginFormProps {
   onLogin: (email: string, password: string, tenantId?: string) => Promise<void>;
 }
 
-export const LoginForm = ({ onLogin }: LoginFormProps) => {
+export const AuthLoginForm = ({ onLogin }: AuthLoginFormProps) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +95,7 @@ export const LoginForm = ({ onLogin }: LoginFormProps) => {
   return (
     <div className="relative max-w-md w-full space-y-8 bg-zinc-900 p-8 rounded-xl border border-zinc-800 shadow-2xl">
       {/* Tenant Selector Overlay */}
-      <TenantSelector
+      <AuthTenantSelector
         isOpen={showTenantSelector}
         tenants={tenants}
         onSelect={handleTenantSelect}

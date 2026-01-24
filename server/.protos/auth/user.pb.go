@@ -712,17 +712,18 @@ func (x *GetUserResponse) GetUser() *User {
 }
 
 type ListUsersRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	Page          int32                  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
-	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	Query         string                 `protobuf:"bytes,4,opt,name=query,proto3" json:"query,omitempty"` // Search by name/email
-	SortBy        string                 `protobuf:"bytes,5,opt,name=sort_by,json=sortBy,proto3" json:"sort_by,omitempty"`
-	SortDesc      bool                   `protobuf:"varint,6,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
-	DepartmentId  string                 `protobuf:"bytes,7,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"` // Filter by department
-	Ids           []string               `protobuf:"bytes,8,rep,name=ids,proto3" json:"ids,omitempty"`                                       // Filter by specific IDs
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TenantId        string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Page            int32                  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
+	PageSize        int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	Query           string                 `protobuf:"bytes,4,opt,name=query,proto3" json:"query,omitempty"` // Search by name/email
+	SortBy          string                 `protobuf:"bytes,5,opt,name=sort_by,json=sortBy,proto3" json:"sort_by,omitempty"`
+	SortDesc        bool                   `protobuf:"varint,6,opt,name=sort_desc,json=sortDesc,proto3" json:"sort_desc,omitempty"`
+	DepartmentId    string                 `protobuf:"bytes,7,opt,name=department_id,json=departmentId,proto3" json:"department_id,omitempty"`             // Filter by department
+	Ids             []string               `protobuf:"bytes,8,rep,name=ids,proto3" json:"ids,omitempty"`                                                   // Filter by specific IDs
+	IncludeAllRoles bool                   `protobuf:"varint,9,opt,name=include_all_roles,json=includeAllRoles,proto3" json:"include_all_roles,omitempty"` // Include super and admin roles
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListUsersRequest) Reset() {
@@ -809,6 +810,13 @@ func (x *ListUsersRequest) GetIds() []string {
 		return x.Ids
 	}
 	return nil
+}
+
+func (x *ListUsersRequest) GetIncludeAllRoles() bool {
+	if x != nil {
+		return x.IncludeAllRoles
+	}
+	return false
 }
 
 type ListUsersResponse struct {
@@ -1382,7 +1390,7 @@ const file_auth_user_proto_rawDesc = "" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\"1\n" +
 	"\x0fGetUserResponse\x12\x1e\n" +
 	"\x04user\x18\x01 \x01(\v2\n" +
-	".auth.UserR\x04user\"\xe3\x01\n" +
+	".auth.UserR\x04user\"\x8f\x02\n" +
 	"\x10ListUsersRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x1b\n" +
@@ -1391,7 +1399,8 @@ const file_auth_user_proto_rawDesc = "" +
 	"\asort_by\x18\x05 \x01(\tR\x06sortBy\x12\x1b\n" +
 	"\tsort_desc\x18\x06 \x01(\bR\bsortDesc\x12#\n" +
 	"\rdepartment_id\x18\a \x01(\tR\fdepartmentId\x12\x10\n" +
-	"\x03ids\x18\b \x03(\tR\x03ids\"V\n" +
+	"\x03ids\x18\b \x03(\tR\x03ids\x12*\n" +
+	"\x11include_all_roles\x18\t \x01(\bR\x0fincludeAllRoles\"V\n" +
 	"\x11ListUsersResponse\x12 \n" +
 	"\x05users\x18\x01 \x03(\v2\n" +
 	".auth.UserR\x05users\x12\x1f\n" +

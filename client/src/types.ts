@@ -118,3 +118,27 @@ export interface ProjectInfo {
   description?: string;
   default_visibility_level: number;
 }
+
+export interface CrewMember {
+  id: string;
+  email: string;
+  username: string;
+  tenant_id: string;
+  role: string;
+  department_id?: string;
+  department_name?: string;
+  position_id?: string;
+  position_name?: string;
+  contact?: string;
+  birthday?: string;
+  phone_numbers?: string[];
+  created_at?: string;
+  updated_at?: string;
+  last_login_at?: string;
+  is_online?: boolean;
+}
+
+export interface ListUsersResponse {
+  users: CrewMember[];
+  total_count: number;
+}

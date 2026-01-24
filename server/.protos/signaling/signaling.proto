@@ -19,6 +19,7 @@ enum SignalType {
   ICE_CANDIDATE = 3; // ICE Candidate
   JOIN = 4;      // 방 입장 / 피어 연결 요청
   LEAVE = 5;     // 연결 종료
+  PRESENCE = 6;  // 상태 업데이트 (Online/Offline)
 }
 
 // 시그널링 요청 메시지
@@ -35,4 +36,5 @@ message SignalResponse {
   string source_peer_id = 2; // 보낸 피어 ID
   string sdp = 3;
   string ice_candidate = 4;
+  string presence_status = 5; // "online" | "offline"
 }

@@ -99,6 +99,7 @@ message ListUsersRequest {
   bool sort_desc = 6;
   string department_id = 7;   // Filter by department
   repeated string ids = 8;    // Filter by specific IDs
+  bool include_all_roles = 9; // Include super and admin roles
 }
 
 message ListUsersResponse {
