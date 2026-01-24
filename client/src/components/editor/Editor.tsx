@@ -18,7 +18,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { EditorContextMenu } from './EditorContextMenu';
 import { EditorToolbar } from './EditorToolbar';
 import { SearchWidget } from './SearchWidget';
-import { Breadcrumbs } from './Breadcrumbs';
+import { EditorBreadcrumbs } from './EditorBreadcrumbs';
 import { EditorActions } from './EditorActions';
 import { EditorTOC } from './EditorTOC';
 import { Document, DocumentState } from '../../types';
@@ -537,7 +537,7 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
 
       {/* Header */}
       <div className="flex items-center justify-between gap-1 pt-2 pl-4 pr-2 shrink-0">
-        <Breadcrumbs currentDoc={doc} />
+        <EditorBreadcrumbs currentDoc={doc} />
         <div>
           <EditorActions
             doc={doc}
@@ -645,64 +645,48 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
             onAddFootnote={(_text) => {
               if (!editor) return;
 
-              // 1. Count existing footnotes to get next number
-              let footnoteCount = 0;
-              editor.state.doc.descendants((node) => {
-                if (node.type.name === 'paragraph' && node.attrs.id?.startsWith('footnote-')) {
-                  footnoteCount++;
-                }
-              });
-              const footnoteNumber = footnoteCount + 1;
-              const footnoteId = `footnote-${footnoteNumber}`;
+              // 1. Count existing footnotes using same logic as toolbar (regex for [N] pattern)
+              const text = editor.getText();
+              const regex = /\[(\d+)\]/g;
+              let maxNum = 0;
+              let match;
+              while ((match = regex.exec(text)) !== null) {
+                const num = parseInt(match[1], 10);
+                if (num > maxNum) maxNum = num;
+              }
+              const nextNum = maxNum + 1;
+              const ref = `[${nextNum}]`;
+              const fnId = `fn-${nextNum}`;
+              const refId = `ref-${nextNum}`;
 
-              // 2. Get the end of current selection and insert footnote reference node
+              // 2. Insert reference at cursor using same HTML as toolbar
               const { to } = editor.state.selection;
-
-              // Insert footnote reference node at selection end
               editor.chain()
                 .focus()
                 .setTextSelection(to)
-                .insertContent({
-                  type: 'footnoteRef',
-                  attrs: {
-                    target: footnoteId,
-                    number: footnoteNumber
-                  }
-                })
+                .insertContent(`<span data-footnote-target="${fnId}" id="${refId}" class="footnote-ref text-blue-500 cursor-pointer font-medium"><sup>${ref}</sup></span> `)
                 .run();
 
-              // 3. Add footnote section at document end
-              const docEnd = editor.state.doc.content.size;
+              // 3. Add footnote section at document end (same format as toolbar)
+              const html = editor.getHTML();
+              const hasSeparator = html.includes('<hr');
 
-              // Check if this is the first footnote - if so, add a separator
-              const isFirstFootnote = footnoteNumber === 1;
+              let appendHtml = '';
+              if (!hasSeparator) {
+                appendHtml += '<hr class="my-4 border-zinc-700" contenteditable="false">';
+              }
 
-              const footnoteContent = [
-                { type: 'paragraph', content: [] }, // Empty line
-                ...(isFirstFootnote ? [
-                  { type: 'horizontalRule' }, // Visual separator for footnotes section
-                ] : []),
-                {
-                  type: 'paragraph',
-                  attrs: { id: footnoteId },
-                  content: [
-                    {
-                      type: 'text',
-                      marks: [{ type: 'superscript' }],
-                      text: `[${footnoteNumber}]`
-                    },
-                    { type: 'text', text: ' ' }
-                  ]
-                }
-              ];
+              // Add the footnote content (same styling as toolbar, but empty for user to fill)
+              appendHtml += `<p id="${fnId}" class="text-xs text-zinc-500 !m-0 !p-0 !indent-0 leading-tight" contenteditable="false">
+                <span data-footnote-target="${refId}" class="footnote-ref text-blue-500 hover:text-blue-600 cursor-pointer font-medium"><sup>${ref}</sup></span>
+                <span class="ml-1"> </span>
+              </p>`;
 
-              editor.chain()
-                .focus()
-                .setTextSelection(docEnd)
-                .insertContent(footnoteContent)
-                .run();
+              // Append to end
+              const endPos = editor.state.doc.content.size;
+              editor.chain().insertContentAt(endPos, appendHtml).run();
 
-              // 4. Move cursor to end for user to type footnote content
+              // 4. Move cursor to footnote for user to type content
               setTimeout(() => {
                 const newDocEnd = editor.state.doc.content.size;
                 editor.chain()

@@ -11,7 +11,7 @@ import { ResizeHandle } from './components/layout/ResizeHandle';
 // Sidebar Components
 import { IconBar } from './components/sidebar/IconBar';
 import { DocumentList, SidebarMode } from './components/sidebar/DocumentList';
-import { MetadataPanel } from './components/sidebar/MetadataPanel';
+import { MetadataPanel } from './components/metadata/MetadataPanel';
 import { RecycleBin } from './components/sidebar/RecycleBin';
 import { useDocumentStore } from './stores/documentStore';
 import { useAuthStore } from './stores/authStore';

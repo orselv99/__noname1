@@ -3,11 +3,11 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Document, GroupType } from '../../types';
 
-interface BreadcrumbsProps {
+interface EditorBreadcrumbsProps {
   currentDoc: Document | undefined;
 }
 
-export const Breadcrumbs = memo(({ currentDoc }: BreadcrumbsProps) => {
+export const EditorBreadcrumbs = memo(({ currentDoc }: EditorBreadcrumbsProps) => {
   const documents = useDocumentStore(state => state.documents);
   const addTab = useDocumentStore(state => state.addTab);
 
@@ -70,4 +70,4 @@ export const Breadcrumbs = memo(({ currentDoc }: BreadcrumbsProps) => {
   );
 });
 
-Breadcrumbs.displayName = 'Breadcrumbs';
+EditorBreadcrumbs.displayName = 'EditorBreadcrumbs';

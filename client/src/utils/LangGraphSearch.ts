@@ -21,12 +21,12 @@ const SearchStateAnnotation = Annotation.Root({
   }),
 });
 
-// Helper to get API URL
-const API_URL = "http://localhost:8080/api/v1"; // Or use config
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token"); // Naive token retrieval
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+// // Helper to get API URL
+// const API_URL = "http://localhost:8080/api/v1"; // Or use config
+// const getAuthHeaders = () => {
+//   const token = localStorage.getItem("token"); // Naive token retrieval
+//   return token ? { Authorization: `Bearer ${token}` } : {};
+// };
 
 // 1. Local RAG Node
 // 1. Define executeSearch with dynamic graph creation

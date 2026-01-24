@@ -41,7 +41,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { NewDocumentDialog } from '../dialogs/NewDocumentDialog';
+import { NewDocumentDialog } from '../newdocument/NewDocumentDialog';
 
 export type SidebarMode = 'folder' | 'star';
 

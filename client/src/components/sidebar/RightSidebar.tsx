@@ -1,4 +1,4 @@
-import { MetadataPanel } from './MetadataPanel';
+import { MetadataPanel } from '../metadata/MetadataPanel';
 import { RagPanel } from './RagPanel';
 import { ResizeHandle } from '../layout/ResizeHandle';
 import { FileText, Sparkles, ChevronRight, ChevronLeft } from 'lucide-react';
