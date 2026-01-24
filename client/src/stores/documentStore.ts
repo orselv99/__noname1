@@ -63,6 +63,7 @@ interface DocumentStore {
   setAutoSaveStatus: (status: string | null) => void;
   setLiveEditorContent: (content: string | null) => void;
   markTabDirty: (tabId: string, isDirty: boolean) => void;
+  moveDocument: (docId: string, targetId: string, position: 'top' | 'bottom' | 'inside') => Promise<void>;
   emptyRecycleBin: () => Promise<void>;
 }
 
@@ -593,6 +594,27 @@ export const useDocumentStore = create<DocumentStore>()(
           await safeInvoke('save_document', { req });
         } catch (error) {
           console.error("Failed to rename document:", error);
+          get().fetchDocuments();
+        }
+      },
+
+      moveDocument: async (docId, targetId, position) => {
+        // Optimistic update
+        // Note: Full tree restructuring is complex for optimistic update.
+        // We will rely on server response refresh for exact tree structure,
+        // but verify basic validity here.
+
+        const doc = get().documents.find(d => d.id === docId);
+        if (!doc) return;
+
+        console.log(`Moving ${doc.title} to ${targetId} (${position})`);
+
+        try {
+          await safeInvoke('move_document', { docId, targetId, position });
+          // Refresh list to get accurate tree
+          await get().fetchDocuments();
+        } catch (error) {
+          console.error('Failed to move document:', error);
           get().fetchDocuments();
         }
       },

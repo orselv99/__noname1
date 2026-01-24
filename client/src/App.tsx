@@ -10,7 +10,8 @@ import { ResizeHandle } from './components/layout/ResizeHandle';
 
 // Sidebar Components
 import { IconBar } from './components/sidebar/IconBar';
-import { DocumentList, SidebarMode } from './components/sidebar/DocumentList';
+import { DocumentList } from './components/documentlist/DocumentList';
+import { DocumentListSidebarMode as SidebarMode } from './components/documentlist/types';
 import { MetadataPanel } from './components/metadata/MetadataPanel';
 import { RecycleBin } from './components/sidebar/RecycleBin';
 import { useDocumentStore } from './stores/documentStore';
@@ -280,7 +281,13 @@ function AppContent() {
                 {isSidebarOpen && (
                   <div style={{ width: `${leftSidebarWidth}px` }} className="h-full flex flex-col">
                     <DocumentList
-                      onSelectDocument={(id) => console.log('Selected:', id)}
+                      onSelectDocument={(id) => {
+                        console.log('Selected:', id);
+                        const doc = useDocumentStore.getState().documents.find(d => d.id === id);
+                        if (doc) {
+                          useDocumentStore.getState().addTab(doc);
+                        }
+                      }}
                       mode={sidebarMode}
                     />
                     <RecycleBin />
