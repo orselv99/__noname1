@@ -9,8 +9,8 @@ export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      "async_hooks": resolve(__dirname, "src/async-hooks-polyfill.ts"),
-      "node:async_hooks": resolve(__dirname, "src/async-hooks-polyfill.ts"),
+      "async_hooks": resolve(__dirname, "src/utils/async-hooks-polyfill.ts"),
+      "node:async_hooks": resolve(__dirname, "src/utils/async-hooks-polyfill.ts"),
     },
   },
   clearScreen: false,

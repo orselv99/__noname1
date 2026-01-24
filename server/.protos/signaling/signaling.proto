@@ -20,6 +20,7 @@ enum SignalType {
   JOIN = 4;      // 방 입장 / 피어 연결 요청
   LEAVE = 5;     // 연결 종료
   PRESENCE = 6;  // 상태 업데이트 (Online/Offline)
+  INVITE = 7;    // 채팅방 초대
 }
 
 // 시그널링 요청 메시지
@@ -28,6 +29,8 @@ message SignalRequest {
   string target_peer_id = 2; // 대상 피어 ID (1:1 통신 시)
   string sdp = 3;           // SDP 정보 (Offer/Answer 인 경우)
   string ice_candidate = 4; // ICE Candidate 정보 (JSON string 등)
+  string room_id = 5;       // 채팅방 ID (INVITE, JOIN 등)
+  repeated string participants = 6; // 참여자 ID 목록 (INVITE 시)
 }
 
 // 시그널링 응답 메시지 (상대방으로부터 수신)
@@ -37,4 +40,6 @@ message SignalResponse {
   string sdp = 3;
   string ice_candidate = 4;
   string presence_status = 5; // "online" | "offline"
+  string room_id = 6;
+  repeated string participants = 7;
 }

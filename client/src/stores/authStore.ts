@@ -15,6 +15,7 @@ interface AuthState {
 
   // Crew List
   crew: CrewMember[];
+  onlineUsers: Record<string, boolean>; // Presence Source of Truth
   fetchCrew: (includeAllRoles?: boolean) => Promise<void>;
   updateCrewPresence: (userId: string, isOnline: boolean) => void;
 
@@ -43,6 +44,7 @@ export const useAuthStore = create<AuthState>()(
       positions: {},
       projects: {},
       crew: [],
+      onlineUsers: {},
 
       setUser: (user) => set((state) => {
         console.log('resp', user, 'state', state);
@@ -87,7 +89,8 @@ export const useAuthStore = create<AuthState>()(
         tenants: {},
         departments: {},
         positions: {},
-        projects: {}
+        projects: {},
+        onlineUsers: {}
       }),
 
       updateTenantName: (id, name) => set((state) => ({ tenants: { ...state.tenants, [id]: name } })),
@@ -136,20 +139,32 @@ export const useAuthStore = create<AuthState>()(
             includeAllRoles
           });
 
-          set({ crew: res.users });
-          console.log('Fetched crew:', res.users); // Debug
+          // Merge with current online state
+          const currentOnlineUsers = get().onlineUsers;
+          const mergedCrew = res.users.map(u => ({
+            ...u,
+            is_online: currentOnlineUsers[u.id] ?? u.is_online
+          }));
+
+          set({ crew: mergedCrew });
+          console.log('Fetched crew:', mergedCrew);
         } catch (error) {
           console.error('Failed to fetch crew:', error);
         }
       },
 
-      updateCrewPresence: (userId, isOnline) => set((state) => ({
-        crew: state.crew.map(member =>
-          member.id === userId
-            ? { ...member, is_online: isOnline }
-            : member
-        )
-      })),
+      updateCrewPresence: (userId, isOnline) => set((state) => {
+        const newOnlineUsers = { ...state.onlineUsers, [userId]: isOnline };
+
+        return {
+          onlineUsers: newOnlineUsers,
+          crew: state.crew.map(member =>
+            member.id === userId
+              ? { ...member, is_online: isOnline }
+              : member
+          )
+        };
+      }),
     }),
     {
       name: 'auth-storage',

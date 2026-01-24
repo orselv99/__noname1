@@ -32,6 +32,7 @@ const (
 	SignalType_JOIN          SignalType = 4 // 방 입장 / 피어 연결 요청
 	SignalType_LEAVE         SignalType = 5 // 연결 종료
 	SignalType_PRESENCE      SignalType = 6 // 상태 업데이트 (Online/Offline)
+	SignalType_INVITE        SignalType = 7 // 채팅방 초대
 )
 
 // Enum value maps for SignalType.
@@ -44,6 +45,7 @@ var (
 		4: "JOIN",
 		5: "LEAVE",
 		6: "PRESENCE",
+		7: "INVITE",
 	}
 	SignalType_value = map[string]int32{
 		"UNKNOWN":       0,
@@ -53,6 +55,7 @@ var (
 		"JOIN":          4,
 		"LEAVE":         5,
 		"PRESENCE":      6,
+		"INVITE":        7,
 	}
 )
 
@@ -90,6 +93,8 @@ type SignalRequest struct {
 	TargetPeerId  string                 `protobuf:"bytes,2,opt,name=target_peer_id,json=targetPeerId,proto3" json:"target_peer_id,omitempty"` // 대상 피어 ID (1:1 통신 시)
 	Sdp           string                 `protobuf:"bytes,3,opt,name=sdp,proto3" json:"sdp,omitempty"`                                         // SDP 정보 (Offer/Answer 인 경우)
 	IceCandidate  string                 `protobuf:"bytes,4,opt,name=ice_candidate,json=iceCandidate,proto3" json:"ice_candidate,omitempty"`   // ICE Candidate 정보 (JSON string 등)
+	RoomId        string                 `protobuf:"bytes,5,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`                     // 채팅방 ID (INVITE, JOIN 등)
+	Participants  []string               `protobuf:"bytes,6,rep,name=participants,proto3" json:"participants,omitempty"`                       // 참여자 ID 목록 (INVITE 시)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -152,6 +157,20 @@ func (x *SignalRequest) GetIceCandidate() string {
 	return ""
 }
 
+func (x *SignalRequest) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *SignalRequest) GetParticipants() []string {
+	if x != nil {
+		return x.Participants
+	}
+	return nil
+}
+
 // 시그널링 응답 메시지 (상대방으로부터 수신)
 type SignalResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -160,6 +179,8 @@ type SignalResponse struct {
 	Sdp            string                 `protobuf:"bytes,3,opt,name=sdp,proto3" json:"sdp,omitempty"`
 	IceCandidate   string                 `protobuf:"bytes,4,opt,name=ice_candidate,json=iceCandidate,proto3" json:"ice_candidate,omitempty"`
 	PresenceStatus string                 `protobuf:"bytes,5,opt,name=presence_status,json=presenceStatus,proto3" json:"presence_status,omitempty"` // "online" | "offline"
+	RoomId         string                 `protobuf:"bytes,6,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	Participants   []string               `protobuf:"bytes,7,rep,name=participants,proto3" json:"participants,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -229,22 +250,40 @@ func (x *SignalResponse) GetPresenceStatus() string {
 	return ""
 }
 
+func (x *SignalResponse) GetRoomId() string {
+	if x != nil {
+		return x.RoomId
+	}
+	return ""
+}
+
+func (x *SignalResponse) GetParticipants() []string {
+	if x != nil {
+		return x.Participants
+	}
+	return nil
+}
+
 var File_signaling_signaling_proto protoreflect.FileDescriptor
 
 const file_signaling_signaling_proto_rawDesc = "" +
 	"\n" +
-	"\x19signaling/signaling.proto\x12\tsignaling\"\x97\x01\n" +
+	"\x19signaling/signaling.proto\x12\tsignaling\"\xd4\x01\n" +
 	"\rSignalRequest\x12)\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.signaling.SignalTypeR\x04type\x12$\n" +
 	"\x0etarget_peer_id\x18\x02 \x01(\tR\ftargetPeerId\x12\x10\n" +
 	"\x03sdp\x18\x03 \x01(\tR\x03sdp\x12#\n" +
-	"\rice_candidate\x18\x04 \x01(\tR\ficeCandidate\"\xc1\x01\n" +
+	"\rice_candidate\x18\x04 \x01(\tR\ficeCandidate\x12\x17\n" +
+	"\aroom_id\x18\x05 \x01(\tR\x06roomId\x12\"\n" +
+	"\fparticipants\x18\x06 \x03(\tR\fparticipants\"\xfe\x01\n" +
 	"\x0eSignalResponse\x12)\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.signaling.SignalTypeR\x04type\x12$\n" +
 	"\x0esource_peer_id\x18\x02 \x01(\tR\fsourcePeerId\x12\x10\n" +
 	"\x03sdp\x18\x03 \x01(\tR\x03sdp\x12#\n" +
 	"\rice_candidate\x18\x04 \x01(\tR\ficeCandidate\x12'\n" +
-	"\x0fpresence_status\x18\x05 \x01(\tR\x0epresenceStatus*f\n" +
+	"\x0fpresence_status\x18\x05 \x01(\tR\x0epresenceStatus\x12\x17\n" +
+	"\aroom_id\x18\x06 \x01(\tR\x06roomId\x12\"\n" +
+	"\fparticipants\x18\a \x03(\tR\fparticipants*r\n" +
 	"\n" +
 	"SignalType\x12\v\n" +
 	"\aUNKNOWN\x10\x00\x12\t\n" +
@@ -254,7 +293,9 @@ const file_signaling_signaling_proto_rawDesc = "" +
 	"\rICE_CANDIDATE\x10\x03\x12\b\n" +
 	"\x04JOIN\x10\x04\x12\t\n" +
 	"\x05LEAVE\x10\x05\x12\f\n" +
-	"\bPRESENCE\x10\x062\\\n" +
+	"\bPRESENCE\x10\x06\x12\n" +
+	"\n" +
+	"\x06INVITE\x10\a2\\\n" +
 	"\x10SignalingService\x12H\n" +
 	"\rStreamSignals\x12\x18.signaling.SignalRequest\x1a\x19.signaling.SignalResponse(\x010\x01B\x1aZ\x18server/.protos/signalingb\x06proto3"
 

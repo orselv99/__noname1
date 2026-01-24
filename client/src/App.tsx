@@ -12,6 +12,8 @@ import { ResizeHandle } from './components/layout/ResizeHandle';
 import { IconBar } from './components/sidebar/IconBar';
 import { DocumentList } from './components/documentlist/DocumentList';
 import { DocumentListSidebarMode as SidebarMode } from './components/documentlist/types';
+import ChatWindow from './windows/ChatWindow';
+import { initChatOpListener } from './services/p2p/ChatOpListener';
 import { MetadataPanel } from './components/metadata/MetadataPanel';
 import { DocumentListRecycleBin } from './components/documentlist/DocumentListRecycleBin';
 import { useDocumentStore } from './stores/documentStore';
@@ -56,6 +58,18 @@ function AppContent() {
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [showCalendarDialog, setShowCalendarDialog] = useState(false);
+
+  // Initialize Chat Op Listener (Main Window Only)
+  useEffect(() => {
+    if (!window.location.pathname.startsWith('/chat/')) {
+      return initChatOpListener();
+    }
+  }, []);
+
+  // Chat Window Route
+  if (window.location.pathname.startsWith('/chat/')) {
+    return <ChatWindow />;
+  }
 
   // Resize refs
   const isResizingLeft = useRef(false);

@@ -98,6 +98,8 @@ func (h *SignalingHandler) HandleWebSocket(c *gin.Context) {
 				"sdp":             in.Sdp,
 				"ice_candidate":   in.IceCandidate,
 				"presence_status": in.PresenceStatus,
+				"room_id":         in.RoomId,
+				"participants":    in.Participants,
 			}
 
 			if err := conn.WriteJSON(wsMsg); err != nil {
@@ -114,6 +116,8 @@ func (h *SignalingHandler) HandleWebSocket(c *gin.Context) {
 			TargetPeerId string        `json:"target_peer_id"`
 			Sdp          string        `json:"sdp"`
 			IceCandidate string        `json:"ice_candidate"`
+			RoomId       string        `json:"room_id"`
+			Participants []string      `json:"participants"`
 		}
 
 		if err := conn.ReadJSON(&msg); err != nil {
@@ -128,6 +132,8 @@ func (h *SignalingHandler) HandleWebSocket(c *gin.Context) {
 			TargetPeerId: msg.TargetPeerId,
 			Sdp:          msg.Sdp,
 			IceCandidate: msg.IceCandidate,
+			RoomId:       msg.RoomId,
+			Participants: msg.Participants,
 		})
 		if err != nil {
 			log.Printf("gRPC Send failed: %v", err)
