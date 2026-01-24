@@ -8,7 +8,7 @@
  * ==========================================================================
  */
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Folder, Briefcase, Lock, Building2, ChevronDown, ChevronRight, ArrowUpDown, MoreHorizontal, Plus } from 'lucide-react';
@@ -53,7 +53,7 @@ interface DocumentListGroupProps {
 /**
  * 문서 목록 그룹 컴포넌트
  */
-export const DocumentListGroup = ({
+export const DocumentListGroup = memo(({
   group,
   onToggle,
   onSelectDocument,
@@ -70,8 +70,7 @@ export const DocumentListGroup = ({
   onRenameSubmit
 }: DocumentListGroupProps) => {
   const [showSortMenu, setShowSortMenu] = useState(false);
-
-  // 그룹 드래그 지원 (Sortable)
+  // ... rest of implementation ...
   const {
     attributes,
     listeners,
@@ -213,4 +212,6 @@ export const DocumentListGroup = ({
       )}
     </div>
   );
-};
+});
+
+DocumentListGroup.displayName = 'DocumentListGroup';

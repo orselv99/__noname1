@@ -11,7 +11,7 @@
  * ==========================================================================
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, Edit2, Search, Share2, FileText, Star, ChevronsUpDown, FilePlus } from 'lucide-react';
 
@@ -65,19 +65,42 @@ const findItem = (items: DocumentListItemType[], id: string): DocumentListItemTy
 };
 
 /**
+ * 아이템 확장 상태 재귀 업데이트 헬퍼
+ */
+const updateItemsExpansion = (items: DocumentListItemType[], expandedSet: Set<string>): DocumentListItemType[] => {
+  return items.map(item => ({
+    ...item,
+    expanded: expandedSet.has(item.id),
+    children: item.children ? updateItemsExpansion(item.children, expandedSet) : undefined
+  }));
+};
+
+/**
  * 문서 목록 컴포넌트
  */
-export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentListProps) => {
+export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: DocumentListProps) => {
   // --- 상태 관리 ---
-  const { documents, createDocument, renameDocument, deleteDocument, fetchDocuments, activeTabId, currentUser, newDocTrigger, moveDocument } = useDocumentStore();
+  // Optimized Selectors
+  const documents = useDocumentStore(state => state.documents);
+  const activeTabId = useDocumentStore(state => state.activeTabId);
+  const currentUser = useDocumentStore(state => state.currentUser);
+  const newDocTrigger = useDocumentStore(state => state.newDocTrigger);
+
+  // Actions (stable)
+  const createDocument = useDocumentStore(state => state.createDocument);
+  const renameDocument = useDocumentStore(state => state.renameDocument);
+  const deleteDocument = useDocumentStore(state => state.deleteDocument);
+  const fetchDocuments = useDocumentStore(state => state.fetchDocuments);
+  const moveDocument = useDocumentStore(state => state.moveDocument);
+
   const { departments, projects } = useAuthStore();
   const { confirm } = useConfirm();
 
   // 그룹별 정렬 옵션 관리
   const [groupSortOptions, setGroupSortOptions] = useState<Record<string, SortOption>>({});
-  const handleSortChange = (groupId: string, sort: SortOption) => {
+  const handleSortChange = useCallback((groupId: string, sort: SortOption) => {
     setGroupSortOptions(prev => ({ ...prev, [groupId]: sort }));
-  };
+  }, []);
 
   const [isFavoriteFilter, setIsFavoriteFilter] = useState(false);
 
@@ -91,10 +114,7 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
 
   // UI 다이얼로그 상태
   const [showNewDocDialog, setShowNewDocDialog] = useState(false);
-  // const [newDocParentInfo, setNewDocParentInfo] = useState<{ groupId: string, parentFolderId?: string } | null>(null);
   const [showGroupLinkDialog, setShowGroupLinkDialog] = useState(false);
-  // const [showGroupInfoDialog, setShowGroupInfoDialog] = useState(false);
-  // const [selectedGroupIdForInfo, setSelectedGroupIdForInfo] = useState<string | null>(null);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,48 +126,7 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
   const [dragItem, setDragItem] = useState<DocumentListItemType | null>(null);
 
   // Handlers
-  const toggleAllGroups = () => {
-    // Check if any group or item is collapsed.
-    const isAnyItemCollapsed = (items: DocumentListItemType[]): boolean => {
-      for (const item of items) {
-        if (item.children && item.children.length > 0) {
-          if (!item.expanded) return true;
-          if (isAnyItemCollapsed(item.children)) return true;
-        }
-      }
-      return false;
-    };
 
-    const anyCollapsed = groups.some(g => !g.expanded || isAnyItemCollapsed(g.items));
-
-    // Recursive function to set expanded state for all items
-    const setAllExpanded = (items: DocumentListItemType[], expanded: boolean): DocumentListItemType[] => {
-      return items.map(item => {
-        if (item.children && item.children.length > 0) {
-          if (expanded) expandedIdsRef.current.add(item.id);
-          else expandedIdsRef.current.delete(item.id);
-        }
-
-        return {
-          ...item,
-          expanded: expanded,
-          children: item.children ? setAllExpanded(item.children, expanded) : undefined
-        };
-      });
-    };
-
-    setGroups(prev => prev.map(g => {
-      const newExpanded = anyCollapsed;
-      if (newExpanded) expandedGroupsRef.current.add(g.id);
-      else expandedGroupsRef.current.delete(g.id);
-
-      return {
-        ...g,
-        expanded: newExpanded,
-        items: setAllExpanded(g.items, newExpanded)
-      }
-    }));
-  };
 
   // DnD 센서 설정
   const sensors = useSensors(
@@ -186,7 +165,9 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
 
   // --- 이벤트 핸들러 ---
 
-  const handleMenuClick = (e: React.MouseEvent, id: string) => {
+  // --- 이벤트 핸들러 ---
+
+  const handleMenuClick = useCallback((e: React.MouseEvent, id: string) => {
     const button = e.currentTarget as HTMLElement;
     const rect = button.getBoundingClientRect();
     setContextMenu({
@@ -194,25 +175,34 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
       x: rect.right + 4,
       y: rect.top
     });
-  };
+  }, []);
 
-  const handleRename = (id: string) => {
+  const handleRename = useCallback((id: string) => {
     setRenamingId(id);
     setContextMenu(null);
-  };
+  }, []);
 
-  const handleRenameSubmit = async (id: string, newTitle: string) => {
+  const handleRenameSubmit = useCallback(async (id: string, newTitle: string) => {
     if (newTitle.trim()) {
       await renameDocument(id, newTitle);
     }
     setRenamingId(null);
-  };
+  }, [renameDocument]);
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     setContextMenu(null);
 
     // 하위 문서 존재 여부 확인
-    const hasChildren = documents.some(d => d.parent_id === id && !d.deleted_at);
+    // documents is a dependency. If documents change, this recreates.
+    // It's unavoidable unless we pass documents to handleDelete, or use getState().
+    // Using getState() inside callback is better for memoization stability if documents change often.
+    // But honestly, documents changing implies list re-rendering anyway, so dependency on documents is fine.
+    // BUT wait, documents changes A LOT.
+    // Let's use documents from closure for now, but be aware.
+    // Optimally: useDocumentStore.getState().documents
+
+    const currentDocuments = useDocumentStore.getState().documents;
+    const hasChildren = currentDocuments.some(d => d.parent_id === id && !d.deleted_at);
 
     const message = hasChildren
       ? '이 문서를 삭제하시겠습니까?\n포함된 하위 문서들도 모두 함께 삭제됩니다.'
@@ -226,11 +216,53 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
     })) {
       await deleteDocument(id);
     }
-  };
+  }, [confirm, deleteDocument]);
 
   // --- 그룹 및 트리 구성 로직 ---
 
   const [groups, setGroups] = useState<DocumentListGroupType[]>([]);
+
+  // Toggle All Groups Handler
+  const toggleAllGroups = useCallback(() => {
+    const isAnyItemCollapsed = (items: DocumentListItemType[]): boolean => {
+      for (const item of items) {
+        if (item.children && item.children.length > 0) {
+          if (!item.expanded) return true;
+          if (isAnyItemCollapsed(item.children)) return true;
+        }
+      }
+      return false;
+    };
+
+    const anyCollapsed = groups.some(g => !g.expanded || isAnyItemCollapsed(g.items));
+
+    const setAllExpanded = (items: DocumentListItemType[], expanded: boolean): DocumentListItemType[] => {
+      return items.map(item => {
+        if (item.children && item.children.length > 0) {
+          if (expanded) expandedIdsRef.current.add(item.id);
+          else expandedIdsRef.current.delete(item.id);
+        }
+
+        return {
+          ...item,
+          expanded: expanded,
+          children: item.children ? setAllExpanded(item.children, expanded) : undefined
+        };
+      });
+    };
+
+    setGroups(prev => prev.map(g => {
+      const newExpanded = anyCollapsed;
+      if (newExpanded) expandedGroupsRef.current.add(g.id);
+      else expandedGroupsRef.current.delete(g.id);
+
+      return {
+        ...g,
+        expanded: newExpanded,
+        items: setAllExpanded(g.items, newExpanded)
+      }
+    }));
+  }, [groups]);
 
   useEffect(() => {
     // 1. 활성 문서 필터링
@@ -440,18 +472,13 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
 
   }, [activeTabId]);
 
-  // 아이템 확장 상태 재귀 업데이트 헬퍼
-  const updateItemsExpansion = (items: DocumentListItemType[], expandedSet: Set<string>): DocumentListItemType[] => {
-    return items.map(item => ({
-      ...item,
-      expanded: expandedSet.has(item.id),
-      children: item.children ? updateItemsExpansion(item.children, expandedSet) : undefined
-    }));
-  };
+
 
   // --- 토글 핸들러 ---
 
-  const handleToggleExpandInfo = (groupId: string, itemId: string) => {
+  // --- 토글 핸들러 ---
+
+  const handleToggleExpandInfo = useCallback((groupId: string, itemId: string) => {
     if (expandedIdsRef.current.has(itemId)) {
       expandedIdsRef.current.delete(itemId);
     } else {
@@ -465,9 +492,14 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
         items: updateItemsExpansion(g.items, expandedIdsRef.current)
       };
     }));
-  };
+  }, []); // updateItemsExpansion is stable (declared outside or... wait it was helper inside)
 
-  const handleToggleGroup = (groupId: string) => {
+  // updateItemsExpansion uses no external state, so it can be moved outside or memoized.
+  // It is defined at line 444 as `const updateItemsExpansion = ...` inside component.
+  // It should be memoized or moved out. Moving out is best.
+
+
+  const handleToggleGroup = useCallback((groupId: string) => {
     if (expandedGroupsRef.current.has(groupId)) {
       expandedGroupsRef.current.delete(groupId);
     } else {
@@ -478,12 +510,12 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
       if (g.id !== groupId) return g;
       return { ...g, expanded: expandedGroupsRef.current.has(groupId) };
     }));
-  };
+  }, []);
 
 
   // --- Drag and Drop 핸들러 ---
 
-  const handleDragStart = (event: DragStartEvent) => {
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
     setActiveId(active.id as string);
     setOverId(null);
@@ -502,20 +534,68 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
     };
 
     // 모든 그룹에서 검색
-    for (const group of groups) {
-      const found = findDragItem(group.items);
-      if (found) {
-        setDragItem(found);
-        break;
+    // We need 'groups' state here. So if groups change, this changes.
+    // But 'groups' IS the main thing being rendered.
+    // We can use functional update or refs if we want to avoid re-creating this callback,
+    // but drag start is rare event. Re-creating this on groups change is fine.
+    // However, for pure performance, maybe better to use ref for groups?
+    // No, groups change leads to re-render anyway.
+
+    // Actually, finding drag item can be done based on internal state logic or using a ref if we want perfect stability.
+    // But let's just depend on groups for now.
+
+
+
+    // Instead of using 'groups' from closure, we can just use the latest groups from state updater?
+    // No, we need it here.
+    // Optimization: Since we are inside 'DocumentList', and 'DocumentList' re-renders when groups change,
+    // passing a new 'handleDragStart' to DndContext is fine.
+
+    // Wait, DndContext is at top level of DocumentList.
+    // But 'handleDragStart' is NOT passed to 'DocumentListItem'.
+    // 'DocumentListItem' receives 'dragState'.
+    // 'handleDragStart' is passed to 'DndContext'.
+    // So this is fine.
+
+    // The issue is 'handleItemMouseMove' which IS passed to Item.
+
+    // For finding item:
+    setGroups(currentGroups => {
+      for (const group of currentGroups) {
+        const found = findDragItem(group.items);
+        if (found) {
+          setDragItem(found);
+          break;
+        }
       }
-    }
-  };
+      return currentGroups; // No change
+    });
+
+  }, []);
 
 
 
   // 마우스 이동으로 드랍 위치(Top/Bottom/Inside) 정밀 계산
-  const handleItemMouseMove = (e: React.MouseEvent, item: DocumentListItemType) => {
-    if (!activeId || activeId === item.id) return;
+  const handleItemMouseMove = useCallback((e: React.MouseEvent, item: DocumentListItemType) => {
+    // This uses activeId from state.
+    // If activeId changes, this recreates.
+    // setActiveId causes re-render anyway.
+
+    // We can use a Ref for activeId to avoid recreating this callback if we want perfect stability,
+    // but activeId only changes on DragStart/End.
+    // During drag, activeId is stable.
+
+    // However, we need to access 'activeId'.
+    // Check if we can use closure or if we need dependency.
+    // If we depend on [activeId], it updates only when drag starts/ends.
+    // This is good.
+
+    // But wait, we need 'activeId' current value.
+    if (!activeId || activeId === item.id) return; // This check needs activeId
+
+    // To make it truly stable even across renders (if other things update),
+    // we can check activeId inside setOverId functional update? No.
+    // Pass activeId as ref?
 
     const rect = e.currentTarget.getBoundingClientRect();
     const clientY = e.clientY;
@@ -530,17 +610,18 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
 
     setOverId(item.id);
     setDropPosition(newPos);
-  };
+  }, [activeId]);
 
-  const handleItemMouseLeave = () => {
+  const handleItemMouseLeave = useCallback(() => {
     setOverId(null);
     setDropPosition(null);
-  };
+  }, []);
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active } = event;
 
-    // 유효한 드랍 타겟이 없으면 취소
+    // We need current overId and dropPosition.
+    // These satisfy dependency chain.
     if (!overId || !dropPosition || active.id === overId) {
       setActiveId(null);
       setOverId(null);
@@ -553,7 +634,6 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
 
     try {
       await moveDocument(active.id as string, overId, dropPosition);
-      // 이동 후 로컬 상태 업데이트는 store subscription 또는 fetchDocuments 에 의해 처리됨
     } catch (err) {
       console.error("Failed to move document", err);
     }
@@ -562,7 +642,7 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
     setOverId(null);
     setDropPosition(null);
     setDragItem(null);
-  };
+  }, [overId, dropPosition, moveDocument]);
 
   // --- 렌더링 ---
 
@@ -591,6 +671,7 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
               <Star size={18} />
             )}
           </button>
+
           <button
             className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-800 rounded"
             onClick={toggleAllGroups}
@@ -741,4 +822,6 @@ export const DocumentList = ({ onSelectDocument, mode = 'folder' }: DocumentList
       */}
     </div>
   );
-};
+});
+
+DocumentList.displayName = 'DocumentList';

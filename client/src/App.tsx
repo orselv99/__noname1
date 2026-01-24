@@ -107,7 +107,9 @@ function AppContent() {
   }, []);
 
   // Tab Menu State
-  const { tabs, setActiveTab } = useDocumentStore();
+  // Tab Menu State
+  const tabs = useDocumentStore(useCallback(state => state.tabs, []));
+  const setActiveTab = useDocumentStore(state => state.setActiveTab);
   const [showTabMenu, setShowTabMenu] = useState(false);
 
   // Right Panel State
@@ -180,6 +182,15 @@ function AppContent() {
     document.addEventListener('mousemove', handleMouseMoveRight);
     document.addEventListener('mouseup', stopResizingRight);
   }, [handleMouseMoveRight, stopResizingRight]);
+
+  // Document Selection Handler
+  const handleSelectDocument = useCallback((id: string) => {
+    console.log('Selected:', id);
+    const doc = useDocumentStore.getState().documents.find(d => d.id === id);
+    if (doc) {
+      useDocumentStore.getState().addTab(doc);
+    }
+  }, []);
 
 
   // Auth handlers
@@ -281,13 +292,7 @@ function AppContent() {
                 {isSidebarOpen && (
                   <div style={{ width: `${leftSidebarWidth}px` }} className="h-full flex flex-col">
                     <DocumentList
-                      onSelectDocument={(id) => {
-                        console.log('Selected:', id);
-                        const doc = useDocumentStore.getState().documents.find(d => d.id === id);
-                        if (doc) {
-                          useDocumentStore.getState().addTab(doc);
-                        }
-                      }}
+                      onSelectDocument={handleSelectDocument}
                       mode={sidebarMode}
                     />
                     <RecycleBin />

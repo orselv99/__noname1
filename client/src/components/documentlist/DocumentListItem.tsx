@@ -8,6 +8,7 @@
  * ==========================================================================
  */
 
+import { memo } from 'react';
 import { FileText, ChevronDown, ChevronRight, MoreHorizontal, Plus } from 'lucide-react';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -197,7 +198,7 @@ interface DocumentListItemProps {
 /**
  * Sortable(드래그 가능한) 문서 리스트 아이템 컴포넌트
  */
-export const DocumentListItem = ({
+export const DocumentListItem = memo(({
   item,
   groupId,
   depth = 0,
@@ -282,4 +283,6 @@ export const DocumentListItem = ({
       )}
     </div>
   );
-};
+});
+
+DocumentListItem.displayName = 'DocumentListItem';

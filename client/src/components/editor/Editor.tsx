@@ -52,7 +52,7 @@ interface TitleInputProps {
 
 const TitleInput = memo(({ initialTitle, docId, onTitleChange, onFocusEditor }: TitleInputProps) => {
   const [localTitle, setLocalTitle] = useState(initialTitle);
-  const { updateTabTitle } = useDocumentStore();
+  const updateTabTitle = useDocumentStore(state => state.updateTabTitle);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevInitialTitleRef = useRef(initialTitle);
   const hasUserEditedRef = useRef(false);
@@ -109,7 +109,14 @@ TitleInput.displayName = 'TitleInput';
  */
 export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
   const { showToast } = useToast();
-  const { highlightedEvidence, toggleFavorite, updateDocument, setLiveEditorContent, setAutoSaveStatus, markTabDirty } = useDocumentStore();
+
+  // Optimized Selectors to prevent re-render of ALL editors on ANY store change
+  const highlightedEvidence = useDocumentStore(state => state.highlightedEvidence);
+  const toggleFavorite = useDocumentStore(state => state.toggleFavorite);
+  const updateDocument = useDocumentStore(state => state.updateDocument);
+  const setLiveEditorContent = useDocumentStore(state => state.setLiveEditorContent);
+  const setAutoSaveStatus = useDocumentStore(state => state.setAutoSaveStatus);
+  const markTabDirty = useDocumentStore(state => state.markTabDirty);
 
   // Get document data for this specific editor
   const doc = useDocumentStore(
