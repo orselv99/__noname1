@@ -12,11 +12,13 @@ export interface Tab {
 }
 
 export interface CalendarEvent {
+  id: string; // Add ID
   title: string;
   description?: string;
   startDate: string; // ISO string
   endDate: string;   // ISO string
   color?: string;
+  priority?: 'High' | 'Medium' | 'Low';
 }
 
 interface DocumentStore {
@@ -30,8 +32,10 @@ interface DocumentStore {
 
   // Calendar State
   calendarSelectedDate: Date | null;
+  calendarSelectedEventId: string | null; // Add Selected Event ID
   calendarEvents: CalendarEvent[];
   setCalendarSelectedDate: (date: Date | null) => void;
+  setCalendarSelectedEventId: (id: string | null) => void;
   addCalendarEvent: (event: CalendarEvent) => void;
 
   // UI State
@@ -94,13 +98,10 @@ export const useDocumentStore = create<DocumentStore>()(
       activeTabId: null,
 
       calendarSelectedDate: new Date(),
-      calendarEvents: [
-        { title: '프로젝트 미팅', startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 6).toISOString(), endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 6, 10, 0).toISOString(), color: 'text-blue-400' },
-        { title: '마감일', startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 12).toISOString(), endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 12, 18, 0).toISOString(), color: 'text-red-400' },
-        { title: '리뷰', startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 18).toISOString(), endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 18, 14, 0).toISOString(), color: 'text-green-400' },
-        { title: '발표', startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 25).toISOString(), endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 25, 11, 0).toISOString(), color: 'text-purple-400' },
-      ],
+      calendarSelectedEventId: null,
+      calendarEvents: [],
       setCalendarSelectedDate: (date) => set({ calendarSelectedDate: date }),
+      setCalendarSelectedEventId: (id) => set({ calendarSelectedEventId: id }),
       addCalendarEvent: (event) => set((state) => ({ calendarEvents: [...state.calendarEvents, event] })),
 
       highlightedEvidence: null,

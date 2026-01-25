@@ -30,10 +30,6 @@ export const StatusBar = () => {
             <span>{aiAnalysisStatus}</span>
           </div>
         )}
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-green-500/20 border border-green-500/50"></span>
-          <span>Online</span>
-        </div>
         <div className="flex items-center gap-1 hover:text-zinc-300 cursor-pointer relative" title="알림">
           <Bell size={14} />
           {/* Notification Badge */}

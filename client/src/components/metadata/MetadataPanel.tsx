@@ -169,7 +169,7 @@ export const MetadataPanel = () => {
     <div className="w-full h-full bg-zinc-950 flex flex-col text-white relative">
       {/* 헤더 */}
       <div className="h-12 p-3 border-b border-zinc-800 font-medium text-xs text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-        <FileText size={14} />
+        <FileText size={14} className="text-blue-400" />
         <span className="flex-1">Metadata</span>
         <button
           className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white transition-colors"

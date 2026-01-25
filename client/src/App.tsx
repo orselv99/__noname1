@@ -411,6 +411,13 @@ function AppContent() {
                       >
                         <Search size={16} />
                       </button>
+                      <button
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'crew' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+                        onClick={() => { setActiveRightTab('crew'); setIsRightSidebarOpen(true); }}
+                        title="Crew Chat"
+                      >
+                        <MessageSquare size={16} />
+                      </button>
                       <div className="w-px h-4 bg-zinc-800 mx-1" />
                       <WindowControls onClose={handleClose} />
                     </div>

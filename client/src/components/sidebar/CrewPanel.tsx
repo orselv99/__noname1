@@ -81,7 +81,9 @@ export const CrewPanel = () => {
       <div className="h-12 p-3 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MessageCircle size={14} className="text-blue-400" />
-          <h2 className="text-zinc-400 font-medium text-xs uppercase tracking-wider ">크루 ({filteredCrew.length})</h2>
+          <h2 className="text-zinc-400 font-medium text-xs uppercase tracking-wider ">
+            Crew ({filteredCrew.length})
+          </h2>
         </div>
 
         {/* 간단한 필터 메뉴 (예시) */}
