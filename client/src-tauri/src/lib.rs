@@ -92,7 +92,9 @@ pub fn run() {
       commands::auth::clear_saved_tenant,
       commands::auth::change_password,
       commands::auth::logout,
+      commands::auth::logout,
       commands::auth::list_users,
+      commands::auth::get_last_user,
       // ----------------------------------------------------------------
       // 문서 명령: CRUD, 휴지통, 동기화
       // ----------------------------------------------------------------
@@ -137,7 +139,15 @@ pub fn run() {
       commands::content::save_content_state,
       commands::content::load_content_state,
       commands::content::delete_content_state,
-      commands::content::clear_content_state
+      commands::content::clear_content_state,
+      // ----------------------------------------------------------------
+      // 채팅 명령: Room, Message
+      // ----------------------------------------------------------------
+      commands::chat::save_chat_room,
+      commands::chat::list_chat_rooms,
+      commands::chat::get_chat_room,
+      commands::chat::save_chat_message,
+      commands::chat::get_chat_messages
     ])
     // ====================================================================
     // 앱 초기화 콜백 (.setup)

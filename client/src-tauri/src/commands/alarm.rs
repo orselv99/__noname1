@@ -28,7 +28,7 @@ pub fn add_alarm(
   id: String,
   title: Option<String>,
   message: String,
-  type_: String,
+  alarm_type: String, // Changed from type_ to alarm_type
   importance: String,
   room_id: Option<String>,
 ) -> Result<(), String> {
@@ -39,7 +39,7 @@ pub fn add_alarm(
       &id,
       title.as_deref(),
       &message,
-      &type_,
+      &alarm_type,
       &importance,
       room_id.as_deref(),
     )?;

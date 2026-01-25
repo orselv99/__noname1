@@ -13,6 +13,7 @@
 // 하위 모듈 선언
 pub mod alarm;
 pub mod auth;
+pub mod chat; // 채팅 모듈
 pub mod content;
 pub mod documents;
 pub mod rag;
@@ -32,8 +33,8 @@ pub use schema::init_database;
 
 // auth 모듈
 pub use auth::{
-  clear_saved_tenant, get_saved_tenant, hash_password, save_user, update_cached_password,
-  verify_offline_login, verify_password, CachedUser,
+  clear_saved_tenant, get_last_user, get_saved_tenant, hash_password, save_user,
+  update_cached_password, verify_offline_login, verify_password, CachedUser,
 };
 
 // documents 모듈
@@ -61,4 +62,10 @@ pub use alarm::{
 // content 모듈
 pub use content::{
   clear_content_state, delete_content_state, load_content_state, save_content_state,
+};
+
+// chat 모듈
+pub use chat::{
+  get_chat_messages, get_chat_room, list_chat_rooms, save_chat_message, save_chat_room,
+  ChatMessage, ChatRoom,
 };

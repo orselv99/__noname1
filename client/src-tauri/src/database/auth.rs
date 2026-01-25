@@ -287,3 +287,41 @@ pub fn get_refresh_token(conn: &Connection) -> Result<Option<String>, String> {
 
   Ok(result)
 }
+
+/// 마지막 로그인한 사용자 정보 조회 (자동 로그인용)
+pub fn get_last_user(conn: &Connection) -> Result<Option<CachedUser>, String> {
+  let result = conn
+    .query_row(
+      "SELECT id, email, password_hash, username, tenant_id, role,
+                position_id, department_id,
+                contact, birthday, phone_numbers, force_change_password,
+                created_at, updated_at, refresh_token
+         FROM users 
+         ORDER BY last_login_at DESC 
+         LIMIT 1",
+      [],
+      |row| {
+        Ok(CachedUser {
+          id: row.get(0)?,
+          email: row.get(1)?,
+          password_hash: row.get(2)?,
+          username: row.get(3)?,
+          tenant_id: row.get(4)?,
+          role: row.get(5)?,
+          position_id: row.get(6)?,
+          department_id: row.get(7)?,
+          contact: row.get(8)?,
+          birthday: row.get(9)?,
+          phone_numbers: row.get(10)?,
+          force_change_password: row.get::<_, i32>(11)? != 0,
+          created_at: row.get(12)?,
+          updated_at: row.get(13)?,
+          refresh_token: row.get(14)?,
+        })
+      },
+    )
+    .optional()
+    .map_err(|e| format!("마지막 사용자 조회 실패: {}", e))?;
+
+  Ok(result)
+}

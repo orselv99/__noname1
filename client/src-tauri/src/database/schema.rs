@@ -54,6 +54,7 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
   create_cache_tables(&conn)?;
   create_alarms_table(&conn)?; // 알람 테이블 생성
   create_contents_table(&conn)?; // 콘텐츠(Store) 테이블 생성
+  create_chat_tables(&conn)?; // 채팅 테이블 생성
 
   // 마이그레이션
   run_migrations(&conn)?;
@@ -148,6 +149,49 @@ fn create_contents_table(conn: &Connection) -> Result<(), String> {
       [],
     )
     .map_err(|e| format!("contents 테이블 생성 실패: {}", e))?;
+  Ok(())
+}
+
+// ============================================================================
+// 테이블 생성 함수 (Chat)
+// ============================================================================
+
+/// 채팅 테이블 생성 (P2P 채팅 히스토리 저장)
+///
+/// chat_rooms: 채팅방 목록 (참与자 정보 포함)
+/// chat_messages: 채팅 메시지 내역
+fn create_chat_tables(conn: &Connection) -> Result<(), String> {
+  // 채팅방 테이블
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS chat_rooms (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            participants TEXT, -- JSON Array or Comma Separated (참여자 User ID 목록)
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+      [],
+    )
+    .map_err(|e| format!("chat_rooms 테이블 생성 실패: {}", e))?;
+
+  // 채팅 메시지 테이블
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS chat_messages (
+            id TEXT PRIMARY KEY,
+            room_id TEXT NOT NULL,
+            sender_id TEXT NOT NULL,
+            content TEXT NOT NULL,
+            status TEXT NOT NULL, -- pending, sent, delivered, read
+            timestamp INTEGER NOT NULL, -- Unix Timestamp (ms)
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE
+        )",
+      [],
+    )
+    .map_err(|e| format!("chat_messages 테이블 생성 실패: {}", e))?;
+
   Ok(())
 }
 
@@ -489,6 +533,14 @@ fn create_indexes(conn: &Connection) -> Result<(), String> {
       [],
     )
     .map_err(|e| format!("alarms 인덱스 생성 실패: {}", e))?;
+
+  // 채팅 메시지 인덱스 (room_id, timestamp) - 메시지 로드 및 정렬용
+  conn
+    .execute(
+      "CREATE INDEX IF NOT EXISTS idx_chat_messages_room_ts ON chat_messages(room_id, timestamp)",
+      [],
+    )
+    .map_err(|e| format!("chat_messages 인덱스 생성 실패: {}", e))?;
 
   Ok(())
 }

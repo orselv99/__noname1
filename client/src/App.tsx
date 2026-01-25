@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown, Search, List, MessageSquare, Calendar as CalendarIcon } from 'lucide-react';
+import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown, Search, List, MessageSquare } from 'lucide-react';
 import { isTauri } from './utils/tauri';
 
 // Layout Components

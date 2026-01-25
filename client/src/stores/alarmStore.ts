@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { invoke } from '@tauri-apps/api/core';
+import { sqliteContentStorage } from '../utils/sqliteContentStorage';
 
 export type AlarmType = 'success' | 'error' | 'info' | 'warning';
 export type AlarmImportance = 'low' | 'medium' | 'high';
@@ -34,6 +36,7 @@ interface AlarmState {
   markAllAsRead: () => void;
   removeAlarm: (id: string) => void;
   clearAll: () => void;
+  loadAlarms: () => Promise<void>; // 로드 함수 추가
 
   updateSettings: (settings: Partial<AlarmSettings>) => void;
 }
@@ -56,7 +59,7 @@ export const useAlarmStore = create<AlarmState>()(
         chatPrivacy: 'all',
       },
 
-      addAlarm: (message, type = 'info', importance = 'medium', title, roomId) => {
+      addAlarm: async (message, type = 'info', importance = 'medium', title, roomId) => {
         const { settings } = get();
 
         // Filter by importance
@@ -64,8 +67,9 @@ export const useAlarmStore = create<AlarmState>()(
           return; // Skip low importance alarms if filter is high
         }
 
+        const id = crypto.randomUUID();
         const newAlarm: Alarm = {
-          id: crypto.randomUUID(),
+          id,
           title,
           message,
           type,
@@ -75,7 +79,18 @@ export const useAlarmStore = create<AlarmState>()(
           roomId,
         };
 
+        // Optimistic update
         set((state) => ({ alarms: [newAlarm, ...state.alarms] }));
+
+        // Backend save
+        invoke('add_alarm', {
+          id,
+          title,
+          message,
+          alarmType: type, // Tauri maps 'alarmType' (JS) -> 'alarm_type' (Rust)
+          importance,
+          room_id: roomId
+        }).catch(e => console.error('Failed to save alarm:', e));
 
         // Desktop Notification Logic
         if (settings.enabled && settings.useDesktopNotifications) {
@@ -91,26 +106,61 @@ export const useAlarmStore = create<AlarmState>()(
         }
       },
 
-      markAsRead: (id) => set((state) => ({
-        alarms: state.alarms.map(a => a.id === id ? { ...a, read: true } : a)
-      })),
+      markAsRead: (id) => {
+        set((state) => ({
+          alarms: state.alarms.map(a => a.id === id ? { ...a, read: true } : a)
+        }));
+        invoke('mark_alarm_read', { id }).catch(e => console.error(e));
+      },
 
-      markAllAsRead: () => set((state) => ({
-        alarms: state.alarms.map(a => ({ ...a, read: true }))
-      })),
+      markAllAsRead: () => {
+        set((state) => ({
+          alarms: state.alarms.map(a => ({ ...a, read: true }))
+        }));
+        invoke('mark_all_alarms_read').catch(e => console.error(e));
+      },
 
-      removeAlarm: (id) => set((state) => ({
-        alarms: state.alarms.filter(a => a.id !== id)
-      })),
+      removeAlarm: (id) => {
+        set((state) => ({
+          alarms: state.alarms.filter(a => a.id !== id)
+        }));
+        invoke('delete_alarm', { id }).catch(e => console.error(e));
+      },
 
-      clearAll: () => set({ alarms: [] }),
+      clearAll: () => {
+        set({ alarms: [] });
+        invoke('clear_alarms').catch(e => console.error(e));
+      },
 
       updateSettings: (newSettings) => set((state) => ({
         settings: { ...state.settings, ...newSettings }
       })),
+
+      // 초기화: DB에서 알람 로드
+      loadAlarms: async () => {
+        try {
+          const alarms = await invoke<any[]>('get_alarms', { limit: 50 });
+          // DB Raw -> Frontend Model 변환
+          const parsedAlarms: Alarm[] = alarms.map(a => ({
+            id: a.id,
+            title: a.title,
+            message: a.message,
+            type: a.type_ as AlarmType, // type_ -> type
+            importance: a.importance as AlarmImportance,
+            timestamp: new Date(a.created_at).getTime(),
+            read: a.is_read,
+            roomId: a.room_id
+          }));
+          set({ alarms: parsedAlarms });
+        } catch (e) {
+          console.error('Failed to load alarms:', e);
+        }
+      }
     }),
     {
-      name: 'alarm-storage',
+      name: 'alarm-storage', // DB key
+      storage: createJSONStorage(() => sqliteContentStorage), // SQLite Adapter 사용
+      partialize: (state) => ({ settings: state.settings }), // settings만 저장 (알람은 별도 테이블)
     }
   )
 );

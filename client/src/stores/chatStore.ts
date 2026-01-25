@@ -1,277 +1,207 @@
 import { create } from 'zustand';
-import { safeInvoke } from '../utils/safeInvoke';
-import { executeSearch, ThinkingState } from '../utils/LangGraphSearch';
+import { invoke } from '@tauri-apps/api/core';
+import { v4 as uuidv4 } from 'uuid';
 
-export interface ChatMessage {
+export interface ChatRoom {
   id: string;
-  chat_id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-}
-
-export interface ChatSession {
-  id: string;
-  title: string;
+  name?: string;
+  participants: string[];
   created_at: string;
   updated_at: string;
 }
 
-interface ChatStore {
-  chats: ChatSession[];
-  currentChatId: string | null;
-  messages: ChatMessage[];
-  isLoading: boolean;
-  loadingStatus: string | null;
-  thinkingProcess: ThinkingState | null;
-  isLoadingMore: boolean;
-  hasMore: boolean;
-
-  loadChats: (search?: string) => Promise<void>;
-  selectChat: (chatId: string) => Promise<void>;
-  createNewChat: () => Promise<void>;
-  deleteChat: (chatId: string) => Promise<void>;
-  renameChat: (chatId: string, newTitle: string) => Promise<void>;
-
-  // Send message handles optimistically adding user/assistant msgs
-  sendMessage: (content: string) => Promise<void>;
-
-  loadMoreMessages: () => Promise<void>;
-  clearMessages: () => void; // Clears locally view only
+export interface ChatMessage {
+  id: string;
+  roomId: string; // CamelCase for Frontend
+  senderId: string; // CamelCase
+  content: string;
+  status: 'pending' | 'sent' | 'delivered' | 'read';
+  syncStatus?: 'synced' | 'unsynced'; // CamelCase
+  timestamp: number;
 }
 
-const PAGE_SIZE = 50;
+// Rust Command DTOs
+interface ChatMessageRaw {
+  id: string;
+  room_id: string; // SnakeCase for Backend
+  sender_id: string;
+  content: string;
+  status: string;
+  timestamp: number;
+}
 
-const INITIAL_THINKING_STATE: ThinkingState = {
-  web: { status: 'idle', logs: [] },
-  server: { status: 'idle', logs: [] },
-  local: { status: 'idle', logs: [] }
-};
+interface ChatRoomRaw {
+  id: string;
+  name?: string;
+  participants: string[]; // JSON parsed by backend automatically? No, backend returns Vec<String>
+  created_at: string;
+  updated_at: string;
+}
 
-export const useChatStore = create<ChatStore>((set, get) => ({
-  chats: [],
-  currentChatId: null,
-  messages: [],
-  isLoading: false,
-  loadingStatus: null,
-  thinkingProcess: null,
-  isLoadingMore: false,
-  hasMore: true,
+interface ChatState {
+  rooms: Record<string, ChatRoom>; // Cache by ID
+  messages: Record<string, ChatMessage[]>; // Cache by RoomID
 
-  loadChats: async (search?: string) => {
+  // Actions
+  loadRooms: () => Promise<void>;
+  createOrUpdateRoom: (room: { id: string; participants: string[]; name?: string }) => Promise<void>;
+
+  loadMessages: (roomId: string) => Promise<void>;
+  addMessage: (msg: { id?: string; roomId: string; senderId: string; content: string; status?: 'pending' | 'sent' | 'delivered' | 'read'; syncStatus?: 'synced' | 'unsynced' }) => Promise<ChatMessage>;
+
+  getRoom: (roomId: string) => ChatRoom | undefined;
+  getMessages: (roomId: string) => ChatMessage[];
+
+  // [읽음 처리] 특정 채팅방의 메시지들을 '읽음' 상태로 변경합니다.
+  markAsRead: (roomId: string, messageIds: string[]) => void;
+}
+
+export const useChatStore = create<ChatState>((set, get) => ({
+  rooms: {},
+  messages: {},
+
+  loadRooms: async () => {
     try {
-      const chats = await safeInvoke<ChatSession[]>('get_rag_chats', { search });
-      set({ chats });
-    } catch (error) {
-      console.error('Failed to load chats:', error);
-    }
-  },
-
-  deleteChat: async (chatId: string) => {
-    try {
-      await safeInvoke('delete_rag_chat', { chatId });
-      // If the deleted chat was selected, clear selection
-      const { currentChatId, loadChats } = get();
-      if (currentChatId === chatId) {
-        set({ currentChatId: null, messages: [] });
-      }
-      // Refresh list
-      await loadChats();
-    } catch (error) {
-      console.error('Failed to delete chat:', error);
-    }
-  },
-
-  renameChat: async (chatId: string, newTitle: string) => {
-    try {
-      await safeInvoke('update_rag_chat_title', { chatId, newTitle });
-      await get().loadChats();
-    } catch (error) {
-      console.error('Failed to rename chat:', error);
-    }
-  },
-
-  selectChat: async (chatId) => {
-    set({ currentChatId: chatId, messages: [], hasMore: true, isLoading: true });
-    try {
-      const msgs = await safeInvoke<ChatMessage[]>('get_rag_messages', {
-        chatId,
-        limit: PAGE_SIZE,
-        before: null
+      const roomsRaw = await invoke<ChatRoomRaw[]>('list_chat_rooms');
+      const roomsMap: Record<string, ChatRoom> = {};
+      roomsRaw.forEach(r => {
+        roomsMap[r.id] = {
+          ...r,
+          // Backend returns standard fields, no extra parsing needed if DTO matches
+        };
       });
-      set({
-        messages: msgs,
-        hasMore: msgs.length === PAGE_SIZE,
-        isLoading: false
-      });
+      set({ rooms: roomsMap });
     } catch (error) {
-      console.error(`Failed to load messages for chat ${chatId}:`, error);
-      set({ isLoading: false });
+      console.error('Failed to load chat rooms:', error);
     }
   },
 
-  createNewChat: async () => {
-    set({ currentChatId: null, messages: [], hasMore: false });
+  createOrUpdateRoom: async (room) => {
+    try {
+      // Optimistic update (optional, usually safer to wait for ack or just fire and forget)
+      // Here we just call backend
+      await invoke('save_chat_room', {
+        id: room.id,
+        name: room.name || null,
+        participants: room.participants
+      });
+
+      // Refresh list or update local state
+      // For now, let's update local map
+      set(state => ({
+        rooms: {
+          ...state.rooms,
+          [room.id]: {
+            id: room.id,
+            name: room.name,
+            participants: room.participants,
+            created_at: state.rooms[room.id]?.created_at || new Date().toISOString(), // Approximation
+            updated_at: new Date().toISOString()
+          }
+        }
+      }));
+    } catch (error) {
+      console.error('Failed to save chat room:', error);
+    }
   },
 
-  sendMessage: async (content) => {
-    // 0. Immediate optimistic lock
-    set({
-      isLoading: true,
-      loadingStatus: "준비 중...",
-      thinkingProcess: JSON.parse(JSON.stringify(INITIAL_THINKING_STATE)) // Deep copy initial
+  loadMessages: async (roomId) => {
+    try {
+      const msgsRaw = await invoke<ChatMessageRaw[]>('get_chat_messages', { roomId });
+      const msgs: ChatMessage[] = msgsRaw.map(m => ({
+        id: m.id,
+        roomId: m.room_id,
+        senderId: m.sender_id,
+        content: m.content,
+        status: m.status as any,
+        timestamp: m.timestamp
+      }));
+
+      set(state => ({
+        messages: {
+          ...state.messages,
+          [roomId]: msgs
+        }
+      }));
+    } catch (error) {
+      console.error(`Failed to load messages for room ${roomId}:`, error);
+    }
+  },
+
+  addMessage: async (msg) => {
+    const id = msg.id || uuidv4();
+    const timestamp = Date.now();
+    const newMessage: ChatMessage = {
+      id,
+      roomId: msg.roomId,
+      senderId: msg.senderId,
+      content: msg.content,
+      status: msg.status || 'pending',
+      syncStatus: msg.syncStatus,
+      timestamp
+    };
+
+    console.log('[ChatStore] addMessage called:', newMessage);
+
+    // Optimistic Update
+    set(state => {
+      const roomMsgs = state.messages[msg.roomId] || [];
+      return {
+        messages: {
+          ...state.messages,
+          [msg.roomId]: [...roomMsgs, newMessage]
+        }
+      };
     });
 
-    let { currentChatId } = get();
-
-    // 1. Ensure chat session exists
-    if (!currentChatId) {
-      try {
-        const chat = await safeInvoke<ChatSession>('create_new_chat', { title: content.substring(0, 30) });
-        currentChatId = chat.id;
-        set({ currentChatId });
-        get().loadChats();
-      } catch (e) {
-        console.error("Failed to create chat:", e);
-        set({ isLoading: false, loadingStatus: null });
-        return;
-      }
-    }
-
-    // 2. Persist User Message
-    let userMsg: ChatMessage;
+    // Backend Save
     try {
-      userMsg = await safeInvoke<ChatMessage>('add_rag_message', {
-        chatId: currentChatId,
-        role: 'user',
-        content
-      });
-    } catch (e) {
-      // Fallback optimistic
-      const tempId = crypto.randomUUID();
-      userMsg = {
-        id: tempId,
-        chat_id: currentChatId,
-        role: 'user',
-        content,
-        timestamp: Date.now()
-      };
-      console.error("Failed to save user message:", e);
-    }
-
-    // Dedup and add
-    set((state) => ({
-      messages: state.messages.some(m => m.id === userMsg.id) ? state.messages : [...state.messages, userMsg],
-    }));
-
-    try {
-      // 3. Execute LangGraph Search with Progress Callback
-      const results = await executeSearch(content, (partialState) => {
-        set((prev) => {
-          // Merge partial state
-          const newState = { ...prev.thinkingProcess, ...partialState } as ThinkingState;
-
-          // Derive simple status for header
-          let statusLabel = "답변 생성 중";
-          if (newState.web.status === 'running') statusLabel = "웹 검색 수행 중";
-          else if (newState.server.status === 'running') statusLabel = "서버 지식 검색 중";
-          else if (newState.local.status === 'running') statusLabel = "로컬 문서 검색 중";
-
-          return {
-            thinkingProcess: newState,
-            loadingStatus: statusLabel
-          };
-        });
+      await invoke('save_chat_message', {
+        message: {
+          id: newMessage.id,
+          room_id: newMessage.roomId,
+          sender_id: newMessage.senderId,
+          content: newMessage.content,
+          status: newMessage.status,
+          timestamp: newMessage.timestamp
+        }
       });
 
-      // 4. Generate Answer (Validation Logic for now)
-      let answer = "";
-      if (results.length === 0) {
-        answer = "관련된 문서를 찾을 수 없습니다";
-      } else {
-        // Flatten results
-        const local = results.filter(r => r.source === 'local');
-        const server = results.filter(r => r.source === 'server');
-        const web = results.filter(r => r.source === 'web');
-
-        // Serialize results as JSON for Rich UI
-        const structuredResponse = {
-          type: 'rag_search_result',
-          results: {
-            local,
-            server,
-            web
-          },
-          summary: "검색 결과를 찾았습니다",
-          thinking_process: get().thinkingProcess
-        };
-        answer = JSON.stringify(structuredResponse);
-      }
-
-      // 5. Persist Assistant Message
-      const asstMsg = await safeInvoke<ChatMessage>('add_rag_message', {
-        chatId: currentChatId,
-        role: 'assistant',
-        content: answer
-      });
-
-      set((state) => ({
-        messages: [...state.messages, asstMsg],
-        isLoading: false,
-        thinkingProcess: null,
-        loadingStatus: null
-      }));
-
-    } catch (err) {
-      console.error(err);
-      // Add error message
-      const errorMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        chat_id: currentChatId!,
-        role: 'assistant',
-        content: `Error: ${String(err)}`,
-        timestamp: Date.now(),
-      };
-      set((state) => ({
-        messages: [...state.messages, errorMsg],
-        isLoading: false
-      }));
-    }
-  },
-
-  loadMoreMessages: async () => {
-    const { currentChatId, messages, isLoadingMore, hasMore } = get();
-    if (!currentChatId || isLoadingMore || !hasMore || messages.length === 0) return;
-
-    set({ isLoadingMore: true });
-
-    try {
-      const oldestMsg = messages[0];
-      const olderMsgs = await safeInvoke<ChatMessage[]>('get_rag_messages', {
-        chatId: currentChatId,
-        limit: PAGE_SIZE,
-        before: oldestMsg.timestamp
-      });
-
-      if (olderMsgs.length > 0) {
-        set((state) => {
-          // Robust Dedup: Filter out messages that already exist by ID
-          const newUniqueMsgs = olderMsgs.filter(newMsg => !state.messages.some(existing => existing.id === newMsg.id));
-          return {
-            messages: [...newUniqueMsgs, ...state.messages],
-            hasMore: olderMsgs.length === PAGE_SIZE,
-            isLoadingMore: false
-          };
-        });
-      } else {
-        set({ hasMore: false, isLoadingMore: false });
-      }
-
+      // Also update room updated_at implicitly in backend, but we might want to reload rooms list
+      // get().loadRooms(); // Optional: might be too heavy?
     } catch (error) {
-      console.error('Failed to load more messages:', error);
-      set({ isLoadingMore: false });
+      console.error('Failed to save message:', error);
+      // Rollback or mark as error? For now just log.
     }
+
+    return newMessage;
   },
 
-  clearMessages: () => set({ messages: [] }),
+  getRoom: (roomId) => get().rooms[roomId],
+
+  getMessages: (roomId) => get().messages[roomId] || [],
+
+  // [읽음 처리 구현]
+  // 채팅방 ID와 메시지 ID 목록을 받아, 해당 메시지들의 상태를 'read'로 업데이트합니다.
+  markAsRead: (roomId, messageIds) => {
+    set(state => {
+      const roomMsgs = state.messages[roomId];
+      if (!roomMsgs) return state;
+
+      // 변경 대상이 있는 경우에만 새로운 배열을 생성하여 업데이트 (불변성 유지)
+      const newMsgs = roomMsgs.map(msg => {
+        if (messageIds.includes(msg.id) && msg.status !== 'read') {
+          return { ...msg, status: 'read' as const };
+        }
+        return msg;
+      });
+
+      return {
+        messages: {
+          ...state.messages,
+          [roomId]: newMsgs
+        }
+      };
+    });
+  }
 }));

@@ -576,6 +576,55 @@ pub fn clear_saved_tenant(
 // 사용자 목록 조회 (Crew List)
 // ============================================================================
 
+/// 마지막 로그인한 사용자 조회 (자동 로그인용)
+#[tauri::command]
+pub fn get_last_user(
+  db_state: State<'_, Mutex<DatabaseState>>,
+) -> Result<Option<LoginResponse>, String> {
+  let db = db_state.lock().unwrap();
+  if let Some(ref conn) = db.conn {
+    match database::get_last_user(conn) {
+      Ok(Some(user)) => {
+        // 전화번호 변환 (CSV → Vec)
+        let phone_numbers = user
+          .phone_numbers
+          .as_ref()
+          .map(|s| s.split(',').map(|p| p.to_string()).collect())
+          .unwrap_or_default();
+
+        Ok(Some(LoginResponse {
+          access_token: String::new(), // 토큰은 갱신 필요
+          refresh_token: user.refresh_token.clone().unwrap_or_default(),
+          expires_in: 0,
+          force_change_password: user.force_change_password,
+          tenant_id: user.tenant_id,
+          role: user.role,
+          is_offline: true, // DB에서 가져왔으므로 일단 오프라인 상태로 간주
+          user_id: user.id,
+          username: user.username,
+          position_id: user.position_id,
+          position_name: None,
+          phone_numbers,
+          contact: user.contact,
+          birthday: user.birthday,
+          created_at: user.created_at,
+          updated_at: user.updated_at,
+          joined_projects: Vec::new(),
+          department: user.department_id.map(|id| DepartmentInfo {
+            id,
+            name: "Offline Department".to_string(), // 저장된 부서명 없음 (필요시 user 테이블 확장)
+            visibility: 1,
+          }),
+        }))
+      }
+      Ok(None) => Ok(None),
+      Err(e) => Err(e),
+    }
+  } else {
+    Ok(None)
+  }
+}
+
 // Server Wire Format (Proto JSON)
 #[derive(Serialize, Deserialize)]
 pub struct RawUserInfo {

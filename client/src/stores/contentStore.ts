@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware'; // createJSONStorage 추가
 import { safeInvoke } from '../utils/safeInvoke';
 import { Document, GroupType, SaveDocumentRequest, DocumentState, VisibilityLevel, ListDocumentsResponse, UserInfo } from '../types';
+import { sqliteContentStorage } from '../utils/sqliteContentStorage'; // Adapter 임포트
 
 export interface Tab {
   id: string; // usually document id or 'calendar'
@@ -671,9 +672,10 @@ export const useContentStore = create<ContentStore>()(
       setCurrentUser: (user: UserInfo) => set({ currentUser: user }),
     }),
     {
-      name: 'document-storage-v1', // key in localStorage
+      name: 'document-storage-v1', // DB key (contents table key)
+      storage: createJSONStorage(() => sqliteContentStorage), // SQLite Adapter 사용
       partialize: (state) => ({
-        tabs: state.tabs.map(t => ({ ...t, isDirty: false })), // Don't persist dirty state, reset to false
+        tabs: state.tabs.map(t => ({ ...t, isDirty: false })), // Don't persist dirty state
         activeTabId: state.activeTabId,
         calendarEvents: state.calendarEvents, // Persist events
       }),

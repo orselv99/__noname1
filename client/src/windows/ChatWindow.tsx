@@ -1,13 +1,22 @@
-
 import { useEffect, useState, useRef } from 'react';
 import { Send, User, MoreVertical, Trash2, LogOut } from 'lucide-react';
-import { messagingStore as chatStore } from '../stores/messagingStore';
+import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 
 export default function ChatWindow() {
-  // Parsing ID manually if not using Router or if window.location is raw
-  // But App.tsx uses Router likely.
   const [roomId, setRoomId] = useState<string>('');
+
+  // Zustand Store Hooks
+  const storedMessages = useChatStore(state => roomId ? state.messages[roomId] : undefined);
+  const storedRooms = useChatStore(state => state.rooms);
+  // Get participants safely
+  const currentRoom = storedRooms[roomId];
+  const participants = currentRoom?.participants || [];
+
+  // Stable empty array to prevent unnecessary effect triggers
+  const EMPTY_ARRAY: any[] = [];
+  const activeMessages = storedMessages || EMPTY_ARRAY;
+
   const [messages, setMessages] = useState<any[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [roomName, setRoomName] = useState('Chat');
@@ -47,17 +56,30 @@ export default function ChatWindow() {
     if (path.startsWith(prefix)) {
       const id = path.slice(prefix.length);
       setRoomId(id);
-      loadMessages(id);
-      loadRoomInfo(id);
+      // Initial Load
+      useChatStore.getState().loadMessages(id);
+      useChatStore.getState().loadRooms(); // Ensure room info is loaded
     }
   }, []);
+
+  // Update Room Info when ID or Rooms change
+  useEffect(() => {
+    if (roomId && storedRooms[roomId]) {
+      setRoomName(storedRooms[roomId].name || 'Unknown Room');
+    }
+  }, [roomId, storedRooms]);
+
+  // Sync Messages from Store to Local State
+  useEffect(() => {
+    setMessages([...activeMessages].sort((a, b) => a.timestamp - b.timestamp));
+  }, [activeMessages]);
 
   // Listen for broadcast updates (New Message)
   useEffect(() => {
     const channel = new BroadcastChannel('chat_updates');
     channel.onmessage = (event) => {
       if (event.data.type === 'NEW_MESSAGE' && event.data.roomId === roomId) {
-        loadMessages(roomId);
+        useChatStore.getState().loadMessages(roomId);
       }
     };
     return () => channel.close();
@@ -67,18 +89,6 @@ export default function ChatWindow() {
     scrollToBottom();
   }, [messages]);
 
-  const loadMessages = async (id: string) => {
-    const msgs = await chatStore.getMessages(id);
-    setMessages(msgs.sort((a, b) => a.timestamp - b.timestamp));
-  };
-
-  const loadRoomInfo = async (id: string) => {
-    const room = await chatStore.getRoom(id);
-    if (room) {
-      setRoomName(room.name || 'Unknown Room');
-    }
-  };
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -86,30 +96,28 @@ export default function ChatWindow() {
   const handleSend = async () => {
     if (!inputValue.trim() || !roomId || !currentUserId) return;
 
-    // We need peers to send to.
-    const room = await chatStore.getRoom(roomId);
-    if (!room) return;
+    // Clear immediately to prevent double-submit
+    const contentToSend = inputValue;
+    setInputValue('');
+
+    // Generate ID here to ensure idempotency if listener triggers multiple times
+    const messageId = crypto.randomUUID();
+
+    if (participants.length === 0) {
+      console.warn('[ChatWindow] Sending message with 0 participants! Room:', roomId);
+    }
 
     // Send via ChatOpListener (Main Window) -> P2P layer
-    // Or directly invoking handler if we are in the same context?
-    // ChatWindow is in a separate window if we use window.open / Tauri window?
-    // If it's a separate window, it doesn't share memory with Main Window P2PManager.
-    // So we must use BroadcastChannel to ask Main Window to send.
-
     const opChannel = new BroadcastChannel('chat_ops');
     opChannel.postMessage({
       type: 'SEND_MESSAGE',
+      id: messageId,
       roomId,
-      content: inputValue,
-      senderId: currentUserId
+      content: contentToSend,
+      senderId: currentUserId,
+      participants // Send directly
     });
     opChannel.close();
-
-    // Optimistic update or wait for reload?
-    // The main window will convert OP to P2P and save to DB.
-    // Then msg saved -> chat_updates -> we reload.
-    // Slight delay.
-    setInputValue('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -141,9 +149,6 @@ export default function ChatWindow() {
             <div ref={menuRef} className="absolute right-4 top-10 w-40 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl z-50 flex flex-col py-1">
               <button
                 onClick={() => {
-                  // Clear Logic (Optional: Just clean local state or mark as hidden?)
-                  // Currently clearAll isn't exposed in ChatWindow context directly or we need a new Op.
-                  // For now, simple console log or TODO.
                   console.log('Clear Chat requested');
                   setShowMenu(false);
                 }}
@@ -179,8 +184,14 @@ export default function ChatWindow() {
                   }`}
               >
                 {msg.content}
-                <div className={`text-[10px] mt-1 text-right ${isMe ? 'text-blue-200' : 'text-zinc-500'}`}>
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                <div className={`text-[10px] mt-1 text-right flex items-center justify-end gap-1 ${isMe ? 'text-blue-200' : 'text-zinc-500'}`}>
+                  <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  {/* [읽음 표시] 내가 보낸 메시지이고, 상대가 읽었다면 파란색 체크 표시 */}
+                  {isMe && (
+                    <span title={msg.status === 'read' ? "읽음" : "전송됨"}>
+                      {msg.status === 'read' ? '✓✓' : '✓'}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -188,6 +199,15 @@ export default function ChatWindow() {
         })}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* [읽음 처리 로직] 효과적인 시점에 읽음 신호를 보내기 위한 Hook */}
+      {/* 메시지 목록이 업데이트되거나 창이 열릴 때, 내가 안 읽은 메시지가 있다면 읽음 처리를 수행합니다. */}
+      <ReadReceiptTrigger
+        roomId={roomId}
+        messages={messages}
+        currentUserId={currentUserId}
+        participants={storedRooms[roomId]?.participants || []}
+      />
 
       {/* Input */}
       <div className="p-4 bg-zinc-900 border-t border-zinc-800">
@@ -213,4 +233,27 @@ export default function ChatWindow() {
   );
 }
 
+// [헬퍼 컴포넌트] 읽음 처리 트리거
+// useEffect를 사용하여 '안 읽은 메시지'를 감지하고, 자동으로 읽음 신호를 보냅니다.
+function ReadReceiptTrigger({ roomId, messages, currentUserId, participants }: { roomId: string, messages: any[], currentUserId: string, participants: string[] }) {
+  useEffect(() => {
+    if (!roomId || !currentUserId || messages.length === 0) return;
 
+    // 1. 내가 읽지 않았고(status !== 'read'), 내가 보낸 메시지가 아닌(senderId !== currentUserId) 메시지 찾기
+    const unreadMessages = messages.filter(m =>
+      m.senderId !== currentUserId && m.status !== 'read'
+    );
+
+    if (unreadMessages.length > 0) {
+      const ids = unreadMessages.map(m => m.id);
+
+      // 2. ChatHandler를 통해 P2P 읽음 신호 전송
+      // (약간의 지연을 두어 UI가 그려진 후 처리되도록 할 수도 있으나, 여기선 즉시 처리)
+      import('../services/p2p/ChatHandler').then(({ chatHandler }) => {
+        chatHandler.sendReadReceipt(roomId, ids, participants);
+      });
+    }
+  }, [roomId, messages, currentUserId, participants]); // 메시지 목록이 바뀔 때마다 체크
+
+  return null; // 화면에 그릴 것은 없음
+}

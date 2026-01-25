@@ -2,8 +2,9 @@ import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Sparkles, Send, Plus, History, MessageSquare, X, Pencil, Database, Globe, ExternalLink, FileText, ChevronDown, Calendar, Tag } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { useChatStore } from '../../stores/chatStore';
+import { useRagStore } from '../../stores/ragStore';
 import { useContentStore } from '../../stores/contentStore';
+import { ThinkingAccordion } from '../ui/ThinkingAccordion';
 
 
 function CollapsibleSection({ title, icon: Icon, children, count, colorClass, defaultExpanded = true }: any) {
@@ -201,8 +202,6 @@ function ResultItem({ result, type, hoverColor, onSelect }: { result: any, type:
   );
 }
 
-import { ThinkingAccordion } from '../ui/ThinkingAccordion';
-
 export function RagPanel() {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
@@ -215,7 +214,7 @@ export function RagPanel() {
     chats, currentChatId, messages,
     isLoading, loadingStatus, thinkingProcess, isLoadingMore, hasMore,
     loadChats, selectChat, createNewChat, sendMessage, loadMoreMessages, renameChat
-  } = useChatStore();
+  } = useRagStore();
 
   const handleRename = async (chatId: string) => {
     if (!editTitle.trim()) {
@@ -307,9 +306,6 @@ export function RagPanel() {
     setShowHistory(false);
     isFirstRender.current = true;
   };
-
-  // Helper Component for Thinking Process moved outside
-
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-white overflow-hidden">
@@ -417,7 +413,7 @@ export function RagPanel() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (confirm('Delete this chat?')) {
-                                  useChatStore.getState().deleteChat(chat.id);
+                                  useRagStore.getState().deleteChat(chat.id);
                                 }
                               }}
                               className="p-1.5 text-zinc-600 hover:text-red-400 rounded hover:bg-zinc-800 transition-colors"

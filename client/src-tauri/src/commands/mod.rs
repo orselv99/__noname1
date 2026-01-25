@@ -41,3 +41,6 @@ pub mod alarm;
 
 /// 콘텐츠 커맨드: 저장, 로드, 삭제
 pub mod content;
+
+/// 채팅 커맨드: 저장, 목록, 조회
+pub mod chat;
