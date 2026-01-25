@@ -1,7 +1,7 @@
 
 import { useContentStore } from '../../stores/contentStore';
 import { Calendar, Clock, Plus, ArrowDownAZ, ArrowUpAZ, Flag, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 export const CalendarPanel = () => {
   const selectedDate = useContentStore(state => state.calendarSelectedDate);
@@ -17,7 +17,7 @@ export const CalendarPanel = () => {
     );
   }
 
-  const dateEvents = events.filter(e => {
+  const dateEvents = useMemo(() => events.filter(e => {
     const start = new Date(e.startDate);
     const end = new Date(e.endDate);
 
@@ -27,19 +27,21 @@ export const CalendarPanel = () => {
     const endTime = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
 
     return selectedTime >= startTime && selectedTime <= endTime;
-  });
+  }), [events, selectedDate]);
 
   const [sortBy, setSortBy] = useState<'name' | 'priority'>('name');
 
-  const sortedEvents = [...dateEvents].sort((a, b) => {
-    if (sortBy === 'priority') {
-      const pMap = { High: 3, Medium: 2, Low: 1, undefined: 0 };
-      const pA = pMap[a.priority as keyof typeof pMap] || 0;
-      const pB = pMap[b.priority as keyof typeof pMap] || 0;
-      if (pA !== pB) return pB - pA; // Descending Priority
-    }
-    return a.title.localeCompare(b.title);
-  });
+  const sortedEvents = useMemo(() => {
+    return [...dateEvents].sort((a, b) => {
+      if (sortBy === 'priority') {
+        const pMap = { High: 3, Medium: 2, Low: 1, undefined: 0 };
+        const pA = pMap[a.priority as keyof typeof pMap] || 0;
+        const pB = pMap[b.priority as keyof typeof pMap] || 0;
+        if (pA !== pB) return pB - pA; // Descending Priority
+      }
+      return a.title.localeCompare(b.title);
+    });
+  }, [dateEvents, sortBy]);
 
   return (
     <div className="flex flex-col h-full bg-zinc-950">

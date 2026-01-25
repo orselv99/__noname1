@@ -21,7 +21,7 @@ export interface CalendarEvent {
   priority?: 'High' | 'Medium' | 'Low';
 }
 
-interface ContentStore {
+export interface ContentStore {
   documents: Document[];
   isLoading: boolean;
   error: string | null;

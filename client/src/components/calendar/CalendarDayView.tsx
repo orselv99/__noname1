@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { CalendarEvent, useContentStore } from '../../stores/contentStore';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { CalendarEvent } from '../../stores/contentStore';
 import { SmallCalendar } from './CalendarSmallCalendar';
-import { getEventColorHex } from '../../utils/colorUtils';
 
 interface CalendarDayViewProps {
   currentDate: Date;
@@ -24,10 +23,10 @@ export const CalendarDayView = ({
   const [dragStart, setDragStart] = useState<number | null>(null); // Y 위치
   const [dragCurrent, setDragCurrent] = useState<number | null>(null); // Y 위치
   const [isDragging, setIsDragging] = useState(false);
-  // 오전 9시로 스크롤 이동
+  // 오전 9시로 스크롤 이동 -> 0시로 변경 (User Request)
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = 9 * 60;
+      scrollRef.current.scrollTop = 0;
     }
   }, []);
 
@@ -113,15 +112,20 @@ export const CalendarDayView = ({
     };
   }, [isDragging, dragStart, dragCurrent]);
 
-  const getEventsForDate = (date: Date) => {
+  const dateEvents = useMemo(() => {
     return events.filter(e => {
       const s = new Date(e.startDate);
       const end = new Date(e.endDate);
-      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
-      const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59);
-
+      const dayStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 0, 0, 0);
+      const dayEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), 23, 59, 59);
       return s < dayEnd && end > dayStart;
     });
+  }, [events, currentDate]);
+
+  const getEventsForDate = (date: Date) => {
+    // Re-use memoized if date matches? CalendarDayView is single date.
+    // Simplify: just use dateEvents directly in render
+    return dateEvents;
   };
 
   const getEventStyle = (event: CalendarEvent, date: Date) => {

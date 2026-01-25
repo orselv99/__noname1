@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { CalendarEvent, useContentStore } from '../../stores/contentStore';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { CalendarEvent } from '../../stores/contentStore';
 import { SmallCalendar } from './CalendarSmallCalendar';
 import { getEventColorHex } from '../../utils/colorUtils';
 
@@ -33,10 +33,10 @@ export const CalendarWeekView = ({
   // 시간 목록
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
-  // 오전 9시로 스크롤 이동
+  // 오전 9시로 스크롤 이동 -> 0시로 변경 (User Request)
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = 9 * 60;
+      scrollRef.current.scrollTop = 0;
     }
   }, []);
 
@@ -132,16 +132,46 @@ export const CalendarWeekView = ({
   // 요일 이름
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
 
-  // 특정 날짜에 해당하는 일정 필터링 도움 함수
-  const getEventsForDate = (date: Date) => {
-    return events.filter(e => {
+  // Pre-bucket events for efficiency
+  const eventsByDate = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+
+    // Iterate all events for the week, or just iterate all events if list is small?
+    // Iterating all events once is O(N).
+    // Filtering inside map loop is O(7*N). 
+    // Let's do O(N) by iterating events and checking if they overlap with the week.
+
+    const weekStart = new Date(weekDays[0]);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekDays[6]);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    events.forEach(e => {
       const s = new Date(e.startDate);
       const end = new Date(e.endDate);
-      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
-      const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59);
 
-      return s < dayEnd && end > dayStart;
+      if (s > weekEnd || end < weekStart) return;
+
+      // Add to each relevant day
+      // This handles multi-day events correctly by adding them to each day bucket
+      for (let i = 0; i < 7; i++) {
+        const date = weekDays[i];
+        const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0);
+        const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59);
+
+        if (s < dayEnd && end > dayStart) {
+          const dayKey = date.toISOString().split('T')[0];
+          if (!map.has(dayKey)) map.set(dayKey, []);
+          map.get(dayKey)!.push(e);
+        }
+      }
     });
+    return map;
+  }, [events, weekDays]);
+
+  const getEventsForDate = (date: Date) => {
+    const dayKey = date.toISOString().split('T')[0];
+    return eventsByDate.get(dayKey) || [];
   };
 
   const getEventStyle = (event: CalendarEvent, date: Date) => {

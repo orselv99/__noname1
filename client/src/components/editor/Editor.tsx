@@ -320,7 +320,11 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
     };
 
     // Push content immediately when tab becomes active
-    pushContent();
+    // Performance: Delay slightly to allow tab switch animation/render to complete first
+    // This prevents blocking the UI thread with getHTML() and MetadataPanel parsing during the transition
+    const timer = setTimeout(() => {
+      pushContent();
+    }, 50);
 
     // Debounce metadata updates on editor changes
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -331,6 +335,7 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
 
     editor.on('update', debouncedUpdate);
     return () => {
+      clearTimeout(timer);
       if (timeoutId) clearTimeout(timeoutId);
       editor.off('update', debouncedUpdate);
       // Clear content when tab becomes inactive

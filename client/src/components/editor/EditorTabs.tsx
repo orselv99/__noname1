@@ -1,6 +1,6 @@
 import { X, Plus, MoreHorizontal, Calendar as CalendarIcon, FileText } from 'lucide-react';
-import { useContentStore } from '../../stores/contentStore';
-import { useRef, useState, useEffect, useMemo, memo } from 'react';
+import { useContentStore, ContentStore } from '../../stores/contentStore';
+import { useRef, useState, useEffect, useMemo, memo, useCallback } from 'react';
 
 interface SortableTabProps {
   id: string;
@@ -57,20 +57,19 @@ const SortableTab = memo(({ title, type, isActive, isDirty, isRecycled, onSelect
 export const EditorTabs = () => {
   const { tabs, activeTabId, setActiveTab, closeTab, triggerNewDocument } = useContentStore();
   // Subscribe to documents once to get deleted status
-  const documents = useContentStore(state => state.documents);
+  // Optimize: Only subscribe to the list of deleted document IDs
+  // This avoids re-rendering EditorTabs whenever ANY document content changes (e.g. typing)
+  const deletedDocIds = useContentStore(useCallback((state: ContentStore) =>
+    state.documents.filter(d => d.deleted_at).map(d => d.id).join(','),
+    []));
+
+  const deletedSet = useMemo(() => new Set(deletedDocIds.split(',')), [deletedDocIds]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
 
-  // Pre-calculate recycled status for all tabs
-  const recycledMap = useMemo(() => {
-    const map = new Map<string, boolean>();
-    tabs.forEach(tab => {
-      const doc = documents.find(d => d.id === tab.docId);
-      map.set(tab.id, !!doc?.deleted_at);
-    });
-    return map;
-  }, [tabs, documents]);
+  // Check if tab is recycled using the Set
+  const isTabRecycled = (docId?: string) => docId ? deletedSet.has(docId) : false;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -101,7 +100,7 @@ export const EditorTabs = () => {
             type={tab.type} // Pass type
             isActive={activeTabId === tab.id}
             isDirty={tab.isDirty}
-            isRecycled={recycledMap.get(tab.id)}
+            isRecycled={isTabRecycled(tab.docId)}
             onSelect={() => setActiveTab(tab.id)}
             onClose={(e) => {
               e.stopPropagation();
