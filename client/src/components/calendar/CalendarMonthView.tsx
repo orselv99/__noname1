@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
-import { useDocumentStore } from '../../stores/documentStore';
-import { CalendarEvent } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
+import { CalendarEvent } from '../../stores/contentStore';
 import { Plus, Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
@@ -20,8 +20,8 @@ export const CalendarMonthView = ({
   onRangeSelect,
   onEventClick }: CalendarMonthViewProps) => {
   // Store State for selection highlighting (global)
-  const selectedDate = useDocumentStore(state => state.calendarSelectedDate);
-  const selectedEventId = useDocumentStore(state => state.calendarSelectedEventId);
+  const selectedDate = useContentStore(state => state.calendarSelectedDate);
+  const selectedEventId = useContentStore(state => state.calendarSelectedEventId);
 
   // Local state for dragging (transient)
   const [dragStart, setDragStart] = useState<Date | null>(null);

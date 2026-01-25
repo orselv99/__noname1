@@ -10,7 +10,7 @@
 
 import { useState, memo } from 'react';
 import { Tag, ChevronUp, ChevronDown } from 'lucide-react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 
 /**
  * 태그 아이템 인터페이스
@@ -80,7 +80,7 @@ export const MetadataTagList = memo(({
                       const isDeselecting = selectedTagIndex === i;
                       setSelectedTagIndex(isDeselecting ? null : i);
                       // 에디터에 evidence 하이라이트 요청
-                      useDocumentStore.getState().setHighlightedEvidence(
+                      useContentStore.getState().setHighlightedEvidence(
                         isDeselecting ? null : (t.evidence || null)
                       );
                     }}
@@ -89,7 +89,7 @@ export const MetadataTagList = memo(({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        useDocumentStore.getState().removeTagFromDocument(docId, i);
+                        useContentStore.getState().removeTagFromDocument(docId, i);
                       }}
                       className="ml-1 text-zinc-500 hover:text-red-400 transition-colors shrink-0"
                       title="Remove tag"

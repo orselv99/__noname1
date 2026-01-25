@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, Edit2, Search, Share2, FileText, Star, ChevronsUpDown, FilePlus } from 'lucide-react';
 
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 import { GroupType, SortOption, PRIVATE_GROUP_ID } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
 import { useConfirm } from '../ConfirmProvider';
@@ -81,17 +81,17 @@ const updateItemsExpansion = (items: DocumentListItemType[], expandedSet: Set<st
 export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: DocumentListProps) => {
   // --- 상태 관리 ---
   // Optimized Selectors
-  const documents = useDocumentStore(state => state.documents);
-  const activeTabId = useDocumentStore(state => state.activeTabId);
-  const currentUser = useDocumentStore(state => state.currentUser);
-  const newDocTrigger = useDocumentStore(state => state.newDocTrigger);
+  const documents = useContentStore(state => state.documents);
+  const activeTabId = useContentStore(state => state.activeTabId);
+  const currentUser = useContentStore(state => state.currentUser);
+  const newDocTrigger = useContentStore(state => state.newDocTrigger);
 
   // Actions (stable)
-  const createDocument = useDocumentStore(state => state.createDocument);
-  const renameDocument = useDocumentStore(state => state.renameDocument);
-  const deleteDocument = useDocumentStore(state => state.deleteDocument);
-  const fetchDocuments = useDocumentStore(state => state.fetchDocuments);
-  const moveDocument = useDocumentStore(state => state.moveDocument);
+  const createDocument = useContentStore(state => state.createDocument);
+  const renameDocument = useContentStore(state => state.renameDocument);
+  const deleteDocument = useContentStore(state => state.deleteDocument);
+  const fetchDocuments = useContentStore(state => state.fetchDocuments);
+  const moveDocument = useContentStore(state => state.moveDocument);
 
   const { departments, projects } = useAuthStore();
   const { confirm } = useConfirm();
@@ -199,9 +199,9 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
     // But honestly, documents changing implies list re-rendering anyway, so dependency on documents is fine.
     // BUT wait, documents changes A LOT.
     // Let's use documents from closure for now, but be aware.
-    // Optimally: useDocumentStore.getState().documents
+    // Optimally: useContentStore.getState().documents
 
-    const currentDocuments = useDocumentStore.getState().documents;
+    const currentDocuments = useContentStore.getState().documents;
     const hasChildren = currentDocuments.some(d => d.parent_id === id && !d.deleted_at);
 
     const message = hasChildren

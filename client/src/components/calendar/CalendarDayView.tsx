@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { CalendarEvent, useDocumentStore } from '../../stores/documentStore';
+import { CalendarEvent, useContentStore } from '../../stores/contentStore';
 import { SmallCalendar } from './CalendarSmallCalendar';
+import { getEventColorHex } from '../../utils/colorUtils';
 
 interface CalendarDayViewProps {
   currentDate: Date;
@@ -191,29 +192,42 @@ export const CalendarDayView = ({
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
             >
-              {getEventsForDate(currentDate).map(event => (
-                <div
-                  key={event.id}
-                  className={`absolute p-2 border-l-4 text-xs overflow-hidden cursor-pointer hover:brightness-110 hover:z-50 shadow-md
-                               ${event.color || 'bg-blue-500'} 
-                               border-${event.color?.replace('bg-', '') || 'blue-500'}-700
-                               text-white bg-opacity-90
-                           `}
-                  style={getEventStyle(event, currentDate)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEventClick(event.id);
-                  }}
-                  onMouseDown={(e) => e.stopPropagation()} // 이벤트 클릭 시 드래그 시작 방지
-                >
-                  <div className="font-bold text-sm">{event.title}</div>
-                  <div className="opacity-90 mt-1 flex gap-2">
-                    <span>{new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(event.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    {event.priority && <span>{event.priority === 'High' ? '!!!' : event.priority === 'Medium' ? '!!' : '!'}</span>}
+              {getEventsForDate(currentDate).map(event => {
+                // Parse color
+                let colorHex = '#3b82f6'; // Default blue
+                if (event.color?.startsWith('bg-[#') && event.color?.endsWith(']')) {
+                  colorHex = event.color.replace('bg-[', '').replace(']', '');
+                }
+
+                return (
+                  <div
+                    key={event.id}
+                    className={`absolute p-2 text-xs overflow-hidden cursor-pointer hover:brightness-95 hover:z-50 rounded-r-md transition-all shadow-sm`}
+                    style={{
+                      ...getEventStyle(event, currentDate),
+                      borderLeft: `4px solid ${colorHex}`,
+                      backgroundColor: `${colorHex}26`, // ~15% opacity
+                      color: colorHex
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEventClick(event.id);
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()} // 이벤트 클릭 시 드래그 시작 방지
+                  >
+                    <div className="font-bold text-sm text-zinc-900 dark:text-zinc-100" style={{ color: colorHex }}>
+                      {event.title}
+                    </div>
+                    <div className="opacity-90 mt-1 flex gap-2">
+                      <span className="font-medium">
+                        {new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(event.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {event.priority && <span className="font-bold">{event.priority === 'High' ? '!!!' : event.priority === 'Medium' ? '!!' : '!'}</span>}
+                    </div>
+                    {event.description && <div className="mt-2 opacity-80 line-clamp-2">{event.description}</div>}
                   </div>
-                  {event.description && <div className="mt-2 text-white/80 line-clamp-2">{event.description}</div>}
-                </div>
-              ))}
+                );
+              })}
 
               {/* 드래그 미리보기 */}
               {isDragging && dragStart !== null && dragCurrent !== null && (

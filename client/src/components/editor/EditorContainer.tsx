@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 import { Editor } from './Editor';
 import { CalendarView } from '../calendar/CalendarView';
 import { FileText } from 'lucide-react';
@@ -10,8 +10,8 @@ import { FileText } from 'lucide-react';
  * by toggling visibility instead of re-loading content.
  */
 export const EditorContainer = memo(() => {
-  const tabs = useDocumentStore(state => state.tabs);
-  const activeTabId = useDocumentStore(state => state.activeTabId);
+  const tabs = useContentStore(state => state.tabs);
+  const activeTabId = useContentStore(state => state.activeTabId);
 
   if (tabs.length === 0) {
     return (

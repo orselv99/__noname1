@@ -1,5 +1,5 @@
 import { X, Plus, MoreHorizontal, Calendar as CalendarIcon, FileText } from 'lucide-react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 import { useRef, useState, useEffect, useMemo, memo } from 'react';
 
 interface SortableTabProps {
@@ -55,9 +55,9 @@ const SortableTab = memo(({ title, type, isActive, isDirty, isRecycled, onSelect
 });
 
 export const EditorTabs = () => {
-  const { tabs, activeTabId, setActiveTab, closeTab, triggerNewDocument } = useDocumentStore();
+  const { tabs, activeTabId, setActiveTab, closeTab, triggerNewDocument } = useContentStore();
   // Subscribe to documents once to get deleted status
-  const documents = useDocumentStore(state => state.documents);
+  const documents = useContentStore(state => state.documents);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [hasOverflow, setHasOverflow] = useState(false);

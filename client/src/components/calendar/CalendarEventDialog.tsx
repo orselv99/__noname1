@@ -12,8 +12,8 @@ interface CalendarEventDialogProps {
 }
 
 const COLORS = [
-  'bg-blue-500', 'bg-red-500', 'bg-green-500', 'bg-purple-500',
-  'bg-orange-500', 'bg-pink-500', 'bg-teal-500', 'bg-gray-500'
+  'bg-[#ed8796]', 'bg-[#ee99a0]', 'bg-[#f5a97f]', 'bg-[#eed49f]',
+  'bg-[#a6da95]', 'bg-[#91d7e3]', 'bg-[#7dc4e4]', 'bg-[#8aadf4]'
 ];
 
 export const CalendarEventDialog = ({ isOpen, onClose, startDate, endDate, onSave }: CalendarEventDialogProps) => {

@@ -14,7 +14,7 @@ import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import Superscript from '@tiptap/extension-superscript';
 import { memo, useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 import { EditorContextMenu } from './EditorContextMenu';
 import { EditorToolbar } from './EditorToolbar';
 import { SearchWidget } from './SearchWidget';
@@ -52,7 +52,7 @@ interface TitleInputProps {
 
 const TitleInput = memo(({ initialTitle, docId, onTitleChange, onFocusEditor }: TitleInputProps) => {
   const [localTitle, setLocalTitle] = useState(initialTitle);
-  const updateTabTitle = useDocumentStore(state => state.updateTabTitle);
+  const updateTabTitle = useContentStore(state => state.updateTabTitle);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevInitialTitleRef = useRef(initialTitle);
   const hasUserEditedRef = useRef(false);
@@ -111,15 +111,15 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
   const { showToast } = useToast();
 
   // Optimized Selectors to prevent re-render of ALL editors on ANY store change
-  const highlightedEvidence = useDocumentStore(state => state.highlightedEvidence);
-  const toggleFavorite = useDocumentStore(state => state.toggleFavorite);
-  const updateDocument = useDocumentStore(state => state.updateDocument);
-  const setLiveEditorContent = useDocumentStore(state => state.setLiveEditorContent);
-  const setAutoSaveStatus = useDocumentStore(state => state.setAutoSaveStatus);
-  const markTabDirty = useDocumentStore(state => state.markTabDirty);
+  const highlightedEvidence = useContentStore(state => state.highlightedEvidence);
+  const toggleFavorite = useContentStore(state => state.toggleFavorite);
+  const updateDocument = useContentStore(state => state.updateDocument);
+  const setLiveEditorContent = useContentStore(state => state.setLiveEditorContent);
+  const setAutoSaveStatus = useContentStore(state => state.setAutoSaveStatus);
+  const markTabDirty = useContentStore(state => state.markTabDirty);
 
   // Get document data for this specific editor
-  const doc = useDocumentStore(
+  const doc = useContentStore(
     useCallback((state) => state.documents.find((d: Document) => d.id === docId), [docId])
   );
 

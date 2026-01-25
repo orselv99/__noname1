@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { CalendarEventDialog } from './CalendarEventDialog';
 import { CalendarMonthView } from './CalendarMonthView';
@@ -14,10 +14,10 @@ export const CalendarView = () => {
   const [view, setView] = useState<ViewType>('month');
 
   // Store Actions
-  const setCalendarSelectedDate = useDocumentStore(state => state.setCalendarSelectedDate);
-  const setCalendarSelectedEventId = useDocumentStore(state => state.setCalendarSelectedEventId);
-  const addCalendarEvent = useDocumentStore(state => state.addCalendarEvent);
-  const events = useDocumentStore(state => state.calendarEvents);
+  const setCalendarSelectedDate = useContentStore(state => state.setCalendarSelectedDate);
+  const setCalendarSelectedEventId = useContentStore(state => state.setCalendarSelectedEventId);
+  const addCalendarEvent = useContentStore(state => state.addCalendarEvent);
+  const events = useContentStore(state => state.calendarEvents);
 
   // Dialog State (Global for all views)
   const [showEventDialog, setShowEventDialog] = useState(false);
@@ -48,10 +48,6 @@ export const CalendarView = () => {
       newDate.setDate(newDate.getDate() + 1);
     }
     setCurrentDate(newDate);
-  };
-
-  const handleToday = () => {
-    setCurrentDate(new Date());
   };
 
   // Header Title Logic
@@ -133,12 +129,6 @@ export const CalendarView = () => {
               </button>
               <button onClick={handleNext} className="p-1 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors">
                 <ChevronRight size={24} />
-              </button>
-              <button
-                onClick={handleToday}
-                className="ml-2 px-3 py-1.5 rounded-md border border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm"
-              >
-                오늘
               </button>
             </div>
           </div>

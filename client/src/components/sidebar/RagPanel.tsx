@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Loader2, Sparkles, Send, Plus, History, MessageSquare, X, Pencil, Database, Globe, ExternalLink, FileText, ChevronDown, Calendar, Tag } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useChatStore } from '../../stores/chatStore';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 
 
 function CollapsibleSection({ title, icon: Icon, children, count, colorClass, defaultExpanded = true }: any) {
@@ -110,8 +110,8 @@ function ServerDocPopup({ doc, onClose }: { doc: any, onClose: () => void }) {
 }
 
 function ResultItem({ result, type, hoverColor, onSelect }: { result: any, type: 'local' | 'server' | 'web', hoverColor?: string, onSelect?: (result: any) => void }) {
-  const documents = useDocumentStore(state => state.documents);
-  const addTab = useDocumentStore(state => state.addTab);
+  const documents = useContentStore(state => state.documents);
+  const addTab = useContentStore(state => state.addTab);
 
   const handleOpen = async (e: React.MouseEvent) => {
     e.stopPropagation();

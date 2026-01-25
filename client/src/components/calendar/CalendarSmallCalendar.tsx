@@ -1,6 +1,6 @@
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 
 interface SmallCalendarProps {
   currentDate: Date;
@@ -8,8 +8,8 @@ interface SmallCalendarProps {
 }
 
 export const SmallCalendar = ({ currentDate, onDateChange }: SmallCalendarProps) => {
-  const selectedDate = useDocumentStore(state => state.calendarSelectedDate);
-  const setCalendarSelectedDate = useDocumentStore(state => state.setCalendarSelectedDate);
+  const selectedDate = useContentStore(state => state.calendarSelectedDate);
+  const setCalendarSelectedDate = useContentStore(state => state.setCalendarSelectedDate);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();

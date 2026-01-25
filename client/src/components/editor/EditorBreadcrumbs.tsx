@@ -1,5 +1,5 @@
 import { memo, useMemo, useCallback } from 'react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Document, GroupType } from '../../types';
 
@@ -8,8 +8,8 @@ interface EditorBreadcrumbsProps {
 }
 
 export const EditorBreadcrumbs = memo(({ currentDoc }: EditorBreadcrumbsProps) => {
-  const documents = useDocumentStore(state => state.documents);
-  const addTab = useDocumentStore(state => state.addTab);
+  const documents = useContentStore(state => state.documents);
+  const addTab = useContentStore(state => state.addTab);
 
   // Build breadcrumbs path from current document up to root
   const breadcrumbs = useMemo(() => {

@@ -16,7 +16,7 @@ import ChatWindow from './windows/ChatWindow';
 import { initChatOpListener } from './services/p2p/ChatOpListener';
 import { MetadataPanel } from './components/metadata/MetadataPanel';
 import { DocumentListRecycleBin } from './components/documentlist/DocumentListRecycleBin';
-import { useDocumentStore } from './stores/documentStore';
+import { useContentStore } from './stores/contentStore';
 import { signalingService } from './services/SignalingService';
 import { useAuthStore } from './stores/authStore';
 import { LoginResponse } from './types';
@@ -123,16 +123,16 @@ function AppContent() {
 
   // Tab Menu State
   // Tab Menu State
-  const tabs = useDocumentStore(useCallback(state => state.tabs, []));
-  const setActiveTab = useDocumentStore(state => state.setActiveTab);
+  const tabs = useContentStore(useCallback(state => state.tabs, []));
+  const setActiveTab = useContentStore(state => state.setActiveTab);
   const [showTabMenu, setShowTabMenu] = useState(false);
 
   // Right Panel State
   const [activeRightTab, setActiveRightTab] = useState<'metadata' | 'rag' | 'crew' | 'calendar'>('metadata');
 
   // Determine active tab type
-  const activeTabId = useDocumentStore(state => state.activeTabId);
-  const activeTabType = useDocumentStore(state => {
+  const activeTabId = useContentStore(state => state.activeTabId);
+  const activeTabType = useContentStore(state => {
     const tab = state.tabs.find(t => t.id === activeTabId);
     return tab?.type || 'document';
   });
@@ -219,9 +219,9 @@ function AppContent() {
   // Document Selection Handler
   const handleSelectDocument = useCallback((id: string) => {
     console.log('Selected:', id);
-    const doc = useDocumentStore.getState().documents.find(d => d.id === id);
+    const doc = useContentStore.getState().documents.find(d => d.id === id);
     if (doc) {
-      useDocumentStore.getState().addTab(doc);
+      useContentStore.getState().addTab(doc);
     }
   }, []);
 
@@ -231,7 +231,7 @@ function AppContent() {
     const data = await invoke<LoginResponse>('login', { email, password, tenantId });
     setCurrentPassword(password);
 
-    useDocumentStore.getState().setCurrentUser(data);
+    useContentStore.getState().setCurrentUser(data);
     useAuthStore.getState().setUser(data);
 
     console.log(data);

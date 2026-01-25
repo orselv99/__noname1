@@ -29,7 +29,7 @@ import {
   History,
   Activity
 } from 'lucide-react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 import { DocumentState, VisibilityLevel, GroupType, Document } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
 import { useConfirm } from '../ConfirmProvider';
@@ -56,12 +56,12 @@ export const MetadataPanel = () => {
   // =========================================================================
 
   // 활성 문서만 구독 (전체 documents 배열 변경에 반응하지 않음)
-  const activeDoc = useDocumentStore(
+  const activeDoc = useContentStore(
     useCallback((state) => state.documents.find((d: Document) => d.id === state.activeTabId), [])
   );
 
-  const liveEditorContent = useDocumentStore(state => state.liveEditorContent);
-  const saveDocument = useDocumentStore(state => state.saveDocument);
+  const liveEditorContent = useContentStore(state => state.liveEditorContent);
+  const saveDocument = useContentStore(state => state.saveDocument);
   const { confirm } = useConfirm();
   const { showToast } = useToast();
 

@@ -1,5 +1,5 @@
 import { Search, Calendar, ListTodo, Settings } from 'lucide-react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 
 interface IconBarProps {
   onSearchClick?: () => void;
@@ -12,7 +12,7 @@ export const IconBar = ({
   onTodoClick,
   onSettingsClick
 }: IconBarProps) => {
-  const addTab = useDocumentStore(state => state.addTab);
+  const addTab = useContentStore(state => state.addTab);
 
   const handleCalendarClick = () => {
     addTab({ id: 'calendar-main', title: 'Calendar', type: 'calendar' });

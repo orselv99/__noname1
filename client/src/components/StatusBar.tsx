@@ -1,9 +1,9 @@
 import { Loader2, Bell } from 'lucide-react';
-import { useDocumentStore } from '../stores/documentStore';
+import { useContentStore } from '../stores/contentStore';
 import { useAlarmStore } from '../stores/alarmStore';
 
 export const StatusBar = () => {
-  const { aiAnalysisStatus, autoSaveStatus } = useDocumentStore();
+  const { aiAnalysisStatus, autoSaveStatus } = useContentStore();
   const alarms = useAlarmStore(state => state.alarms);
   const unreadCount = alarms.filter(a => !a.read).length;
 

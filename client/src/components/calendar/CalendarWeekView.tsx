@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { CalendarEvent, useDocumentStore } from '../../stores/documentStore';
+import { CalendarEvent, useContentStore } from '../../stores/contentStore';
 import { SmallCalendar } from './CalendarSmallCalendar';
+import { getEventColorHex } from '../../utils/colorUtils';
 
 interface CalendarWeekViewProps {
   currentDate: Date;
@@ -221,28 +222,32 @@ export const CalendarWeekView = ({
                   onMouseDown={(e) => handleMouseDown(e, i)}
                   onMouseMove={handleMouseMove}
                 >
-                  {dayEvents.map(event => (
-                    <div
-                      key={event.id}
-                      className={`absolute p-1 border-l-2 text-[10px] overflow-hidden cursor-pointer hover:brightness-110 hover:z-50 shadow-sm
-                                       ${event.color || 'bg-blue-500/20'} 
-                                       border-${event.color?.replace('bg-', '') || 'blue-500'}
-                                       text-white bg-opacity-80
-                                   `}
-                      style={{
-                        ...getEventStyle(event, date),
-                        backgroundColor: 'var(--tw-bg-opacity)'
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEventClick(event.id);
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      <div className="font-semibold">{event.title}</div>
-                      <div className="opacity-75">{new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                    </div>
-                  ))}
+                  {dayEvents.map(event => {
+                    const colorHex = getEventColorHex(event.color);
+                    // Use standard hex opacity for transparency (26 = ~15%, 33 = ~20%)
+                    // The user liked Day View which had transparency to see grid lines.
+
+                    return (
+                      <div
+                        key={event.id}
+                        className={`absolute p-1 border-l-4 text-[10px] overflow-hidden cursor-pointer hover:brightness-110 hover:z-50 rounded-r-md transition-all shadow-sm`}
+                        style={{
+                          ...getEventStyle(event, date),
+                          borderLeft: `4px solid ${colorHex}`,
+                          backgroundColor: `${colorHex}26`,
+                          color: colorHex, // Use colored text as per initial Day View
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEventClick(event.id);
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <div className="font-semibold" style={{ color: colorHex }}>{event.title}</div>
+                        <div className="opacity-75 text-zinc-400">{new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      </div>
+                    );
+                  })}
 
                   {/* 드래그 미리보기 */}
                   {isDragging && dragStart !== null && dragStart.dayIndex === i && dragCurrent !== null && (

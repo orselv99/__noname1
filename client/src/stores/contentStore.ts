@@ -21,7 +21,7 @@ export interface CalendarEvent {
   priority?: 'High' | 'Medium' | 'Low';
 }
 
-interface DocumentStore {
+interface ContentStore {
   documents: Document[];
   isLoading: boolean;
   error: string | null;
@@ -37,6 +37,7 @@ interface DocumentStore {
   setCalendarSelectedDate: (date: Date | null) => void;
   setCalendarSelectedEventId: (id: string | null) => void;
   addCalendarEvent: (event: CalendarEvent) => void;
+  deleteCalendarEvent: (id: string) => void;
 
   // UI State
   highlightedEvidence: string | null;
@@ -86,7 +87,7 @@ interface DocumentStore {
   emptyRecycleBin: () => Promise<void>;
 }
 
-export const useDocumentStore = create<DocumentStore>()(
+export const useContentStore = create<ContentStore>()(
   persist(
     (set, get) => ({
       documents: [],
@@ -103,6 +104,10 @@ export const useDocumentStore = create<DocumentStore>()(
       setCalendarSelectedDate: (date) => set({ calendarSelectedDate: date }),
       setCalendarSelectedEventId: (id) => set({ calendarSelectedEventId: id }),
       addCalendarEvent: (event) => set((state) => ({ calendarEvents: [...state.calendarEvents, event] })),
+      deleteCalendarEvent: (id) => set((state) => ({
+        calendarEvents: state.calendarEvents.filter(e => e.id !== id),
+        calendarSelectedEventId: state.calendarSelectedEventId === id ? null : state.calendarSelectedEventId
+      })),
 
       highlightedEvidence: null,
       liveEditorContent: null,

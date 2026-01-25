@@ -1,4 +1,4 @@
-import { Tab } from '../../stores/documentStore';
+import { Tab } from '../../stores/contentStore';
 import { X } from 'lucide-react';
 
 interface TabMenuProps {

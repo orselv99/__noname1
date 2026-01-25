@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react';
 import { Trash2, ChevronUp, ChevronDown, RotateCcw, X, FileText, Search, Eraser } from 'lucide-react';
 import { useConfirm } from '../ConfirmProvider';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useContentStore } from '../../stores/contentStore';
 
 export const DocumentListRecycleBin = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const { documents, restoreDocument, saveDocument, deleteDocument, addTab, emptyRecycleBin } = useDocumentStore();
+  const { documents, restoreDocument, saveDocument, deleteDocument, addTab, emptyRecycleBin } = useContentStore();
   const { confirm } = useConfirm();
 
   const deletedDocs = useMemo(() => documents.filter(d => d.deleted_at), [documents]);

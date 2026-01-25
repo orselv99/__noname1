@@ -1,12 +1,12 @@
 
-import { useDocumentStore } from '../../stores/documentStore';
-import { Calendar, Clock, Plus, ArrowDownAZ, ArrowUpAZ, Flag } from 'lucide-react';
+import { useContentStore } from '../../stores/contentStore';
+import { Calendar, Clock, Plus, ArrowDownAZ, ArrowUpAZ, Flag, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 export const CalendarPanel = () => {
-  const selectedDate = useDocumentStore(state => state.calendarSelectedDate);
-  const selectedEventId = useDocumentStore(state => state.calendarSelectedEventId);
-  const events = useDocumentStore(state => state.calendarEvents);
+  const selectedDate = useContentStore(state => state.calendarSelectedDate);
+  const selectedEventId = useContentStore(state => state.calendarSelectedEventId);
+  const events = useContentStore(state => state.calendarEvents);
 
   if (!selectedDate) {
     return (
@@ -79,15 +79,25 @@ export const CalendarPanel = () => {
           <div className="space-y-3">
             {sortedEvents.map((event, idx) => {
               const isSelected = event.id === selectedEventId;
+              const colorHex = event.color ? event.color.replace('bg-[', '').replace(']', '') : '#3b82f6'; // Default blue-500 hex approx
+
               return (
                 <div
-                  key={event.id || idx} // Fallback idx if id missing (migration)
-                  className={`bg-zinc-900 border rounded-lg p-3 transition-all ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-zinc-800' : 'border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  onClick={() => useDocumentStore.getState().setCalendarSelectedEventId(event.id)}
+                  key={event.id || idx}
+                  className={`bg-zinc-900 border rounded-lg p-3 transition-all relative group
+                    ${isSelected ? 'bg-zinc-800' : 'border-zinc-800 hover:border-zinc-700'}
+                  `}
+                  style={{
+                    borderColor: isSelected ? colorHex : undefined,
+                    boxShadow: isSelected ? `0 0 0 1px ${colorHex}` : undefined
+                  }}
+                  onClick={() => useContentStore.getState().setCalendarSelectedEventId(event.id)}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <div className={`text-xs font-bold ${event.color?.replace('bg-', 'text-') || 'text-blue-400'}`}>
+                    <div
+                      className="text-xs font-bold"
+                      style={{ color: colorHex }}
+                    >
                       {event.title}
                     </div>
                     {event.priority && (
@@ -103,9 +113,24 @@ export const CalendarPanel = () => {
                   {event.description && (
                     <div className="text-xs text-zinc-400 mb-2 whitespace-pre-wrap">{event.description}</div>
                   )}
-                  <div className="flex items-center gap-1 text-[10px] text-zinc-500">
-                    <Clock size={10} />
-                    <span>{new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(event.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-1 text-[10px] text-zinc-500">
+                      <Clock size={10} />
+                      <span>{new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(event.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    {/* Delete Button */}
+                    <button
+                      className="text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('이 일정을 삭제하시겠습니까?')) {
+                          useContentStore.getState().deleteCalendarEvent(event.id);
+                        }
+                      }}
+                      title="일정 삭제"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               );
