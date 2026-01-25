@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown, Search, List, MessageSquare } from 'lucide-react';
+import { PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, FolderOpen, Star, ChevronDown, Search, List, MessageSquare, Calendar as CalendarIcon } from 'lucide-react';
 import { isTauri } from './utils/tauri';
 
 // Layout Components
@@ -25,7 +25,6 @@ import { LoginResponse } from './types';
 import { SearchDialog } from './components/dialogs/SearchDialog';
 import { SettingsDialog } from './components/dialogs/SettingsDialog';
 import { ConfirmDialog } from './components/dialogs/ConfirmDialog';
-import { CalendarDialog } from './components/dialogs/CalendarDialog';
 import { ConfirmProvider } from './components/ConfirmProvider';
 
 // Auth Components
@@ -41,6 +40,7 @@ import { ToastProvider, useToast } from './components/Toast';
 import { StatusBar } from './components/StatusBar';
 import { RagPanel } from './components/sidebar/RagPanel';
 import { CrewPanel } from './components/sidebar/CrewPanel';
+import { CalendarPanel } from './components/calendar/CalendarPanel';
 
 // LoginResponse imported from types
 
@@ -57,7 +57,6 @@ function AppContent() {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
-  const [showCalendarDialog, setShowCalendarDialog] = useState(false);
 
   // Initialize Chat Op Listener (Main Window Only)
   useEffect(() => {
@@ -129,7 +128,25 @@ function AppContent() {
   const [showTabMenu, setShowTabMenu] = useState(false);
 
   // Right Panel State
-  const [activeRightTab, setActiveRightTab] = useState<'metadata' | 'rag' | 'crew'>('metadata');
+  const [activeRightTab, setActiveRightTab] = useState<'metadata' | 'rag' | 'crew' | 'calendar'>('metadata');
+
+  // Determine active tab type
+  const activeTabId = useDocumentStore(state => state.activeTabId);
+  const activeTabType = useDocumentStore(state => {
+    const tab = state.tabs.find(t => t.id === activeTabId);
+    return tab?.type || 'document';
+  });
+
+  // Effect to switch right panel content based on main tab type
+  useEffect(() => {
+    if (activeRightTab === 'metadata' || activeRightTab === 'calendar') { // Only switch if in default/contextual mode
+      if (activeTabType === 'calendar') {
+        setActiveRightTab('calendar');
+      } else {
+        setActiveRightTab('metadata');
+      }
+    }
+  }, [activeTabType]);
 
   // Drag to move window
   const handleDragStart = (e: React.MouseEvent) => {
@@ -311,7 +328,6 @@ function AppContent() {
               <div className="flex-1 flex overflow-hidden">
                 <IconBar
                   onSearchClick={() => setShowSearchDialog(true)}
-                  onCalendarClick={() => setShowCalendarDialog(true)}
                   onSettingsClick={() => setShowSettingsDialog(true)}
                 />
                 {isSidebarOpen && (
@@ -418,13 +434,15 @@ function AppContent() {
                 >
                   <div className="flex items-center gap-1 ml-2">
                     <div className="h-full flex items-center gap-1">
+                      {/* Contextual Tabs */}
                       <button
                         className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'metadata' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
-                        onClick={() => setActiveRightTab('metadata')}
+                        onClick={() => setActiveRightTab(activeTabType === 'calendar' ? 'calendar' : 'metadata')}
                         title="Metadata"
                       >
                         <List size={16} />
                       </button>
+
                       <button
                         className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'rag' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
                         onClick={() => setActiveRightTab('rag')}
@@ -448,6 +466,7 @@ function AppContent() {
                 </div>
                 <div className="flex-1 overflow-hidden">
                   {activeRightTab === 'metadata' && <MetadataPanel />}
+                  {activeRightTab === 'calendar' && <CalendarPanel />}
                   {activeRightTab === 'rag' && <RagPanel />}
                   {activeRightTab === 'crew' && <CrewPanel />}
                 </div>
@@ -521,10 +540,7 @@ function AppContent() {
         onClose={() => setShowSettingsDialog(false)}
       />
 
-      <CalendarDialog
-        isOpen={showCalendarDialog}
-        onClose={() => setShowCalendarDialog(false)}
-      />
+
     </div>
   );
 }

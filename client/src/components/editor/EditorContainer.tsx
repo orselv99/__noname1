@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { Editor } from './Editor';
+import { CalendarView } from '../calendar/CalendarView';
 import { FileText } from 'lucide-react';
 
 /**
@@ -24,11 +25,16 @@ export const EditorContainer = memo(() => {
   return (
     <div className="relative w-full h-full">
       {tabs.map((tab) => (
-        <Editor
-          key={tab.docId}
-          docId={tab.docId}
-          isActive={tab.id === activeTabId}
-        />
+        <div key={tab.id} className={`w-full h-full ${tab.id === activeTabId ? 'block' : 'hidden'}`}>
+          {tab.type === 'calendar' ? (
+            <CalendarView />
+          ) : (
+            <Editor
+              docId={tab.docId!}
+              isActive={tab.id === activeTabId}
+            />
+          )}
+        </div>
       ))}
     </div>
   );

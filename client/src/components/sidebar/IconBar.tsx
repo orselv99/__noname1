@@ -1,18 +1,22 @@
 import { Search, Calendar, ListTodo, Settings } from 'lucide-react';
+import { useDocumentStore } from '../../stores/documentStore';
 
 interface IconBarProps {
   onSearchClick?: () => void;
-  onCalendarClick?: () => void;
   onTodoClick?: () => void;
   onSettingsClick?: () => void;
 }
 
 export const IconBar = ({
   onSearchClick,
-  onCalendarClick,
   onTodoClick,
   onSettingsClick
 }: IconBarProps) => {
+  const addTab = useDocumentStore(state => state.addTab);
+
+  const handleCalendarClick = () => {
+    addTab({ id: 'calendar-main', title: 'Calendar', type: 'calendar' });
+  };
   const buttonClass = "w-8 h-8 flex items-center justify-center text-zinc-400 hover:bg-zinc-800 hover:text-white rounded-md transition-colors";
 
   return (
@@ -27,7 +31,7 @@ export const IconBar = ({
       <button
         className={`${buttonClass} mb-1`}
         title="Calendar"
-        onClick={onCalendarClick}
+        onClick={handleCalendarClick}
       >
         <Calendar size={18} />
       </button>

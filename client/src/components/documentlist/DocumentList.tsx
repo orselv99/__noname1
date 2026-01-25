@@ -721,9 +721,12 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
                 onSelectDocument={onSelectDocument}
                 selectedDocumentId={activeTabId || undefined}
                 onToggleExpandInfo={handleToggleExpandInfo}
-                onAddSubPage={() => {
-                  // setNewDocParentInfo({ groupId: gId, parentFolderId: pId });
-                  setShowNewDocDialog(true);
+                onAddSubPage={(gId, pId) => {
+                  // Quick Create implementation
+                  const gType = group.type === 'project' ? GroupType.Project :
+                    (group.type === 'department' && group.id === 'private_group') ? GroupType.Private : GroupType.Department;
+
+                  createDocument("제목 없음", gId, gType, pId);
                 }}
                 dragState={{ activeId, overId, position: dropPosition }}
                 onItemMouseMove={handleItemMouseMove}

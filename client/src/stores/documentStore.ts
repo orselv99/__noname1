@@ -4,10 +4,19 @@ import { safeInvoke } from '../utils/safeInvoke';
 import { Document, GroupType, SaveDocumentRequest, DocumentState, VisibilityLevel, ListDocumentsResponse, UserInfo } from '../types';
 
 export interface Tab {
-  id: string; // usually document id
-  docId: string;
+  id: string; // usually document id or 'calendar'
+  docId?: string; // Optional for non-documents
   title: string;
+  type: 'document' | 'calendar';
   isDirty?: boolean;
+}
+
+export interface CalendarEvent {
+  title: string;
+  description?: string;
+  startDate: string; // ISO string
+  endDate: string;   // ISO string
+  color?: string;
 }
 
 interface DocumentStore {
@@ -18,6 +27,12 @@ interface DocumentStore {
   // Tabs
   tabs: Tab[];
   activeTabId: string | null;
+
+  // Calendar State
+  calendarSelectedDate: Date | null;
+  calendarEvents: CalendarEvent[];
+  setCalendarSelectedDate: (date: Date | null) => void;
+  addCalendarEvent: (event: CalendarEvent) => void;
 
   // UI State
   highlightedEvidence: string | null;
@@ -51,7 +66,7 @@ interface DocumentStore {
   setCurrentUser: (user: UserInfo) => void;
 
   // Tab Actions
-  addTab: (doc: Document) => void;
+  addTab: (item: { id: string; title: string; type?: 'document' | 'calendar' }) => void;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   reorderTabs: (newTabs: Tab[]) => void;
@@ -77,6 +92,17 @@ export const useDocumentStore = create<DocumentStore>()(
 
       tabs: [],
       activeTabId: null,
+
+      calendarSelectedDate: new Date(),
+      calendarEvents: [
+        { title: '프로젝트 미팅', startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 6).toISOString(), endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 6, 10, 0).toISOString(), color: 'text-blue-400' },
+        { title: '마감일', startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 12).toISOString(), endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 12, 18, 0).toISOString(), color: 'text-red-400' },
+        { title: '리뷰', startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 18).toISOString(), endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 18, 14, 0).toISOString(), color: 'text-green-400' },
+        { title: '발표', startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 25).toISOString(), endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 25, 11, 0).toISOString(), color: 'text-purple-400' },
+      ],
+      setCalendarSelectedDate: (date) => set({ calendarSelectedDate: date }),
+      addCalendarEvent: (event) => set((state) => ({ calendarEvents: [...state.calendarEvents, event] })),
+
       highlightedEvidence: null,
       liveEditorContent: null,
       aiAnalysisStatus: null,
@@ -271,18 +297,28 @@ export const useDocumentStore = create<DocumentStore>()(
         }
       },
 
-      addTab: (doc) => {
+
+      // ...
+
+      // ...
+
+      addTab: (item: { id: string; title: string; type?: 'document' | 'calendar' }) => {
         set((state) => {
-          const existingTab = state.tabs.find((t) => t.docId === doc.id);
+          const type = item.type || 'document';
+          const existingTab = state.tabs.find((t) => t.id === item.id);
+
           if (existingTab) {
             return { activeTabId: existingTab.id };
           }
+
           const newTab: Tab = {
-            id: doc.id,
-            docId: doc.id,
-            title: doc.title,
+            id: item.id,
+            docId: type === 'document' ? item.id : undefined,
+            title: item.title,
+            type: type,
             isDirty: false,
           };
+
           return {
             tabs: [...state.tabs, newTab],
             activeTabId: newTab.id,
@@ -485,7 +521,7 @@ export const useDocumentStore = create<DocumentStore>()(
 
           set((state) => {
             const newDocs = state.documents.filter(d => !toDeleteIds.has(d.id));
-            const newTabs = state.tabs.filter(t => !toDeleteIds.has(t.docId));
+            const newTabs = state.tabs.filter(t => !toDeleteIds.has(t.docId || ''));
 
             let newActiveId = state.activeTabId;
             if (newActiveId && toDeleteIds.has(newActiveId)) {
@@ -541,7 +577,7 @@ export const useDocumentStore = create<DocumentStore>()(
           const newDocuments = state.documents.filter(d => !d.deleted_at);
           // Also cleanup any tabs that might reference deleted docs (though they should be closed on delete)
           const deletedIds = new Set(state.documents.filter(d => d.deleted_at).map(d => d.id));
-          const newTabs = state.tabs.filter(t => !deletedIds.has(t.docId));
+          const newTabs = state.tabs.filter(t => !deletedIds.has(t.docId || ''));
 
           let newActiveId = state.activeTabId;
           if (newActiveId && deletedIds.has(newActiveId)) {
@@ -633,6 +669,7 @@ export const useDocumentStore = create<DocumentStore>()(
       partialize: (state) => ({
         tabs: state.tabs.map(t => ({ ...t, isDirty: false })), // Don't persist dirty state, reset to false
         activeTabId: state.activeTabId,
+        calendarEvents: state.calendarEvents, // Persist events
       }),
     }
   )

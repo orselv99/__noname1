@@ -1,10 +1,11 @@
-import { X, Plus, MoreHorizontal } from 'lucide-react';
+import { X, Plus, MoreHorizontal, Calendar as CalendarIcon, FileText } from 'lucide-react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useRef, useState, useEffect, useMemo, memo } from 'react';
 
 interface SortableTabProps {
   id: string;
   title: string;
+  type?: 'document' | 'calendar';
   isActive: boolean;
   isDirty?: boolean;
   isRecycled?: boolean;
@@ -12,7 +13,7 @@ interface SortableTabProps {
   onClose: (e: React.MouseEvent) => void;
 }
 
-const SortableTab = memo(({ title, isActive, isDirty, isRecycled, onSelect, onClose }: SortableTabProps) => {
+const SortableTab = memo(({ title, type, isActive, isDirty, isRecycled, onSelect, onClose }: SortableTabProps) => {
   // Logic for border color
   let borderColor = 'border-t-transparent';
   if (isActive) {
@@ -31,7 +32,8 @@ const SortableTab = memo(({ title, isActive, isDirty, isRecycled, onSelect, onCl
       onMouseDown={(e) => e.stopPropagation()} // Prevent window drag
       onClick={onSelect}
     >
-      <span className="truncate select-none flex-1">
+      <span className="truncate select-none flex-1 flex items-center gap-1.5">
+        {type === 'calendar' ? <CalendarIcon size={12} className="shrink-0" /> : <FileText size={12} className="shrink-0 opacity-70" />}
         {title}
       </span>
 
@@ -96,6 +98,7 @@ export const EditorTabs = () => {
             key={tab.id}
             id={tab.id}
             title={tab.title}
+            type={tab.type} // Pass type
             isActive={activeTabId === tab.id}
             isDirty={tab.isDirty}
             isRecycled={recycledMap.get(tab.id)}
