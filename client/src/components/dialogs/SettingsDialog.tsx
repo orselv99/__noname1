@@ -1,5 +1,6 @@
 import { X, Monitor, Palette, Bell, Shield, Database, Info } from 'lucide-react';
 import { useState } from 'react';
+import { useAlarmStore } from '../../stores/alarmStore';
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ type SettingsTab = 'appearance' | 'notifications' | 'security' | 'storage' | 'ab
 
 export const SettingsDialog = ({ isOpen, onClose }: SettingsDialogProps) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
+  const { settings, updateSettings } = useAlarmStore();
 
   if (!isOpen) return null;
 
@@ -58,21 +60,75 @@ export const SettingsDialog = ({ isOpen, onClose }: SettingsDialogProps) => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-medium text-white">데스크톱 알림</h3>
-                <p className="text-xs text-zinc-500">새 메시지 알림 받기</p>
+                <h3 className="text-sm font-medium text-white">알림 사용</h3>
+                <p className="text-xs text-zinc-500">모든 알림을 켜거나 끕니다.</p>
               </div>
-              <button className="w-10 h-6 bg-blue-600 rounded-full relative">
-                <span className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full" />
+              <button
+                onClick={() => updateSettings({ enabled: !settings.enabled })}
+                className={`w-10 h-6 rounded-full relative transition-colors ${settings.enabled ? 'bg-blue-600' : 'bg-zinc-700'}`}
+              >
+                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.enabled ? 'right-1' : 'left-1'}`} />
               </button>
             </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-white">소리</h3>
-                <p className="text-xs text-zinc-500">알림 소리 재생</p>
+
+            <div className={`space-y-4 ${!settings.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-white">데스크톱 알림 사용</h3>
+                  <p className="text-xs text-zinc-500">앱 내 토스트 대신 OS 알림을 사용합니다.</p>
+                </div>
+                <button
+                  onClick={() => updateSettings({ useDesktopNotifications: !settings.useDesktopNotifications })}
+                  className={`w-10 h-6 rounded-full relative transition-colors ${settings.useDesktopNotifications ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.useDesktopNotifications ? 'right-1' : 'left-1'}`} />
+                </button>
               </div>
-              <button className="w-10 h-6 bg-zinc-700 rounded-full relative">
-                <span className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full" />
-              </button>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-white">소리</h3>
+                  <p className="text-xs text-zinc-500">알림 소리 재생</p>
+                </div>
+                <button
+                  onClick={() => updateSettings({ soundEnabled: !settings.soundEnabled })}
+                  className={`w-10 h-6 rounded-full relative transition-colors ${settings.soundEnabled ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.soundEnabled ? 'right-1' : 'left-1'}`} />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-white">채팅 알림 스타일</h3>
+                  <p className="text-xs text-zinc-500">알림 내용의 표시 수준을 선택합니다.</p>
+                </div>
+                <select
+                  value={settings.chatPrivacy}
+                  onChange={(e) => updateSettings({ chatPrivacy: e.target.value as any })}
+                  className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-300 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="all">모두 표시</option>
+                  <option value="sender">보낸 사람만</option>
+                  <option value="simple">간단히</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-white">중요도 필터</h3>
+                  <p className="text-xs text-zinc-500">이 수준 이상의 알림만 표시합니다.</p>
+                </div>
+                <select
+                  value={settings.minImportance}
+                  onChange={(e) => updateSettings({ minImportance: e.target.value as any })}
+                  className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-300 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="low">낮음 (모두)</option>
+                  <option value="medium">중간</option>
+                  <option value="high">높음</option>
+                </select>
+              </div>
             </div>
           </div>
         );
@@ -165,8 +221,8 @@ export const SettingsDialog = ({ isOpen, onClose }: SettingsDialogProps) => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${activeTab === tab.id
-                    ? 'bg-blue-600/20 text-blue-400'
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                  ? 'bg-blue-600/20 text-blue-400'
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                   }`}
               >
                 <tab.icon size={16} />

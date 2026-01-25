@@ -18,8 +18,25 @@ class RoomManager {
       return;
     }
 
-    const roomId = uuidv4();
     const allParticipants = Array.from(new Set([...participantIds, myId]));
+
+    // Check if 1:1 room already exists
+    if (allParticipants.length === 2) {
+      const rooms = await chatStore.getAllRooms();
+      const existingRoom = rooms.find(r =>
+        r.participants.length === 2 &&
+        r.participants.every(p => allParticipants.includes(p))
+      );
+
+      if (existingRoom) {
+        console.log('Reusing existing room:', existingRoom.id);
+        this.openChatWindow(existingRoom.id);
+        this.connectToParticipants(participantIds);
+        return;
+      }
+    }
+
+    const roomId = uuidv4();
 
     // 1. Save Room Locally
     await chatStore.createOrUpdateRoom({
@@ -92,8 +109,9 @@ class RoomManager {
 
     import('@tauri-apps/api/webviewWindow').then(({ WebviewWindow }) => {
       const label = `chat-${roomId}`;
+      const myId = useAuthStore.getState().user?.user_id;
       const webview = new WebviewWindow(label, {
-        url: `/chat/${roomId}`,
+        url: `/chat/${roomId}?uid=${myId}`,
         title: 'Chat',
         width: 400,
         height: 600,

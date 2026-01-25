@@ -68,10 +68,10 @@ class MessagingStore {
 
   // --- Messages ---
 
-  async addMessage(msg: { roomId: string; senderId: string; content: string; status?: 'pending' | 'sent' | 'read' }) {
+  async addMessage(msg: { id?: string; roomId: string; senderId: string; content: string; status?: 'pending' | 'sent' | 'read' }) {
     const db = await this.dbPromise;
     const message = {
-      id: uuidv4(),
+      id: msg.id || uuidv4(),
       timestamp: Date.now(),
       status: 'pending' as const,
       ...msg,

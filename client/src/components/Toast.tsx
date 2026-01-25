@@ -1,114 +1,134 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAlarmStore, AlarmType } from '../stores/alarmStore';
 
-type ToastType = 'success' | 'error' | 'info' | 'warning';
-
-interface Toast {
-  id: number;
-  message: string;
-  type: ToastType;
-}
-
-interface ToastContextType {
-  showToast: (message: string, type?: ToastType) => void;
-}
-
-const ToastContext = createContext<ToastContextType | undefined>(undefined);
+// Toast Context is deprecated in favor of global store, but we keep the Provider structure for compatibility if needed.
+// Actually, let's export a simple hook that wraps the store action for convenience.
 
 export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider');
-  }
-  return context;
+  const addAlarm = useAlarmStore(state => state.addAlarm);
+  return {
+    showToast: (message: string, type: AlarmType = 'info') => addAlarm(message, type)
+  };
 }
 
-const toastStyles: Record<ToastType, { bg: string; icon: ReactNode }> = {
+const toastStyles: Record<AlarmType, { bg: string; icon: ReactNode; border: string; text: string }> = {
   success: {
-    bg: 'bg-green-600',
+    bg: 'bg-zinc-900',
+    border: 'border-green-900/50',
+    text: 'text-zinc-300',
     icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
       </svg>
     ),
   },
   error: {
-    bg: 'bg-red-600',
+    bg: 'bg-zinc-900',
+    border: 'border-red-900/50',
+    text: 'text-zinc-300',
     icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
       </svg>
     ),
   },
   info: {
-    bg: 'bg-blue-600',
+    bg: 'bg-zinc-900',
+    border: 'border-blue-900/50',
+    text: 'text-zinc-300',
     icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
   warning: {
-    bg: 'bg-yellow-600',
+    bg: 'bg-zinc-900',
+    border: 'border-yellow-900/50',
+    text: 'text-zinc-300',
     icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
     ),
   },
 };
 
+import { roomManager } from '../services/p2p/RoomManager';
+
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  // Use a ref for id generator to avoid re-renders resetting it (though useCallback handles it usually, closure scope holds it)
-  // Actually the original code declared `let toastId = 0` inside component, which resets on re-render!
-  // It should be outside or useRef.
-  // Wait, `web` code had `let toastId = 0` inside `ToastProvider`.
-  // If `ToastProvider` re-renders, `toastId` resets to 0.
-  // If multiple toasts added, IDs might collide if re-rendered?
-  // But `ToastProvider` is usually top-level and doesn't re-render often.
-  // I'll stick to the original implementation to be identical, but fix it if I see fit.
-  // I'll put it outside or use state/ref. State is safer.
+  const alarms = useAlarmStore(state => state.alarms);
+  const settings = useAlarmStore(state => state.settings);
+  const markAsRead = useAlarmStore(state => state.markAsRead);
 
-  // Actually, I'll use the original code logic for now to match request "make it same".
-  // But inside component `let` is definitely buggy if component re-renders.
-  // I'll move `let toastId = 0` outside the component function.
+  // Filter for unread alarms that happened recently (e.g. last 5 seconds) to show as toast
+  // Use a local strategy or just show unread? 
+  // Typically toasts are ephemeral. The store keeps history.
+  // We need to know which ones are "new" to show them.
+  // We can track the last seen timestamp or similar.
+  // OR, simply render toasts for alarms that are not read and created recently.
 
-  const showToast = useCallback((message: string, type: ToastType = 'success') => {
-    const id = Date.now(); // Simple ID
-    setToasts(prev => [...prev, { id, message, type }]);
+  // Actually, standard Toast behavior is "trigger -> show -> hide".
+  // The store persists them.
+  // We can just rely on the store's "addAlarm" triggering a re-render.
+  // But how to auto-dismiss the TOAST without removing from STORE?
+  // We need a separate "toast view" state vs "store" state?
+  // User request: "toast 를 alarm provider 로 승격... 전역에서 입력하면 toast 형태로 표시".
 
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3000);
-  }, []);
+  // Let's iterate:
+  // We only show alarms that are (1) unread AND (2) created in the last 4 seconds.
+  // This is a simple heuristic for "Toasting".
+
+  const recentAlarms = alarms.filter(a => {
+    const isRecent = Date.now() - a.timestamp < 4000;
+    return !a.read && isRecent;
+  });
+
+  // Suppress visual toasts if in Chat Window
+  const isChatWindow = typeof window !== 'undefined' && window.location.pathname.startsWith('/chat/');
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <>
       {children}
 
       {/* Toast Container */}
-      <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
-        <AnimatePresence>
-          {toasts.map(toast => {
-            const MotionDiv = motion.div as any;
-            return (
-              <MotionDiv
-                key={toast.id}
-                initial={{ opacity: 0, y: 50, scale: 0.9 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 20, scale: 0.9 }}
-                className={`${toastStyles[toast.type].bg} text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[200px] pointer-events-auto`}
-              >
-                {toastStyles[toast.type].icon}
-                <span className="font-medium">{toast.message}</span>
-              </MotionDiv>
-            );
-          })}
-        </AnimatePresence>
-      </div>
-    </ToastContext.Provider>
+      {!settings.useDesktopNotifications && settings.enabled && !isChatWindow && (
+        <div className="fixed bottom-10 right-4 z-50 flex flex-col gap-2 pointer-events-none items-end">
+          <AnimatePresence>
+            {recentAlarms.map(alarm => {
+              const style = toastStyles[alarm.type];
+              const MotionDiv = motion.div as any;
+              return (
+                <MotionDiv
+                  key={alarm.id}
+                  initial={{ opacity: 0, x: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 20, scale: 0.95 }}
+                  onClick={() => {
+                    if (alarm.roomId) {
+                      roomManager.openChatWindow(alarm.roomId);
+                    }
+                    markAsRead(alarm.id);
+                  }}
+                  className={`${style.bg} border ${style.border} ${style.text} px-4 py-3 rounded-md shadow-xl flex items-start gap-3 min-w-[300px] max-w-[400px] pointer-events-auto cursor-pointer hover:brightness-110`}
+                >
+                  <div className="mt-1 shrink-0">{style.icon}</div>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    {alarm.title && <span className="font-semibold text-sm mb-0.5 truncate">{alarm.title}</span>}
+                    <span className="text-sm font-medium opacity-90 wrap-break-word">{alarm.message}</span>
+                    <span className="text-[10px] opacity-60 mt-1 self-end">
+                      {new Date(alarm.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </MotionDiv>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
+    </>
   );
 }

@@ -1,6 +1,6 @@
 
 import { useEffect, useState, useRef } from 'react';
-import { Send, User } from 'lucide-react';
+import { Send, User, MoreVertical, Trash2, LogOut } from 'lucide-react';
 import { messagingStore as chatStore } from '../stores/messagingStore';
 import { useAuthStore } from '../stores/authStore';
 
@@ -12,7 +12,33 @@ export default function ChatWindow() {
   const [inputValue, setInputValue] = useState('');
   const [roomName, setRoomName] = useState('Chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const currentUser = useAuthStore(state => state.user);
+  const authUser = useAuthStore(state => state.user);
+
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fallback ID from URL if store not ready
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+
+  useEffect(() => {
+    if (authUser?.user_id) {
+      setCurrentUserId(authUser.user_id);
+    } else {
+      const params = new URLSearchParams(window.location.search);
+      const uid = params.get('uid');
+      if (uid) setCurrentUserId(uid);
+    }
+  }, [authUser]);
 
   // Simple manual route param extraction
   useEffect(() => {
@@ -58,7 +84,7 @@ export default function ChatWindow() {
   };
 
   const handleSend = async () => {
-    if (!inputValue.trim() || !roomId || !currentUser) return;
+    if (!inputValue.trim() || !roomId || !currentUserId) return;
 
     // We need peers to send to.
     const room = await chatStore.getRoom(roomId);
@@ -75,7 +101,7 @@ export default function ChatWindow() {
       type: 'SEND_MESSAGE',
       roomId,
       content: inputValue,
-      senderId: currentUser.user_id
+      senderId: currentUserId
     });
     opChannel.close();
 
@@ -88,6 +114,7 @@ export default function ChatWindow() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.nativeEvent.isComposing) return; // Ignore IME composition confirm
       e.preventDefault();
       handleSend();
     }
@@ -96,17 +123,55 @@ export default function ChatWindow() {
   return (
     <div className="flex flex-col h-screen bg-zinc-900 text-white font-sans">
       {/* Header */}
-      <div className="h-12 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 drag-region select-none">
+      <div className="h-12 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-4 drag-region select-none relative">
         <div className="flex items-center gap-2">
           <User size={16} className="text-blue-400" />
           <span className="font-semibold text-sm">{roomName}</span>
+        </div>
+
+        <div className="no-drag">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+          >
+            <MoreVertical size={18} />
+          </button>
+
+          {showMenu && (
+            <div ref={menuRef} className="absolute right-4 top-10 w-40 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl z-50 flex flex-col py-1">
+              <button
+                onClick={() => {
+                  // Clear Logic (Optional: Just clean local state or mark as hidden?)
+                  // Currently clearAll isn't exposed in ChatWindow context directly or we need a new Op.
+                  // For now, simple console log or TODO.
+                  console.log('Clear Chat requested');
+                  setShowMenu(false);
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white w-full text-left"
+              >
+                <Trash2 size={14} />
+                대화내용 삭제
+              </button>
+              <button
+                onClick={() => {
+                  import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+                    getCurrentWindow().close();
+                  });
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 hover:text-red-300 w-full text-left"
+              >
+                <LogOut size={14} />
+                나가기
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg) => {
-          const isMe = msg.senderId === currentUser?.user_id;
+          const isMe = msg.senderId === currentUserId;
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div

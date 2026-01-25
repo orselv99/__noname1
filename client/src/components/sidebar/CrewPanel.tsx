@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { MessageCircle, Search, User, X, Hash, MessageSquarePlus, CheckCircle2 } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { MessageCircle, Search, User, X, Hash } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { CrewMember } from '../../types';
 import { roomManager } from '../../services/p2p/RoomManager';
@@ -13,9 +13,9 @@ export const CrewPanel = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState<string | null>(null);
 
-  // Multi-selection state
-  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; member: CrewMember } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // 검색 및 필터링
   const filteredCrew = useMemo(() => {
@@ -50,50 +50,43 @@ export const CrewPanel = () => {
     return groups;
   }, [filteredCrew]);
 
-  const toggleSelection = (id: string) => {
-    const newSet = new Set(selectedUserIds);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
-    setSelectedUserIds(newSet);
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
 
-    // Auto-enable selection mode if not active
-    if (!isSelectionMode && newSet.size > 0) {
-      setIsSelectionMode(true);
-    }
-    // Auto-disable if empty? Maybe keep it.
-    if (newSet.size === 0) {
-      setIsSelectionMode(false);
-    }
+  const handleContextMenu = (e: React.MouseEvent, member: CrewMember) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      member
+    });
   };
 
-  const handleStartChat = () => {
-    if (selectedUserIds.size === 0) return;
-    roomManager.createRoom(Array.from(selectedUserIds));
-    setSelectedUserIds(new Set());
-    setIsSelectionMode(false);
+  const handleStartChat = (memberId: string) => {
+    roomManager.createRoom([memberId]);
+    setContextMenu(null);
   };
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 text-zinc-300 relative">
       {/* 헤더 */}
-      <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+      <div className="h-12 p-3 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <MessageCircle size={18} className="text-blue-400" />
-          <h2 className="font-medium text-white">크루 ({filteredCrew.length})</h2>
+          <MessageCircle size={14} className="text-blue-400" />
+          <h2 className="text-zinc-400 font-medium text-xs uppercase tracking-wider ">크루 ({filteredCrew.length})</h2>
         </div>
 
         {/* 간단한 필터 메뉴 (예시) */}
         <div className="flex gap-1">
-          <button
-            onClick={() => setIsSelectionMode(!isSelectionMode)}
-            className={`p-1.5 rounded-md ${isSelectionMode ? 'bg-zinc-800 text-white' : 'hover:bg-zinc-800 text-zinc-400'}`}
-            title="다중 선택 모드"
-          >
-            <CheckCircle2 size={16} className={selectedUserIds.size > 0 ? "text-blue-400" : ""} />
-          </button>
+          {/* 추후 필터 버튼 추가 가능 */}
         </div>
       </div>
 
@@ -142,22 +135,15 @@ export const CrewPanel = () => {
                 {/* 멤버 목록 */}
                 <div>
                   {members.map(member => {
-                    const isSelected = selectedUserIds.has(member.id);
+
                     return (
                       <div
                         key={member.id}
-                        onClick={() => toggleSelection(member.id)}
-                        className={`group px-4 py-3 border-b border-zinc-800/50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-500/10 hover:bg-blue-500/20' : 'hover:bg-zinc-900'
-                          }`}
+                        onDoubleClick={() => handleStartChat(member.id)}
+                        onContextMenu={(e) => handleContextMenu(e, member)}
+                        className={`group px-4 py-3 border-b border-zinc-800/50 cursor-pointer transition-colors hover:bg-zinc-900 ${contextMenu?.member.id === member.id ? 'bg-zinc-800' : ''}`}
                       >
                         <div className="flex items-start gap-3">
-                          {/* 체크박스 (선택 모드일 때만) */}
-                          {isSelectionMode && (
-                            <div className={`w-5 h-5 rounded border flex items-center justify-center mt-2.5 transition-colors ${isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-zinc-600 bg-zinc-800'
-                              }`}>
-                              {isSelected && <CheckCircle2 size={12} />}
-                            </div>
-                          )}
 
                           {/* 프로필 아바타 */}
                           <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 border border-zinc-700 group-hover:border-zinc-600 relative">
@@ -172,7 +158,7 @@ export const CrewPanel = () => {
                           <div className="flex-1 min-w-0">
                             {/* 라인 1: 이름 + 직책 */}
                             <div className="flex items-center gap-2 mb-0.5">
-                              <h3 className={`text-sm font-medium truncate group-hover:text-white ${isSelected ? 'text-blue-200' : 'text-zinc-200'}`}>
+                              <h3 className="text-sm font-medium truncate group-hover:text-white text-zinc-200">
                                 {member.username}
                               </h3>
                               {member.position_name && (
@@ -197,15 +183,45 @@ export const CrewPanel = () => {
         )}
       </div>
 
-      {/* Start Chat Floating Button */}
-      {selectedUserIds.size > 0 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10">
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 min-w-[160px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <div className="px-3 py-2 border-b border-zinc-800 mb-1">
+            <div className="text-xs font-semibold text-zinc-300">{contextMenu.member.username}</div>
+            <div className="text-[10px] text-zinc-500">{contextMenu.member.department_name}</div>
+          </div>
+
           <button
-            onClick={handleStartChat}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-full shadow-lg font-medium transition-transform hover:scale-105 active:scale-95"
+            onClick={() => handleStartChat(contextMenu.member.id)}
+            className="w-full text-left px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2"
           >
-            <MessageSquarePlus size={20} />
-            {selectedUserIds.size}명과 대화 시작
+            <MessageCircle size={14} />
+            대화 시작
+          </button>
+
+          <button
+            onClick={() => {
+              /* TODO: View Profile */
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2"
+          >
+            <User size={14} />
+            프로필 보기
+          </button>
+
+          <div className="my-1 border-t border-zinc-800"></div>
+
+          <button
+            onClick={() => setContextMenu(null)}
+            className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-zinc-800 hover:text-red-300 flex items-center gap-2"
+          >
+            <X size={14} />
+            닫기
           </button>
         </div>
       )}
