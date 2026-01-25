@@ -11,7 +11,9 @@
 //! ==========================================================================
 
 // 하위 모듈 선언
+pub mod alarm;
 pub mod auth;
+pub mod content;
 pub mod documents;
 pub mod rag;
 pub mod schema;
@@ -48,4 +50,15 @@ pub use rag::{
   create_chat_session_db, delete_rag_chat_db, list_rag_chats_db, list_rag_messages_db,
   save_rag_message_db, search_similar_documents_db, update_chat_timestamp_db, update_chat_title_db,
   RagChatRaw, RagMessageRaw, SearchResultRaw,
+};
+
+// alarm 모듈
+pub use alarm::{
+  add_alarm, clear_alarms, delete_alarm, get_alarms, mark_alarm_read, mark_all_alarms_read,
+  AlarmRaw,
+};
+
+// content 모듈
+pub use content::{
+  clear_content_state, delete_content_state, load_content_state, save_content_state,
 };

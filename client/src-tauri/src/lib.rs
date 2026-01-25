@@ -119,7 +119,25 @@ pub fn run() {
       commands::rag::update_rag_chat_title,
       commands::rag::search_local,
       commands::rag::search_web,
-      commands::rag::search_server
+      commands::rag::search_local,
+      commands::rag::search_web,
+      commands::rag::search_server,
+      // ----------------------------------------------------------------
+      // 알람 명령
+      // ----------------------------------------------------------------
+      commands::alarm::add_alarm,
+      commands::alarm::get_alarms,
+      commands::alarm::mark_alarm_read,
+      commands::alarm::mark_all_alarms_read,
+      commands::alarm::delete_alarm,
+      commands::alarm::clear_alarms,
+      // ----------------------------------------------------------------
+      // 콘텐츠 명령
+      // ----------------------------------------------------------------
+      commands::content::save_content_state,
+      commands::content::load_content_state,
+      commands::content::delete_content_state,
+      commands::content::clear_content_state
     ])
     // ====================================================================
     // 앱 초기화 콜백 (.setup)

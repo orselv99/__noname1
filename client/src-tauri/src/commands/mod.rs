@@ -33,4 +33,11 @@ pub mod documents;
 pub mod media;
 
 /// RAG 커맨드: AI 질의응답, 채팅 세션, 검색
+/// RAG 커맨드: AI 질의응답, 채팅 세션, 검색
 pub mod rag;
+
+/// 알람 커맨드: 추가, 목록 조회, 읽음 처리, 삭제
+pub mod alarm;
+
+/// 콘텐츠 커맨드: 저장, 로드, 삭제
+pub mod content;

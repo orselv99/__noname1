@@ -52,6 +52,8 @@ pub fn init_database(app: &tauri::AppHandle) -> Result<Connection, String> {
   create_documents_tables(&conn)?;
   create_rag_tables(&conn)?;
   create_cache_tables(&conn)?;
+  create_alarms_table(&conn)?; // 알람 테이블 생성
+  create_contents_table(&conn)?; // 콘텐츠(Store) 테이블 생성
 
   // 마이그레이션
   run_migrations(&conn)?;
@@ -85,11 +87,67 @@ fn create_users_table(conn: &Connection) -> Result<(), String> {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_login_at DATETIME,
-            force_change_password INTEGER DEFAULT 1
+            force_change_password INTEGER DEFAULT 1,
+            refresh_token TEXT -- 리프레시 토큰 (세션 유지용)
         )",
       [],
     )
     .map_err(|e| format!("users 테이블 생성 실패: {}", e))?;
+  Ok(())
+}
+
+// ============================================================================
+// 테이블 생성 함수 (Alarms)
+// ============================================================================
+
+/// 알람 테이블 생성
+///
+/// 알림 내역을 구조화하여 저장합니다.
+/// - id: 알람 고유 ID (UUID)
+/// - title: 알람 제목
+/// - message: 알람 내용
+/// - type: 알람 유형 (info, error, warning, success)
+/// - importance: 중요도 (low, medium, high)
+/// - is_read: 읽음 여부 (0: 안읽음, 1: 읽음)
+/// - created_at: 생성 시간
+fn create_alarms_table(conn: &Connection) -> Result<(), String> {
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS alarms (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            message TEXT NOT NULL,
+            type TEXT DEFAULT 'info',
+            importance TEXT DEFAULT 'medium',
+            is_read INTEGER DEFAULT 0,
+            room_id TEXT, -- 채팅방 ID (옵션)
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+      [],
+    )
+    .map_err(|e| format!("alarms 테이블 생성 실패: {}", e))?;
+  Ok(())
+}
+
+// ============================================================================
+// 테이블 생성 함수 (Contents)
+// ============================================================================
+
+/// 콘텐츠 상태 테이블 생성
+///
+/// ContentStore 데이터를 Key-Value(JSON) 형태로 저장합니다.
+/// 예: tabs, active_tab_id, calendar_events 등
+fn create_contents_table(conn: &Connection) -> Result<(), String> {
+  conn
+    .execute(
+      "CREATE TABLE IF NOT EXISTS contents (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL, -- JSON 문자열
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+      [],
+    )
+    .map_err(|e| format!("contents 테이블 생성 실패: {}", e))?;
   Ok(())
 }
 
@@ -121,6 +179,7 @@ fn create_documents_tables(conn: &Connection) -> Result<(), String> {
             last_synced_at INTEGER DEFAULT 0,
             accessed_at BLOB,
             version INTEGER DEFAULT 0,
+            media_size BLOB, -- 미디어 파일 크기 (JSON)
             FOREIGN KEY (user_id) REFERENCES users(id)
         )",
       [],
@@ -354,6 +413,23 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
       .map_err(|e| format!("media_size 컬럼 추가 실패: {}", e))?;
   }
 
+  // refresh_token 컬럼 마이그레이션 (users)
+  let refresh_token_exists: bool = conn
+    .query_row(
+      "SELECT COUNT(*) FROM pragma_table_info('users') WHERE name='refresh_token'",
+      [],
+      |row| row.get(0),
+    )
+    .unwrap_or(0)
+    > 0;
+
+  if !refresh_token_exists {
+    println!("Debug: 마이그레이션 - users에 refresh_token 컬럼 추가");
+    conn
+      .execute("ALTER TABLE users ADD COLUMN refresh_token TEXT", [])
+      .map_err(|e| format!("refresh_token 컬럼 추가 실패: {}", e))?;
+  }
+
   // 레거시 데이터 수정
   conn
     .execute(
@@ -376,8 +452,8 @@ fn create_indexes(conn: &Connection) -> Result<(), String> {
     .ok();
   conn
     .execute(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_document_unique 
-         ON document_revisions(document_id, version)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_document_unique
+          ON document_revisions(document_id, version)",
       [],
     )
     .map_err(|e| format!("document_revisions 유니크 인덱스 생성 실패: {}", e))?;
@@ -385,8 +461,8 @@ fn create_indexes(conn: &Connection) -> Result<(), String> {
   // 메시지 페이지네이션 인덱스
   conn
     .execute(
-      "CREATE INDEX IF NOT EXISTS idx_rag_messages_chat_ts 
-         ON rag_messages(chat_id, timestamp)",
+      "CREATE INDEX IF NOT EXISTS idx_rag_messages_chat_ts
+          ON rag_messages(chat_id, timestamp)",
       [],
     )
     .map_err(|e| format!("rag_messages 인덱스 생성 실패: {}", e))?;
@@ -405,6 +481,14 @@ fn create_indexes(conn: &Connection) -> Result<(), String> {
       [],
     )
     .map_err(|e| format!("document_tags 인덱스 생성 실패: {}", e))?;
+
+  // 알람 인덱스 (is_read, created_at) - 읽지 않은 알람 조회용
+  conn
+    .execute(
+      "CREATE INDEX IF NOT EXISTS idx_alarms_read ON alarms(is_read)",
+      [],
+    )
+    .map_err(|e| format!("alarms 인덱스 생성 실패: {}", e))?;
 
   Ok(())
 }

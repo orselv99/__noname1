@@ -6,7 +6,7 @@
 //! ==========================================================================
 
 use bcrypt::{hash, verify};
-use rusqlite::{Connection, Result as SqliteResult};
+use rusqlite::{Connection, OptionalExtension, Result as SqliteResult};
 
 // ============================================================================
 // 상수 정의
@@ -81,6 +81,7 @@ pub struct CachedUser {
   pub force_change_password: bool,
   pub created_at: Option<String>,
   pub updated_at: Option<String>,
+  pub refresh_token: Option<String>,
 }
 
 // ============================================================================
@@ -96,7 +97,13 @@ pub struct CachedUser {
 /// - `conn`: SQLite 연결
 /// - `user`: 저장할 사용자 정보
 /// - `plain_password`: 해싱할 평문 비밀번호
-pub fn save_user(conn: &Connection, user: &CachedUser, plain_password: &str) -> Result<(), String> {
+/// - `refresh_token`: 리프레시 토큰 (옵션)
+pub fn save_user(
+  conn: &Connection,
+  user: &CachedUser,
+  plain_password: &str,
+  refresh_token: Option<&str>,
+) -> Result<(), String> {
   let password_hash = hash_password(plain_password)?;
 
   conn
@@ -105,8 +112,8 @@ pub fn save_user(conn: &Connection, user: &CachedUser, plain_password: &str) -> 
             id, email, password_hash, username, tenant_id, role,
             position_id, department_id,
             contact, birthday, phone_numbers, force_change_password,
-            created_at, updated_at, last_login_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, CURRENT_TIMESTAMP)
+            created_at, updated_at, last_login_at, refresh_token
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, CURRENT_TIMESTAMP, ?15)
         ON CONFLICT(email) DO UPDATE SET
             id = excluded.id,
             password_hash = excluded.password_hash,
@@ -120,7 +127,8 @@ pub fn save_user(conn: &Connection, user: &CachedUser, plain_password: &str) -> 
             phone_numbers = excluded.phone_numbers,
             force_change_password = excluded.force_change_password,
             updated_at = excluded.updated_at,
-            last_login_at = CURRENT_TIMESTAMP",
+            last_login_at = CURRENT_TIMESTAMP,
+            refresh_token = excluded.refresh_token",
       rusqlite::params![
         user.id,
         user.email,
@@ -136,6 +144,7 @@ pub fn save_user(conn: &Connection, user: &CachedUser, plain_password: &str) -> 
         user.force_change_password as i32,
         user.created_at,
         user.updated_at,
+        refresh_token // 리프레시 토큰 바인딩
       ],
     )
     .map_err(|e| format!("사용자 저장 실패: {}", e))?;
@@ -168,7 +177,7 @@ pub fn verify_offline_login(
       "SELECT id, email, password_hash, username, tenant_id, role,
                 position_id, department_id,
                 contact, birthday, phone_numbers, force_change_password,
-                created_at, updated_at
+                created_at, updated_at, refresh_token
          FROM users WHERE email = ?1",
     )
     .map_err(|e| format!("쿼리 준비 실패: {}", e))?;
@@ -189,6 +198,7 @@ pub fn verify_offline_login(
       force_change_password: row.get::<_, i32>(11)? != 0,
       created_at: row.get(12)?,
       updated_at: row.get(13)?,
+      refresh_token: row.get(14)?, // 리프레시 토큰 매핑
     })
   });
 
@@ -259,4 +269,21 @@ pub fn clear_saved_tenant(conn: &Connection, email: &str) -> Result<(), String> 
 
   println!("Debug: 캐시된 테넌트 삭제됨: {}", email);
   Ok(())
+}
+
+/// 저장된 리프레시 토큰 조회 (자동 로그인용)
+///
+/// 가장 최근 로그인한(last_login_at DESC) 사용자의 리프레시 토큰을 반환합니다.
+/// 앱 시작 시 자동 세션 복구에 사용됩니다.
+pub fn get_refresh_token(conn: &Connection) -> Result<Option<String>, String> {
+  let result: Option<String> = conn
+    .query_row(
+      "SELECT refresh_token FROM users ORDER BY last_login_at DESC LIMIT 1",
+      [],
+      |row| row.get(0),
+    )
+    .optional()
+    .map_err(|e| format!("리프레시 토큰 조회 실패: {}", e))?;
+
+  Ok(result)
 }

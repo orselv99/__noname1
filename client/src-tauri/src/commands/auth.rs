@@ -250,9 +250,16 @@ pub async fn login(
             force_change_password: login_res.force_change_password,
             created_at: login_res.created_at.clone(),
             updated_at: login_res.updated_at.clone(),
+            refresh_token: Some(login_res.refresh_token.clone()), // 리프레시 토큰 저장
           };
 
-          if let Err(e) = database::save_user(conn, &cached_user, &password) {
+          // save_user 함수 호출 수정 (refresh_token 전달)
+          if let Err(e) = database::save_user(
+            conn,
+            &cached_user,
+            &password,
+            Some(&login_res.refresh_token),
+          ) {
             println!("Warning: 사용자 캐시 실패: {}", e);
           }
         }
