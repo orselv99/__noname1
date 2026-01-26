@@ -1,3 +1,4 @@
+import { signalingService } from '../services/SignalingService';
 import { create } from 'zustand';
 import { UserInfo, LoginResponse, CrewMember, ListUsersResponse } from '../types';
 import { invoke } from '@tauri-apps/api/core';
@@ -82,15 +83,20 @@ export const useAuthStore = create<AuthState>()(
       };
     }),
 
-    logout: () => set({
-      user: null,
-      isAuthenticated: false,
-      tenants: {},
-      departments: {},
-      positions: {},
-      projects: {},
-      onlineUsers: {}
-    }),
+    logout: () => {
+      // 명시적으로 Signaling 연결 해제
+      signalingService.disconnect();
+
+      set({
+        user: null,
+        isAuthenticated: false,
+        tenants: {},
+        departments: {},
+        positions: {},
+        projects: {},
+        onlineUsers: {}
+      });
+    },
 
     updateTenantName: (id, name) => set((state) => ({ tenants: { ...state.tenants, [id]: name } })),
     updateDepartmentName: (id, name) => set((state) => ({

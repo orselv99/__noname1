@@ -260,8 +260,12 @@ function AppContent() {
       currentPassword: currentPassword,
       newPassword: newPassword
     });
-    showToast('Password updated successfully', 'success');
-    setView('main');
+    showToast('Password updated successfully. Please login again.', 'success');
+
+    // 로그아웃 및 로그인 화면으로 이동 (재연결을 위해)
+    useAuthStore.getState().logout();
+    setCurrentPassword('');
+    setView('login');
   };
 
   const handleClose = () => {
