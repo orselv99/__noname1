@@ -117,6 +117,9 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
           })
       ]);
 
+      console.log("Local search results:", localResults);
+      console.log("Server search results:", serverResults);
+
       // 결과 병합 및 소스 태깅
       const allResults = [
         ...localResults.map(r => ({ ...r, source: 'local' as const })),

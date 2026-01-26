@@ -482,7 +482,9 @@ export function RagPanel() {
                         {/* 2. Search Result (Center Aligned) */}
                         <div className="flex justify-center w-full">
                           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 w-full max-w-3xl shadow-lg">
-                            <div className="font-medium text-zinc-200 mb-4 text-base">{ragData.summary}</div>
+                            <div className="text-xs mb-4">
+                              {ragData.summary}
+                            </div>
 
                             {/* Local Results */}
                             {ragData.results.local.length > 0 && (

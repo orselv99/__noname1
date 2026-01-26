@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { executeSearch, ThinkingState } from '../utils/LangGraphSearch';
 
 export interface RagChat {
   id: string;
@@ -22,7 +23,7 @@ interface RagState {
   messages: RagMessage[];
   isLoading: boolean;
   loadingStatus: string;
-  thinkingProcess: any;
+  thinkingProcess: ThinkingState | null;
   isLoadingMore: boolean;
   hasMore: boolean;
 
@@ -81,51 +82,91 @@ export const useRagStore = create<RagState>((set, get) => ({
 
   sendMessage: async (content: string) => {
     const { currentChatId, chats } = get();
-    set({ isLoading: true, loadingStatus: 'Thinking...' });
+    // Reset state
+    set({
+      isLoading: true,
+      loadingStatus: '생각 중...',
+      thinkingProcess: {
+        local: { status: 'running', logs: [] }, // Start with running to show UI immediately
+        server: { status: 'idle', logs: [] },
+        web: { status: 'idle', logs: [] }
+      }
+    });
 
     try {
-      // 1. Ask AI (this usually handles creation if no chat_id provided, 
-      // but in updated backend it returns answer + chat_id)
+      // 1. Ensure Chat Session Exists
+      let chatId = currentChatId;
+      if (!chatId) {
+        set({ loadingStatus: '새 채팅방 생성 중...' });
+        const newChat = await invoke<RagChat>('create_new_chat', { title: content.slice(0, 30) });
+        chatId = newChat.id;
+        set(state => ({
+          currentChatId: chatId,
+          chats: [newChat, ...state.chats]
+        }));
+      }
 
-      // But wait, frontend logic usually does:
-      // If no chat ID, call ask_ai(null, question) -> returns { answer, chat_id }
-      // Then we update state.
-
-      // However, to show "User Message" immediately, we might want to manually add it to state?
-      // Or rely on reload. 
-      // Let's Optimistic add user message.
-      const tempUserMsg: RagMessage = {
-        id: 'temp-user',
-        chat_id: currentChatId || 'temp',
+      // 2. Persist User Message
+      const userMsg = await invoke<RagMessage>('add_rag_message', {
+        chatId,
         role: 'user',
-        content,
-        timestamp: Date.now()
+        content
+      });
+
+      set(state => ({ messages: [...state.messages, userMsg] }));
+
+      // 3. Execute LangGraph Search
+      set({ loadingStatus: '문서 검색 및 분석 중...' });
+
+      const searchResults = await executeSearch(content, (partialState) => {
+        set(state => {
+          const currentThinking = state.thinkingProcess || {
+            local: { status: 'idle', logs: [] },
+            server: { status: 'idle', logs: [] },
+            web: { status: 'idle', logs: [] }
+          };
+          return {
+            thinkingProcess: { ...currentThinking, ...partialState }
+          };
+        });
+      });
+
+      // 4. Format Result (JSON for UI)
+      const localResults = searchResults.filter(r => r.source === 'local');
+      const serverResults = searchResults.filter(r => r.source === 'server');
+      const webResults = searchResults.filter(r => r.source === 'web');
+
+      const responsePayload = {
+        type: 'rag_search_result',
+        summary: `검색이 완료되었습니다. (총 ${localResults.length + serverResults.length + webResults.length}건 발견)`,
+        thinking_process: get().thinkingProcess,
+        results: {
+          local: localResults,
+          server: serverResults,
+          web: webResults
+        }
       };
 
-      set(state => ({ messages: [...state.messages, tempUserMsg] }));
-
-      const res = await invoke<{ answer: string; chat_id: string }>('ask_ai', {
-        chatId: currentChatId,
-        question: content
+      // 5. Persist Assistant Message
+      const assistantMsg = await invoke<RagMessage>('add_rag_message', {
+        chatId,
+        role: 'assistant',
+        content: JSON.stringify(responsePayload)
       });
 
-      // 2. Reload Messages (to get real IDs and AI response)
-      const messages = await invoke<RagMessage[]>('get_rag_messages', { chatId: res.chat_id });
-      messages.sort((a, b) => a.timestamp - b.timestamp);
-
-      // 3. Reload Chats (to update title or order)
-      await get().loadChats();
-
-      set({
-        currentChatId: res.chat_id,
-        messages,
+      // 6. Update UI
+      set(state => ({
+        messages: [...state.messages, assistantMsg],
         isLoading: false,
         loadingStatus: ''
-      });
+      }));
+
+      // Update chat timestamp in list
+      get().loadChats();
 
     } catch (error) {
       console.error('Failed to send message:', error);
-      set({ isLoading: false, loadingStatus: 'Error' });
+      set({ isLoading: false, loadingStatus: '오류 발생' });
     }
   },
 
