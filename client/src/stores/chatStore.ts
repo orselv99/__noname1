@@ -130,6 +130,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   addMessage: async (msg) => {
     const id = msg.id || uuidv4();
+
+    // ========================================================================
+    // [중복 메시지 체크]
+    // ========================================================================
+    // 같은 메시지 ID가 이미 존재하면 추가하지 않음
+    // P2P 특성상 같은 메시지가 여러 경로로 도착할 수 있기 때문에 필요
+    // ========================================================================
+    const existingMsgs = get().messages[msg.roomId] || [];
+    const existingMsg = existingMsgs.find(m => m.id === id);
+    if (existingMsg) {
+      console.log('[ChatStore] 중복 메시지 무시 (이미 존재함):', id);
+      return existingMsg; // 이미 존재하는 메시지 반환
+    }
+
     const timestamp = Date.now();
     const newMessage: ChatMessage = {
       id,
@@ -181,14 +195,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   getMessages: (roomId) => get().messages[roomId] || [],
 
+  // ============================================================================
   // [읽음 처리 구현]
-  // 채팅방 ID와 메시지 ID 목록을 받아, 해당 메시지들의 상태를 'read'로 업데이트합니다.
+  // ============================================================================
+  // P2P 채팅에서 '읽음' 상태를 관리하는 핵심 함수입니다.
+  //
+  // 동작 원리:
+  // 1. 상대방이 채팅창을 열면, ReadReceiptTrigger 컴포넌트가 안 읽은 메시지를 감지
+  // 2. ChatHandler.sendReadReceipt()를 호출하여 P2P로 '읽음 신호' 전송
+  // 3. 나(발신자)의 ChatHandler가 신호를 받아 이 markAsRead 함수 호출
+  // 4. 로컬 상태와 DB 모두 업데이트 → UI에 ✓✓ 표시!
+  //
+  // 왜 DB 저장이 필요한가?
+  // - 앱을 껐다 켜도 읽음 상태가 유지되어야 함
+  // - 채팅창이 닫혔다 다시 열려도 ✓✓가 보여야 함
+  // ============================================================================
   markAsRead: (roomId, messageIds) => {
+    // Step 1: 로컬 상태(메모리) 즉시 업데이트 (UI 반응성)
     set(state => {
       const roomMsgs = state.messages[roomId];
       if (!roomMsgs) return state;
 
-      // 변경 대상이 있는 경우에만 새로운 배열을 생성하여 업데이트 (불변성 유지)
+      // 해당 ID의 메시지들을 'read' 상태로 변경
       const newMsgs = roomMsgs.map(msg => {
         if (messageIds.includes(msg.id) && msg.status !== 'read') {
           return { ...msg, status: 'read' as const };
@@ -202,6 +230,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
           [roomId]: newMsgs
         }
       };
+    });
+
+    // Step 2: DB에 영구 저장 (앱 재시작 후에도 유지)
+    // 비동기로 실행하므로 UI 블로킹 없음
+    invoke('update_message_status', {
+      messageIds,
+      status: 'read'
+    }).then(() => {
+      console.log(`[ChatStore] ${messageIds.length}개 메시지 읽음 처리 완료 (DB 저장됨)`);
+    }).catch(e => {
+      console.error('[ChatStore] 읽음 상태 DB 저장 실패:', e);
+      // 실패해도 로컬 상태는 이미 업데이트됨 (낙관적 UI)
+      // 다음 번 로드 시 DB 상태와 동기화될 수 있음
     });
   }
 }));

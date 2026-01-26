@@ -19,21 +19,34 @@ class RoomManager {
 
     const allParticipants = Array.from(new Set([...participantIds, myId]));
 
-    // Check if 1:1 room already exists
+    // ========================================================================
+    // [1:1 채팅방 재사용 로직]
+    // ========================================================================
+    // 이미 존재하는 1:1 채팅방이 있다면 새로 만들지 않고 기존 방을 엽니다.
+    // ========================================================================
     if (allParticipants.length === 2) {
-      // Ensure rooms are loaded
-      if (Object.keys(useChatStore.getState().rooms).length === 0) {
-        await useChatStore.getState().loadRooms();
-      }
-
-      const rooms = Object.values(useChatStore.getState().rooms);
-      const existingRoom = rooms.find(r =>
+      // 1. 메모리 캐시에서 찾기
+      // useChatStore.getState().rooms는 Record<string, ChatRoom> 타입
+      let rooms = Object.values(useChatStore.getState().rooms);
+      let existingRoom = rooms.find((r: any) =>
         r.participants.length === 2 &&
-        r.participants.every(p => allParticipants.includes(p))
+        r.participants.every((p: string) => allParticipants.includes(p))
       );
 
+      // 2. 없으면 DB에서 다시 로드하고 다시 찾기 (동기화 문제 방지)
+      if (!existingRoom) {
+        console.log('[RoomManager] 메모리에 1:1 방 없음, DB 리로드 시도...');
+        await useChatStore.getState().loadRooms();
+
+        rooms = Object.values(useChatStore.getState().rooms);
+        existingRoom = rooms.find((r: any) =>
+          r.participants.length === 2 &&
+          r.participants.every((p: string) => allParticipants.includes(p))
+        );
+      }
+
       if (existingRoom) {
-        console.log('Reusing existing room:', existingRoom.id);
+        console.log('[RoomManager] 기존 1:1 방 재사용:', existingRoom.id);
         this.openChatWindow(existingRoom.id);
         this.connectToParticipants(participantIds);
         return;

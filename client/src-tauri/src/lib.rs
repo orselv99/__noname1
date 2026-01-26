@@ -141,13 +141,14 @@ pub fn run() {
       commands::content::delete_content_state,
       commands::content::clear_content_state,
       // ----------------------------------------------------------------
-      // 채팅 명령: Room, Message
+      // 채팅 명령: Room, Message, 읽음 처리
       // ----------------------------------------------------------------
       commands::chat::save_chat_room,
       commands::chat::list_chat_rooms,
       commands::chat::get_chat_room,
       commands::chat::save_chat_message,
-      commands::chat::get_chat_messages
+      commands::chat::get_chat_messages,
+      commands::chat::update_message_status // [읽음 처리용] 메시지 상태 업데이트
     ])
     // ====================================================================
     // 앱 초기화 콜백 (.setup)
