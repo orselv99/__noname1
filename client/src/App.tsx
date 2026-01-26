@@ -240,10 +240,12 @@ function AppContent() {
       setView('change_password');
     } else {
       showToast('Login successful', 'success');
-      // Fetch crew list immediately after login
-      useAuthStore.getState().fetchCrew(true);
 
+      // Only fetch crew list and connect to signaling when we have a valid token (online mode)
       if (data.access_token) {
+        // Fetch crew list (requires auth token for server request)
+        useAuthStore.getState().fetchCrew(true);
+
         // Connect to Signaling Server
         // TODO: Configurable URL
         signalingService.connect('ws://localhost:8080/api/v1/ws/signaling', data.user_id, data.access_token);

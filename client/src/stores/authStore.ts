@@ -176,10 +176,18 @@ export const useAuthStore = create<AuthState>()(
           get().setUser(lastUser);
 
           // 2. 토큰 갱신 시도 (온라인이면)
-          await get().refreshToken();
+          if (lastUser.refresh_token) {
+            await get().refreshToken();
+          }
 
-          // 3. Crew 목록 Fetch
-          await get().fetchCrew();
+          // 3. Crew 목록 Fetch (토큰이 유효할 때만)
+          const currentUser = get().user;
+          // @ts-ignore - access_token exists on LoginResponse
+          if (currentUser?.access_token) {
+            await get().fetchCrew();
+          } else {
+            console.log('[Auth] Skipping fetchCrew - no valid access token (offline mode)');
+          }
         } else {
           console.log('[Auth] No cached user found.');
         }

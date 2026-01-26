@@ -577,14 +577,28 @@ pub fn clear_saved_tenant(
 // ============================================================================
 
 /// 마지막 로그인한 사용자 조회 (자동 로그인용)
+///
+/// AuthState도 업데이트하여 list_documents 등 후속 명령이 작동하도록 함
 #[tauri::command]
 pub fn get_last_user(
+  state: State<'_, Mutex<AuthState>>,
   db_state: State<'_, Mutex<DatabaseState>>,
 ) -> Result<Option<LoginResponse>, String> {
   let db = db_state.lock().unwrap();
   if let Some(ref conn) = db.conn {
     match database::get_last_user(conn) {
       Ok(Some(user)) => {
+        // AuthState 업데이트 (토큰은 없지만 user_id, tenant_id 등은 설정)
+        {
+          let mut auth = state.lock().unwrap();
+          auth.token = None; // 토큰은 refresh_token으로 갱신 필요
+          auth.tenant_id = Some(user.tenant_id.clone());
+          auth.email = Some(user.email.clone());
+          auth.user_id = Some(user.id.clone());
+          auth.username = Some(user.username.clone());
+          auth.refresh_token = user.refresh_token.clone();
+        }
+
         // 전화번호 변환 (CSV → Vec)
         let phone_numbers = user
           .phone_numbers
