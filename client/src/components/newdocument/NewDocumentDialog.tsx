@@ -18,12 +18,13 @@
 
 import { useState } from 'react';
 import { safeInvoke } from '../../utils/safeInvoke';
-import { X, FileText, Sparkles, Loader2 } from 'lucide-react';
+import { X, FileText, Sparkles, Loader2, Upload } from 'lucide-react';
 import { ThinkingState } from '../ui/ThinkingAccordion';
 import { FolderItem, WebSearchResult, RagSearchResult } from './types';
 import { NewDocumentSidebar } from './NewDocumentSidebar';
 import { NewDocumentBlankMode } from './NewDocumentBlankMode';
 import { NewDocumentAiMode } from './NewDocumentAiMode';
+import { NewDocumentImportMode } from './NewDocumentImportMode';
 
 /**
  * NewDocumentDialog Props 정의
@@ -34,7 +35,17 @@ interface NewDocumentDialogProps {
   /** 닫기 핸들러 */
   onClose: () => void;
   /** 생성 핸들러 */
-  onCreate?: (data: { groupId: string; groupType: 'department' | 'project'; folderId?: string; template: string; title: string }) => void;
+  onCreate?: (data: {
+    groupId: string;
+    groupType: 'department' | 'project';
+    folderId?: string;
+    template: string;
+    title: string;
+    // 태그와 요약 정보도 부모 컴포넌트로 전달
+    tags?: string;
+    summary?: string;
+    content?: string; // AI 생성된 본문 내용 추가
+  }) => void;
   /** 폴더 생성 핸들러 */
   onCreateFolder?: (groupId: string, parentFolderId?: string) => void;
   /** 그룹 토글 핸들러 */
@@ -59,13 +70,17 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   const [selectedGroupId, setSelectedGroupId] = useState<string>(groups[0]?.id || '');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
-  // 모드 상태 ('blank' | 'ai')
-  const [creationMode, setCreationMode] = useState<'blank' | 'ai'>('blank');
+  // 모드 상태 ('blank': 기본, 'ai': AI 초안, 'import': 가져오기)
+  const [creationMode, setCreationMode] = useState<'blank' | 'ai' | 'import'>('blank');
 
-  // 기본 모드 상태
+  // 기본 모드 및 공통 상태
   const [selectedTemplate, setSelectedTemplate] = useState('blank');
   const [title, setTitle] = useState('');
   const [templateSearch, setTemplateSearch] = useState('');
+
+  // AI 모드 추가 정보 상태
+  const [tags, setTags] = useState(''); // 태그 (콤마로 구분)
+  const [summary, setSummary] = useState(''); // 문서 요약/개요
 
   // AI 모드 상태
   const [webSearchQuery, setWebSearchQuery] = useState('');
@@ -81,16 +96,17 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   const [webSearchResults, setWebSearchResults] = useState<WebSearchResult[]>([]);
   const [thinkingState, setThinkingState] = useState<ThinkingState | null>(null);
 
-  // 아코디언 상태 (AI 모드)
+  // 아코디언 상태 (AI 모드) - title, template, docs, web, resources
   const [accordionState, setAccordionState] = useState({
     title: true,
     template: true,
     docs: true,
-    web: true
+    web: true,
+    resources: true // 리소스 첨부 섹션 추가
   });
 
-  /** 아코디언 토글 */
-  const toggleAccordion = (section: 'title' | 'template' | 'docs' | 'web') => {
+  /** 아코디언 토글 함수 */
+  const toggleAccordion = (section: 'title' | 'template' | 'docs' | 'web' | 'resources') => {
     setAccordionState(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
@@ -116,9 +132,6 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
             return [];
           })
       ]);
-
-      console.log("Local search results:", localResults);
-      console.log("Server search results:", serverResults);
 
       // 결과 병합 및 소스 태깅
       const allResults = [
@@ -189,9 +202,7 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
         source: 'server'
       }));
 
-      // 상위 2개 자동 선택
-      const withSelection = mappedResults.map((r, i) => i < 2 ? { ...r, selected: true } : r);
-      setWebSearchResults(withSelection);
+      setWebSearchResults(mappedResults);
     } catch (error) {
       console.error("Web search failed", error);
     } finally {
@@ -206,10 +217,9 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   };
 
   /**
-   * AI 생성 시뮬레이션
-   * - 단계별 진행 상태(ThinkingState)를 업데이트하며 생성을 흉내냅니다.
+   * AI 초안 생성 호출
    */
-  const simulateAiGeneration = async () => {
+  const generateAiDraft = async (): Promise<string> => {
     setIsGenerating(true);
     setThinkingState({
       local: { status: 'pending', logs: [] },
@@ -217,45 +227,75 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
       web: { status: 'pending', logs: [] }
     });
 
-    // 1. 참조 문서 분석
+    // 1. 참조 문서 준비 (Thinking UI 업데이트)
     const selectedDocs = docSearchResults.filter(r => r.selected);
     if (selectedDocs.length > 0) {
-      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'running', logs: [{ message: `선택된 문서 ${selectedDocs.length}건 분석 중...` }] } }) : null);
-      await new Promise(r => setTimeout(r, 800));
-      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'done', logs: [{ message: `핵심 내용 추출 완료`, subItems: selectedDocs.map(d => d.title) }] } }) : null);
+      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'running', logs: [{ message: `선택된 문서 ${selectedDocs.length}건 준비 중...` }] } }) : null);
+      await new Promise(r => setTimeout(r, 600)); // 시각적 딜레이
+      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'done', logs: [{ message: `참조 문서 준비 완료`, subItems: selectedDocs.map(d => d.title) }] } }) : null);
     } else {
-      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'idle', logs: [{ message: '참조 문서 미사용' }] } }) : null);
+      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'idle', logs: [{ message: '참조 문서 없음' }] } }) : null);
     }
 
-    // 2. 웹 검색 결과 분석
+    // 2. 웹 검색 결과 준비 (Thinking UI 업데이트)
     const selectedWebResults = webSearchResults.filter(r => r.selected);
     if (selectedWebResults.length > 0) {
-      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'running', logs: [{ message: `선택된 웹 검색 결과 ${selectedWebResults.length}건 분석 중...` }] } }) : null);
-      await new Promise(r => setTimeout(r, 1000));
-      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'done', logs: [{ message: '핵심 정보 추출 완료', subItems: selectedWebResults.map(r => r.title) }] } }) : null);
+      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'running', logs: [{ message: `웹 검색 결과 ${selectedWebResults.length}건 준비 중...` }] } }) : null);
+      await new Promise(r => setTimeout(r, 600));
+      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'done', logs: [{ message: '웹 정보 준비 완료', subItems: selectedWebResults.map(r => r.title) }] } }) : null);
     } else {
-      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'idle', logs: [{ message: '웹 검색 결과 미사용' }] } }) : null);
+      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'idle', logs: [{ message: '웹 검색 결과 없음' }] } }) : null);
     }
 
-    // 3. 초안 작성
-    setThinkingState(prev => prev ? ({ ...prev, server: { status: 'running', logs: [{ message: '초안 작성 중...' }] } }) : null);
-    await new Promise(r => setTimeout(r, 1500));
-    setThinkingState(prev => prev ? ({ ...prev, server: { status: 'done', logs: [{ message: '초안 생성 완료' }] } }) : null);
+    // 3. AI 생성 요청
+    setThinkingState(prev => prev ? ({ ...prev, server: { status: 'running', logs: [{ message: 'Gemma 2 모델이 초안을 작성하고 있습니다... (약 10~30초 소요)' }] } }) : null);
 
-    setIsGenerating(false);
-    return "AI로 생성된 문서 내용입니다...";
+    try {
+      const draftContent = await safeInvoke<string>('generate_draft', {
+        title,
+        tags: tags || undefined,
+        summary: summary || undefined,
+        template: selectedTemplate,
+        referenceDocs: selectedDocs.map(d => ({ title: d.title, content: d.snippet })),
+        webResults: selectedWebResults.map(d => ({ title: d.title, content: d.snippet }))
+      });
+
+      setThinkingState(prev => prev ? ({ ...prev, server: { status: 'done', logs: [{ message: '초안 생성 완료!' }] } }) : null);
+      return draftContent;
+
+    } catch (error) {
+      console.error("AI Generation failed:", error);
+      // 'error' status is not supported, so use 'idle' or 'done' with error message
+      setThinkingState(prev => prev ? ({ ...prev, server: { status: 'idle', logs: [{ message: '생성 실패: ' + String(error) }] } }) : null);
+      throw error;
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   /**
    * 문서 생성 핸들러
    */
   const handleCreate = async () => {
+    // 가져오기 모드일 때는 별도 로직 (아직 미구현이므로 리턴)
+    if (creationMode === 'import') {
+      alert("문서 가져오기 기능은 아직 준비 중입니다.");
+      return;
+    }
+
     if (!title.trim() || !selectedGroupId) return;
     const group = groups.find(g => g.id === selectedGroupId);
     if (!group) return;
 
+    let generatedContent = '';
+
     if (creationMode === 'ai') {
-      await simulateAiGeneration();
+      try {
+        generatedContent = await generateAiDraft();
+      } catch (e) {
+        alert("AI 초안 생성에 실패했습니다. 다시 시도해주세요.");
+        return; // 생성 중단
+      }
     }
 
     onCreate?.({
@@ -263,11 +303,16 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
       groupType: group.type,
       folderId: selectedFolderId || undefined,
       template: creationMode === 'ai' ? 'blank' : selectedTemplate,
-      title: title.trim()
+      title: title.trim(),
+      tags: tags,
+      summary: summary,
+      content: generatedContent || undefined
     });
 
     // 상태 초기화
     setTitle('');
+    setTags('');
+    setSummary('');
     setSelectedTemplate('blank');
     setTemplateSearch('');
     setCreationMode('blank');
@@ -306,7 +351,8 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
     }
 
     // 일반 생성 실행
-    if (e.key === 'Enter' && title.trim() && !isGenerating) {
+    if (e.key === 'Enter' && title.trim() && !isGenerating && creationMode !== 'import') {
+      // TextArea 등에서 엔터키 입력 시 생성을 막기 위해 조건 추가 필요할 수 있음
       handleCreate();
     } else if (e.key === 'Escape' && !isGenerating) {
       onClose();
@@ -359,6 +405,16 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
               <Sparkles size={16} />
               AI 초안 작성
             </button>
+            <button
+              onClick={() => setCreationMode('import')}
+              disabled={isGenerating}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${creationMode === 'import'
+                ? 'border-green-500 text-green-400'
+                : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+            >
+              <Upload size={16} />
+              문서 가져오기
+            </button>
           </div>
         </div>
 
@@ -369,7 +425,7 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
             groups={groups}
             selectedGroupId={selectedGroupId}
             selectedFolderId={selectedFolderId}
-            creationMode={creationMode}
+            creationMode={creationMode as any}
             onSelectGroup={(id) => {
               setSelectedGroupId(id);
               setSelectedFolderId(null);
@@ -386,40 +442,56 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
           {/* 우측 콘텐츠: 입력 폼 */}
           <div className="flex-1 flex flex-col min-h-0 bg-white/5">
             {/* 스크롤 가능한 메인 입력 영역 */}
-            <div className="flex-1 overflow-y-scroll custom-scrollbar p-5">
+            <div className={`flex-1 overflow-y-scroll custom-scrollbar ${creationMode === 'import' ? '' : 'p-5'}`}>
 
               {/* 모드별 콘텐츠 렌더링 */}
-              {creationMode === 'blank' ? (
+              {creationMode === 'blank' && (
                 <NewDocumentBlankMode
                   selectedTemplate={selectedTemplate}
                   setSelectedTemplate={setSelectedTemplate}
                   templateSearch={templateSearch}
                   setTemplateSearch={setTemplateSearch}
                 />
-              ) : (
+              )}
+
+              {creationMode === 'ai' && (
                 <NewDocumentAiMode
+                  // 상태 전달
                   title={title}
                   setTitle={setTitle}
+                  tags={tags}
+                  setTags={setTags}
+                  summary={summary}
+                  setSummary={setSummary}
+
                   selectedTemplate={selectedTemplate}
                   setSelectedTemplate={setSelectedTemplate}
+
                   accordionState={accordionState}
                   toggleAccordion={toggleAccordion}
+
                   docSearchQuery={docSearchQuery}
                   setDocSearchQuery={setDocSearchQuery}
                   docSearchResults={docSearchResults}
                   handleDocSearch={handleDocSearch}
                   toggleDocResult={toggleDocResult}
                   isSearchingDocs={isSearchingDocs}
+
                   webSearchQuery={webSearchQuery}
                   setWebSearchQuery={setWebSearchQuery}
                   webSearchResults={webSearchResults}
                   handleWebSearch={handleWebSearch}
                   toggleWebResult={toggleWebResult}
                   isSearchingWeb={isSearchingWeb}
+
                   isGenerating={isGenerating}
                   thinkingState={thinkingState}
                   onKeyDown={handleKeyDown}
                 />
+              )}
+
+              {creationMode === 'import' && (
+                <NewDocumentImportMode />
               )}
             </div>
 
@@ -453,25 +525,39 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
           >
             취소
           </button>
-          <button
-            onClick={handleCreate}
-            disabled={!title.trim() || isGenerating}
-            className={`flex-1 py-2.5 px-4 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2 ${creationMode === 'ai'
-              ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/20'
-              : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20'
-              }`}
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                작성 중...
-              </>
-            ) : (
-              creationMode === 'ai' ? <>
-                <Sparkles size={16} /> AI로 초안 작성
-              </> : '문서 생성'
-            )}
-          </button>
+
+          {/* 생성 버튼 (가져오기 모드는 별도 버튼 텍스트) */}
+          {creationMode !== 'import' && (
+            <button
+              onClick={handleCreate}
+              disabled={!title.trim() || isGenerating}
+              className={`flex-1 py-2.5 px-4 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2 ${creationMode === 'ai'
+                ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-900/20'
+                : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20'
+                }`}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  작성 중...
+                </>
+              ) : (
+                creationMode === 'ai' ? <>
+                  <Sparkles size={16} /> AI로 초안 작성
+                </> : '문서 생성'
+              )}
+            </button>
+          )}
+
+          {/* 가져오기 모드일 때 버튼 */}
+          {creationMode === 'import' && (
+            <button
+              onClick={() => alert("준비 중...")}
+              className="flex-1 py-2.5 px-4 rounded-lg text-white text-sm font-medium transition-colors bg-green-600 hover:bg-green-500 shadow-green-900/20 flex items-center justify-center gap-2"
+            >
+              <Upload size={16} /> 불러오기
+            </button>
+          )}
         </div>
       </div>
     </div>

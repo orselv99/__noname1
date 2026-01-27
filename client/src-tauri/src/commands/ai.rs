@@ -798,6 +798,8 @@ Document:
     Some(encrypt_content(&user_id, &summary)?)
   } else {
     None
+
+
   };
 
   // Encrypt size and created_at
@@ -861,3 +863,113 @@ Document:
 }
 
 // rand module removed
+
+// ============================================================================
+// AI Draft Generation
+// ============================================================================
+
+/// AI 초안 생성을 위한 참고 문서 구조체
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
+pub struct DraftReference {
+    pub title: String,
+    pub content: String, // Snippet or Full content
+}
+
+/// AI 초안 생성 커맨드
+///
+/// 사용자가 입력한 제목, 태그, 요약 및 선택한 참고 문서를 바탕으로
+/// Gemma 2 모델을 사용하여 문서 초안을 생성합니다.
+#[tauri::command]
+pub async fn generate_draft(
+    title: String,
+    tags: Option<String>,
+    summary: Option<String>,
+    template: String,
+    reference_docs: Vec<DraftReference>,
+    web_results: Vec<DraftReference>,
+) -> Result<String, String> {
+    println!("[AI] Generating draft for: {}", title);
+
+    // 1. 프롬프트 구성
+    // 시스템 역할 및 작업 정의
+    let mut prompt_content = String::new();
+    
+    prompt_content.push_str("당신은 전문적인 테크니컬 라이터입니다. \n");
+    prompt_content.push_str("다음 정보를 바탕으로 체계적이고 전문적인 문서 초안을 작성해주세요.\n\n");
+
+    // 메타데이터 입력
+    prompt_content.push_str(&format!("## 문서 정보\n"));
+    prompt_content.push_str(&format!("- 제목: {}\n", title));
+    if let Some(t) = tags {
+        prompt_content.push_str(&format!("- 핵심 키워드(태그): {}\n", t));
+    }
+    if let Some(s) = summary {
+        prompt_content.push_str(&format!("- 문서 개요/요청사항: {}\n", s));
+    }
+    prompt_content.push_str(&format!("- 템플릿/형식: {}\n\n", template));
+
+    // 참고 문서 입력
+    if !reference_docs.is_empty() {
+        prompt_content.push_str("## 참고 내부 문서\n");
+        for (i, doc) in reference_docs.iter().enumerate() {
+            prompt_content.push_str(&format!("{}. [{}] {}\n", i + 1, doc.title, doc.content));
+        }
+        prompt_content.push_str("\n");
+    }
+
+    // 웹 검색 결과 입력
+    if !web_results.is_empty() {
+        prompt_content.push_str("## 참고 웹 검색 결과\n");
+        for (i, doc) in web_results.iter().enumerate() {
+            prompt_content.push_str(&format!("{}. [{}] {}\n", i + 1, doc.title, doc.content));
+        }
+        prompt_content.push_str("\n");
+    }
+
+    // 작성 지침
+    prompt_content.push_str("## 작성 지침\n");
+    prompt_content.push_str("1. 언어: 자연스럽고 전문적인 한국어로 작성하세요.\n");
+    prompt_content.push_str("2. 형식: 마크다운(Markdown) 포맷을 사용하세요. (헤더, 리스트, 강조 등 적절히 활용)\n");
+    prompt_content.push_str("3. 구조: 선택된 템플릿 형식에 맞춰 논리적인 구조(서론, 본론, 결론 등)를 갖추세요.\n");
+    prompt_content.push_str("4. 내용: 제공된 '문서 개요'와 '참고 자료'를 적극 반영하여 구체적이고 풍부한 내용을 작성하세요.\n");
+    prompt_content.push_str("5. 참조: 참고한 자료가 있다면 본문 중에 적절히 인용하거나 문서 끝에 참고 문헌 섹션을 만드세요.\n");
+    prompt_content.push_str("6. 스타일: 명확하고 간결하며 객관적인 어조를 유지하세요.\n");
+
+    // Gemma 2 프롬프트 포맷 적용
+    let prompt = format!(
+        r#"<start_of_turn>user
+{}<end_of_turn>
+<start_of_turn>model
+"#,
+        prompt_content
+    );
+
+    println!("[AI] Draft Prompt generated (length: {})", prompt.len());
+
+    // 2. LLM 요청
+    let client = reqwest::Client::new();
+    let gen_res = client
+        .post(&format!("{}/completion", config::get_completion_url()))
+        .json(&serde_json::json!({
+            "prompt": prompt,
+            "n_predict": 4096, // 긴 문서 생성을 위해 충분히 확보
+            "temperature": 0.7, // 창의적인 작성을 위해 약간 높임
+            "top_k": 40,
+            "top_p": 0.9,
+            "stop": ["<end_of_turn>"]
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Generation request failed: {}", e))?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Failed to parse generation response: {}", e))?;
+
+    let content = gen_res["content"]
+        .as_str()
+        .ok_or("No content in response")?
+        .to_string();
+
+    Ok(content)
+}
+
