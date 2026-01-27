@@ -9,7 +9,7 @@
  */
 
 import { PenLine, ChevronRight, ChevronDown, FileText, Database, Globe, Paperclip, Image as ImageIcon, Mic } from 'lucide-react';
-import { ThinkingAccordion, ThinkingState } from '../ui/ThinkingAccordion';
+import { DraftThinkingAccordion, DraftThinkingState } from './DraftThinkingAccordion';
 import { frequentTemplates, WebSearchResult } from './types';
 import { NewDocumentAiDocSearch } from './NewDocumentAiDocSearch';
 import { NewDocumentAiWebSearch } from './NewDocumentAiWebSearch';
@@ -71,7 +71,7 @@ interface NewDocumentAiModeProps {
 
   // 공통 상태
   isGenerating: boolean;
-  thinkingState: ThinkingState | null;
+  thinkingState: DraftThinkingState | null;
   onKeyDown: (e: React.KeyboardEvent) => void;
 }
 
@@ -366,11 +366,12 @@ export const NewDocumentAiMode = ({
       {/* 생각 과정 UI (AI 생성 시 표시) */}
       {thinkingState && (
         <div className="pt-2">
-          <ThinkingAccordion state={thinkingState} status="AI Drafting Process" defaultExpanded={true} />
+          <DraftThinkingAccordion state={thinkingState} status="AI Drafting Process" defaultExpanded={true} />
         </div>
       )}
     </div>
   );
 };
+
 
 NewDocumentAiMode.displayName = 'NewDocumentAiMode';

@@ -881,6 +881,7 @@ pub struct DraftReference {
 /// Gemma 2 모델을 사용하여 문서 초안을 생성합니다.
 #[tauri::command]
 pub async fn generate_draft(
+    auth_state: State<'_, Mutex<AuthState>>,
     title: String,
     tags: Option<String>,
     summary: Option<String>,
@@ -890,86 +891,53 @@ pub async fn generate_draft(
 ) -> Result<String, String> {
     println!("[AI] Generating draft for: {}", title);
 
-    // 1. 프롬프트 구성
-    // 시스템 역할 및 작업 정의
-    let mut prompt_content = String::new();
-    
-    prompt_content.push_str("당신은 전문적인 테크니컬 라이터입니다. \n");
-    prompt_content.push_str("다음 정보를 바탕으로 체계적이고 전문적인 문서 초안을 작성해주세요.\n\n");
+    // Get Auth Token
+    let token = {
+        let auth = auth_state.lock().unwrap();
+        auth.token.clone().ok_or("Not authenticated")?
+    };
 
-    // 메타데이터 입력
-    prompt_content.push_str(&format!("## 문서 정보\n"));
-    prompt_content.push_str(&format!("- 제목: {}\n", title));
-    if let Some(t) = tags {
-        prompt_content.push_str(&format!("- 핵심 키워드(태그): {}\n", t));
-    }
-    if let Some(s) = summary {
-        prompt_content.push_str(&format!("- 문서 개요/요청사항: {}\n", s));
-    }
-    prompt_content.push_str(&format!("- 템플릿/형식: {}\n\n", template));
+    // Prepare JSON payload for the server
+    let payload = serde_json::json!({
+        "title": title,
+        "tags": tags.unwrap_or_default(),
+        "summary": summary.unwrap_or_default(),
+        "template": template,
+        "reference_docs": reference_docs,
+        "web_results": web_results
+    });
 
-    // 참고 문서 입력
-    if !reference_docs.is_empty() {
-        prompt_content.push_str("## 참고 내부 문서\n");
-        for (i, doc) in reference_docs.iter().enumerate() {
-            prompt_content.push_str(&format!("{}. [{}] {}\n", i + 1, doc.title, doc.content));
-        }
-        prompt_content.push_str("\n");
-    }
-
-    // 웹 검색 결과 입력
-    if !web_results.is_empty() {
-        prompt_content.push_str("## 참고 웹 검색 결과\n");
-        for (i, doc) in web_results.iter().enumerate() {
-            prompt_content.push_str(&format!("{}. [{}] {}\n", i + 1, doc.title, doc.content));
-        }
-        prompt_content.push_str("\n");
-    }
-
-    // 작성 지침
-    prompt_content.push_str("## 작성 지침\n");
-    prompt_content.push_str("1. 언어: 자연스럽고 전문적인 한국어로 작성하세요.\n");
-    prompt_content.push_str("2. 형식: 마크다운(Markdown) 포맷을 사용하세요. (헤더, 리스트, 강조 등 적절히 활용)\n");
-    prompt_content.push_str("3. 구조: 선택된 템플릿 형식에 맞춰 논리적인 구조(서론, 본론, 결론 등)를 갖추세요.\n");
-    prompt_content.push_str("4. 내용: 제공된 '문서 개요'와 '참고 자료'를 적극 반영하여 구체적이고 풍부한 내용을 작성하세요.\n");
-    prompt_content.push_str("5. 참조: 참고한 자료가 있다면 본문 중에 적절히 인용하거나 문서 끝에 참고 문헌 섹션을 만드세요.\n");
-    prompt_content.push_str("6. 스타일: 명확하고 간결하며 객관적인 어조를 유지하세요.\n");
-
-    // Gemma 2 프롬프트 포맷 적용
-    let prompt = format!(
-        r#"<start_of_turn>user
-{}<end_of_turn>
-<start_of_turn>model
-"#,
-        prompt_content
-    );
-
-    println!("[AI] Draft Prompt generated (length: {})", prompt.len());
-
-    // 2. LLM 요청
+    // Call the server API (POST /api/v1/draft)
     let client = reqwest::Client::new();
-    let gen_res = client
-        .post(&format!("{}/completion", config::get_completion_url()))
-        .json(&serde_json::json!({
-            "prompt": prompt,
-            "n_predict": 4096, // 긴 문서 생성을 위해 충분히 확보
-            "temperature": 0.7, // 창의적인 작성을 위해 약간 높임
-            "top_k": 40,
-            "top_p": 0.9,
-            "stop": ["<end_of_turn>"]
-        }))
+    let url = format!("{}/draft", config::get_completion_url()); // http://localhost:8080/api/v1/draft
+
+    println!("[AI] Sending draft generation request to {}", url);
+
+    let res = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("Generation request failed: {}", e))?
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("Failed to parse generation response: {}", e))?;
+        .map_err(|e| format!("Draft generation request failed: {}", e))?;
+
+    let raw_body = res.text().await.map_err(|e| format!("Failed to read response body: {}", e))?;
+    println!("[AI] Response: {} chars", raw_body.len());
+
+    // Parse response
+    let gen_res: serde_json::Value = serde_json::from_str(&raw_body)
+        .map_err(|e| format!("Failed to parse server response: {}, body: {}", e, raw_body))?;
+
+    if let Some(error) = gen_res["error"].as_str() {
+        return Err(format!("Server returned error: {}", error));
+    }
 
     let content = gen_res["content"]
         .as_str()
-        .ok_or("No content in response")?
+        .ok_or_else(|| format!("No content in response: {}", raw_body))?
         .to_string();
 
     Ok(content)
 }
+
 

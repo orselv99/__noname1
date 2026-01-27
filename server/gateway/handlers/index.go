@@ -169,3 +169,69 @@ func (h *IndexHandler) GenerateEmbedding(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"embedding": resp.Embedding})
 }
+
+// ----------------------------------------------------------------------------
+// 문서 초안 (Draft) 생성 핸들러
+// ----------------------------------------------------------------------------
+
+// DraftReference: 초안 생성 참조 문서 (Gateway <-> Front)
+type DraftReference struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+// GenerateDraftRequest: 초안 생성 요청 바디
+type GenerateDraftRequest struct {
+	Title         string           `json:"title"`
+	Tags          string           `json:"tags"`
+	Summary       string           `json:"summary"`
+	Template      string           `json:"template"`
+	ReferenceDocs []DraftReference `json:"reference_docs"`
+	WebResults    []DraftReference `json:"web_results"`
+}
+
+func (h *IndexHandler) GenerateDraft(c *gin.Context) {
+	var req GenerateDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 10분 타임아웃 (긴 생성 시간 고려)
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	defer cancel()
+
+	// 참조 문서 변환 (JSON -> Proto)
+	var refDocsProto []*pb.DraftReference
+	for _, d := range req.ReferenceDocs {
+		refDocsProto = append(refDocsProto, &pb.DraftReference{
+			Title:   d.Title,
+			Content: d.Content,
+		})
+	}
+
+	var webResultsProto []*pb.DraftReference
+	for _, d := range req.WebResults {
+		webResultsProto = append(webResultsProto, &pb.DraftReference{
+			Title:   d.Title,
+			Content: d.Content,
+		})
+	}
+
+	// gRPC 호출
+	resp, err := h.client.GenerateDraft(ctx, &pb.GenerateDraftRequest{
+		Title:         req.Title,
+		Tags:          req.Tags,
+		Summary:       req.Summary,
+		Template:      req.Template,
+		ReferenceDocs: refDocsProto,
+		WebResults:    webResultsProto,
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"content": resp.Content})
+}

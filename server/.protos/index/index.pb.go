@@ -706,6 +706,192 @@ func (x *GenerateEmbeddingResponse) GetEmbedding() []float32 {
 	return nil
 }
 
+// 참조 문서 정보 (DraftReference)
+// 초안 생성 시 AI가 참고할 문서나 웹 검색 결과입니다.
+type DraftReference struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`     // 참조 문서 제목
+	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"` // 참조 내용 (요약본 혹은 발췌문)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DraftReference) Reset() {
+	*x = DraftReference{}
+	mi := &file_index_index_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftReference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftReference) ProtoMessage() {}
+
+func (x *DraftReference) ProtoReflect() protoreflect.Message {
+	mi := &file_index_index_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftReference.ProtoReflect.Descriptor instead.
+func (*DraftReference) Descriptor() ([]byte, []int) {
+	return file_index_index_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DraftReference) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *DraftReference) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+// 초안 생성 요청 (GenerateDraftRequest)
+// 사용자가 입력한 정보를 바탕으로 AI에게 초안 작성을 요청하는 메시지입니다.
+type GenerateDraftRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`                                      // 작성할 문서의 제목
+	Tags          string                 `protobuf:"bytes,2,opt,name=tags,proto3" json:"tags,omitempty"`                                        // 관련 태그 (콤마로 구분된 문자열, 선택 사항)
+	Summary       string                 `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`                                  // 사용자가 작성한 요약 혹은 의도 (선택 사항)
+	Template      string                 `protobuf:"bytes,4,opt,name=template,proto3" json:"template,omitempty"`                                // 사용할 템플릿 이름 (예: "Technical Specs")
+	ReferenceDocs []*DraftReference      `protobuf:"bytes,5,rep,name=reference_docs,json=referenceDocs,proto3" json:"reference_docs,omitempty"` // 사용자가 선택한 로컬 참조 문서 목록
+	WebResults    []*DraftReference      `protobuf:"bytes,6,rep,name=web_results,json=webResults,proto3" json:"web_results,omitempty"`          // 웹 검색 결과 목록
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerateDraftRequest) Reset() {
+	*x = GenerateDraftRequest{}
+	mi := &file_index_index_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateDraftRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateDraftRequest) ProtoMessage() {}
+
+func (x *GenerateDraftRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_index_index_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateDraftRequest.ProtoReflect.Descriptor instead.
+func (*GenerateDraftRequest) Descriptor() ([]byte, []int) {
+	return file_index_index_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GenerateDraftRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *GenerateDraftRequest) GetTags() string {
+	if x != nil {
+		return x.Tags
+	}
+	return ""
+}
+
+func (x *GenerateDraftRequest) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *GenerateDraftRequest) GetTemplate() string {
+	if x != nil {
+		return x.Template
+	}
+	return ""
+}
+
+func (x *GenerateDraftRequest) GetReferenceDocs() []*DraftReference {
+	if x != nil {
+		return x.ReferenceDocs
+	}
+	return nil
+}
+
+func (x *GenerateDraftRequest) GetWebResults() []*DraftReference {
+	if x != nil {
+		return x.WebResults
+	}
+	return nil
+}
+
+// 초안 생성 응답 (GenerateDraftResponse)
+// AI가 작성한 마크다운 형식의 문서 초안입니다.
+type GenerateDraftResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"` // 생성된 마크다운 내용
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerateDraftResponse) Reset() {
+	*x = GenerateDraftResponse{}
+	mi := &file_index_index_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateDraftResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateDraftResponse) ProtoMessage() {}
+
+func (x *GenerateDraftResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_index_index_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateDraftResponse.ProtoReflect.Descriptor instead.
+func (*GenerateDraftResponse) Descriptor() ([]byte, []int) {
+	return file_index_index_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GenerateDraftResponse) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
 var File_index_index_proto protoreflect.FileDescriptor
 
 const file_index_index_proto_rawDesc = "" +
@@ -761,12 +947,26 @@ const file_index_index_proto_rawDesc = "" +
 	"\x18GenerateEmbeddingRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\"9\n" +
 	"\x19GenerateEmbeddingResponse\x12\x1c\n" +
-	"\tembedding\x18\x01 \x03(\x02R\tembedding2\xc2\x02\n" +
+	"\tembedding\x18\x01 \x03(\x02R\tembedding\"@\n" +
+	"\x0eDraftReference\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\"\xec\x01\n" +
+	"\x14GenerateDraftRequest\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12\x12\n" +
+	"\x04tags\x18\x02 \x01(\tR\x04tags\x12\x18\n" +
+	"\asummary\x18\x03 \x01(\tR\asummary\x12\x1a\n" +
+	"\btemplate\x18\x04 \x01(\tR\btemplate\x12<\n" +
+	"\x0ereference_docs\x18\x05 \x03(\v2\x15.index.DraftReferenceR\rreferenceDocs\x126\n" +
+	"\vweb_results\x18\x06 \x03(\v2\x15.index.DraftReferenceR\n" +
+	"webResults\"1\n" +
+	"\x15GenerateDraftResponse\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent2\x8e\x03\n" +
 	"\fIndexService\x12J\n" +
 	"\rIndexDocument\x12\x1b.index.IndexDocumentRequest\x1a\x1c.index.IndexDocumentResponse\x12P\n" +
 	"\x0fSearchDocuments\x12\x1d.index.SearchDocumentsRequest\x1a\x1e.index.SearchDocumentsResponse\x12<\n" +
 	"\rSyncDocuments\x12\x12.index.SyncRequest\x1a\x13.index.SyncResponse(\x010\x01\x12V\n" +
-	"\x11GenerateEmbedding\x12\x1f.index.GenerateEmbeddingRequest\x1a .index.GenerateEmbeddingResponseB\x16Z\x14server/.protos/indexb\x06proto3"
+	"\x11GenerateEmbedding\x12\x1f.index.GenerateEmbeddingRequest\x1a .index.GenerateEmbeddingResponse\x12J\n" +
+	"\rGenerateDraft\x12\x1b.index.GenerateDraftRequest\x1a\x1c.index.GenerateDraftResponseB\x16Z\x14server/.protos/indexb\x06proto3"
 
 var (
 	file_index_index_proto_rawDescOnce sync.Once
@@ -780,7 +980,7 @@ func file_index_index_proto_rawDescGZIP() []byte {
 	return file_index_index_proto_rawDescData
 }
 
-var file_index_index_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_index_index_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_index_index_proto_goTypes = []any{
 	(*TagEvidence)(nil),               // 0: index.TagEvidence
 	(*Document)(nil),                  // 1: index.Document
@@ -793,6 +993,9 @@ var file_index_index_proto_goTypes = []any{
 	(*SyncResponse)(nil),              // 8: index.SyncResponse
 	(*GenerateEmbeddingRequest)(nil),  // 9: index.GenerateEmbeddingRequest
 	(*GenerateEmbeddingResponse)(nil), // 10: index.GenerateEmbeddingResponse
+	(*DraftReference)(nil),            // 11: index.DraftReference
+	(*GenerateDraftRequest)(nil),      // 12: index.GenerateDraftRequest
+	(*GenerateDraftResponse)(nil),     // 13: index.GenerateDraftResponse
 }
 var file_index_index_proto_depIdxs = []int32{
 	0,  // 0: index.Document.tag_evidences:type_name -> index.TagEvidence
@@ -802,19 +1005,23 @@ var file_index_index_proto_depIdxs = []int32{
 	5,  // 4: index.SearchDocumentsResponse.results:type_name -> index.SearchResult
 	1,  // 5: index.SyncRequest.changes:type_name -> index.Document
 	1,  // 6: index.SyncResponse.updates:type_name -> index.Document
-	2,  // 7: index.IndexService.IndexDocument:input_type -> index.IndexDocumentRequest
-	4,  // 8: index.IndexService.SearchDocuments:input_type -> index.SearchDocumentsRequest
-	7,  // 9: index.IndexService.SyncDocuments:input_type -> index.SyncRequest
-	9,  // 10: index.IndexService.GenerateEmbedding:input_type -> index.GenerateEmbeddingRequest
-	3,  // 11: index.IndexService.IndexDocument:output_type -> index.IndexDocumentResponse
-	6,  // 12: index.IndexService.SearchDocuments:output_type -> index.SearchDocumentsResponse
-	8,  // 13: index.IndexService.SyncDocuments:output_type -> index.SyncResponse
-	10, // 14: index.IndexService.GenerateEmbedding:output_type -> index.GenerateEmbeddingResponse
-	11, // [11:15] is the sub-list for method output_type
-	7,  // [7:11] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	11, // 7: index.GenerateDraftRequest.reference_docs:type_name -> index.DraftReference
+	11, // 8: index.GenerateDraftRequest.web_results:type_name -> index.DraftReference
+	2,  // 9: index.IndexService.IndexDocument:input_type -> index.IndexDocumentRequest
+	4,  // 10: index.IndexService.SearchDocuments:input_type -> index.SearchDocumentsRequest
+	7,  // 11: index.IndexService.SyncDocuments:input_type -> index.SyncRequest
+	9,  // 12: index.IndexService.GenerateEmbedding:input_type -> index.GenerateEmbeddingRequest
+	12, // 13: index.IndexService.GenerateDraft:input_type -> index.GenerateDraftRequest
+	3,  // 14: index.IndexService.IndexDocument:output_type -> index.IndexDocumentResponse
+	6,  // 15: index.IndexService.SearchDocuments:output_type -> index.SearchDocumentsResponse
+	8,  // 16: index.IndexService.SyncDocuments:output_type -> index.SyncResponse
+	10, // 17: index.IndexService.GenerateEmbedding:output_type -> index.GenerateEmbeddingResponse
+	13, // 18: index.IndexService.GenerateDraft:output_type -> index.GenerateDraftResponse
+	14, // [14:19] is the sub-list for method output_type
+	9,  // [9:14] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_index_index_proto_init() }
@@ -828,7 +1035,7 @@ func file_index_index_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_index_index_proto_rawDesc), len(file_index_index_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

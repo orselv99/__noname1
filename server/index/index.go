@@ -552,7 +552,6 @@ type EmbeddingResponse struct {
 }
 
 // 임베딩 생성 함수 (Llama Server 연동)
-// 임베딩 생성 함수 (Llama Server 연동)
 func generateEmbedding(text string) ([]float32, error) {
 	// Clean input text (remove markdown, HTML, etc.)
 	cleanedText := cleanInputText(text)
@@ -811,4 +810,169 @@ func (s *server) GenerateEmbedding(ctx context.Context, req *pb.GenerateEmbeddin
 		return nil, err
 	}
 	return &pb.GenerateEmbeddingResponse{Embedding: vec}, nil
+}
+
+// ----------------------------------------------------------------------------
+// 문서 초안 (Draft) 생성 로직
+// ----------------------------------------------------------------------------
+
+// GenerateDraftRequest 구조체 (LLM 요청용)
+type DraftCompletionRequest struct {
+	Prompt      string   `json:"prompt"`
+	NPredict    int      `json:"n_predict"`
+	Temperature float32  `json:"temperature"`
+	TopK        int      `json:"top_k"`
+	TopP        float32  `json:"top_p"`
+	Stop        []string `json:"stop"`
+}
+
+// GenerateDraftResponse 구조체 (LLM 응답용)
+type DraftCompletionResponse struct {
+	ID      string             `json:"id"`
+	Object  string             `json:"object"`
+	Created int64              `json:"created"`
+	Model   string             `json:"model"`
+	Choices []CompletionChoice `json:"choices"`
+	Content string             `json:"content"` // For some quantized models (e.g. Q4_K_M)
+	Usage   *CompletionUsage   `json:"usage,omitempty"`
+}
+
+// GenerateDraft RPC 구현
+// 클라이언트로부터 받은 메타데이터와 참조 문서를 바탕으로 AI 초안을 생성합니다.
+func (s *server) GenerateDraft(ctx context.Context, req *pb.GenerateDraftRequest) (*pb.GenerateDraftResponse, error) {
+	fmt.Printf("DEBUG: Generating draft for title='%s' template='%s'\n", req.Title, req.Template)
+
+	// 1. 프롬프트 구성 (Korean)
+	// 역할 부여: 전문 테크니컬 라이터
+	var promptContent strings.Builder
+	promptContent.WriteString("당신은 전문적인 테크니컬 라이터입니다. \n")
+	promptContent.WriteString("다음 정보를 바탕으로 체계적이고 전문적인 문서 초안을 작성해주세요.\n\n")
+
+	// 1-1. 문서 메타데이터
+	promptContent.WriteString(fmt.Sprintf("## 문서 정보\n- 제목: %s\n", req.Title))
+	if req.Tags != "" {
+		promptContent.WriteString(fmt.Sprintf("- 태그: %s\n", req.Tags))
+	}
+	if req.Summary != "" {
+		promptContent.WriteString(fmt.Sprintf("- 요약/의도: %s\n", req.Summary))
+	}
+	promptContent.WriteString(fmt.Sprintf("- 템플릿/형식: %s\n\n", req.Template))
+
+	// 1-2. 참조 문서 (Local RAG)
+	if len(req.ReferenceDocs) > 0 {
+		promptContent.WriteString("## 내부 참조 문서 (Local Knowledge)\n")
+		promptContent.WriteString("작성 시 다음 내부 문서들의 내용과 스타일을 적극적으로 반영하세요:\n\n")
+		for i, doc := range req.ReferenceDocs {
+			promptContent.WriteString(fmt.Sprintf("### [참조 %d] %s\n%s\n\n", i+1, doc.Title, doc.Content))
+		}
+	}
+
+	// 1-3. 웹 검색 결과 (Web RAG)
+	if len(req.WebResults) > 0 {
+		promptContent.WriteString("## 외부 웹 검색 자료 (Web Insights)\n")
+		promptContent.WriteString("다음 최신 웹 정보를 바탕으로 내용을 보강하세요:\n\n")
+		for i, doc := range req.WebResults {
+			promptContent.WriteString(fmt.Sprintf("### [웹 %d] %s\n%s\n\n", i+1, doc.Title, doc.Content))
+		}
+	}
+
+	// 1-4. 작성 지침 (Instructions)
+	promptContent.WriteString("## 작성 지침\n")
+	promptContent.WriteString("1. **마크다운 형식 준수**: 명확한 헤더 구조(#, ## 등)를 사용하세요.\n")
+	promptContent.WriteString("2. **전문적 어조**: 간결하고 명확하며 비즈니스 친화적인 어투를 사용하세요.\n")
+	promptContent.WriteString("3. **내용 통합**: 제공된 메타데이터, 로컬 참조 문서, 웹 정보를 논리적으로 종합하세요.\n")
+	promptContent.WriteString("4. **완결성**: 서론, 본론, 결론 혹은 템플릿에 맞는 완결된 구조를 갖추세요.\n")
+	promptContent.WriteString("5. **언어**: 문서는 한국어로 작성해야 합니다.\n")
+	promptContent.WriteString(fmt.Sprintf("6. **템플릿 적용**: '%s' 템플릿의 일반적인 구조(개요, 상세 내용, 결론 등)를 따르세요.\n\n", req.Template))
+
+	promptContent.WriteString("위 지침에 따라 문서 초안을 지금 바로 작성해주세요.")
+
+	// Gemma 2 프롬프트 포맷 적용
+	finalPrompt := fmt.Sprintf("<start_of_turn>user\n%s<end_of_turn>\n<start_of_turn>model\n", promptContent.String())
+
+	// 2. LLM 호출 (Completion API)
+	draftContent, err := generateDraftCompletion(finalPrompt)
+	if err != nil {
+		fmt.Printf("Error generating draft: %v\n", err)
+		return nil, err
+	}
+
+	fmt.Printf("DEBUG: Draft generated successfully (%d chars)\n", len(draftContent))
+
+	return &pb.GenerateDraftResponse{
+		Content: draftContent,
+	}, nil
+}
+
+// generateDraftCompletion: LLAMA 서버로 Completion 요청을 보냅니다.
+// JSON 모드나 스키마 제약 없이 자유 형식의 텍스트 생성을 요청합니다.
+func generateDraftCompletion(prompt string) (string, error) {
+	llamaAddr := os.Getenv("LLAMA_COMPLETION_ADDR")
+	if llamaAddr == "" {
+		llamaAddr = "http://llama-completion:8080"
+		// 개발 환경 포트 포워딩 (Client config.rs와 맞춤)
+		// 도커 내부 통신이므로 서비스명 사용이 맞지만, 로컬 테스트 시 다를 수 있음 주의
+	}
+
+	reqBody := DraftCompletionRequest{
+		Prompt:      prompt,
+		NPredict:    4096, // 긴 문서 생성을 위해 충분한 토큰 확보
+		Temperature: 0.7,  // 창의적인 초안 작성을 위해 약간 높임
+		TopK:        40,
+		TopP:        0.9,
+		Stop:        []string{"<end_of_turn>"},
+	}
+
+	jsonPayload, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal draft request: %w", err)
+	}
+
+	fmt.Println("payload:", string(jsonPayload))
+	fmt.Println("DEBUG: Sending draft completion request to", llamaAddr)
+
+	resp, err := http.Post(llamaAddr+"/completions", "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return "", fmt.Errorf("draft completion request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read completion response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("llama server error: %s - %s", resp.Status, string(bodyBytes))
+	}
+
+	// Parse response
+	var completionResp CompletionResponse
+	if err := json.Unmarshal(bodyBytes, &completionResp); err != nil {
+		return "", fmt.Errorf("failed to parse completion response: %w", err)
+	}
+
+	var responseText string
+
+	// 테스트 환경이 달라서 모델응답값이 다름
+	// 유연한 응답 처리: Choices 배열 우선, 없으면 Content 필드 확인
+	if len(completionResp.Choices) > 0 {
+		responseText = strings.TrimSpace(completionResp.Choices[0].Text)
+	} else if completionResp.Content != "" {
+		responseText = strings.TrimSpace(completionResp.Content)
+		fmt.Printf("DEBUG: Using 'content' field from response (likely quantized model)\n")
+	} else {
+		return "", fmt.Errorf("completion response has no choices and no content")
+	}
+
+	fmt.Printf("DEBUG: Completion text (%d chars): [%s]\n", len(responseText), responseText)
+
+	// Check for empty response
+	if responseText == "" {
+		return "", fmt.Errorf("completion response text is empty")
+	}
+
+	fmt.Printf("DEBUG: Full JSON to parse: [%s]\n", responseText)
+
+	return completionResp.Content, nil
 }

@@ -1,5 +1,5 @@
 import { FileText, Database, Globe, Sparkles } from 'lucide-react';
-import { ThinkingAccordion } from '../ui/ThinkingAccordion';
+import { RagThinkingAccordion } from './RagThinkingAccordion';
 import { RagCollapsibleSection } from './RagCollapsibleSection';
 import { RagResultItem } from './RagResultItem';
 
@@ -41,7 +41,7 @@ export function RagChatMessage({ message, onSelectServerDoc }: RagChatMessagePro
         {/* 1. 사고 과정 (Thinking Process) - 좌측 정렬 */}
         {ragData.thinking_process && (
           <div className="flex justify-start w-full max-w-[90%]">
-            <ThinkingAccordion state={ragData.thinking_process as any} status="Thinking Process" />
+            <RagThinkingAccordion state={ragData.thinking_process as any} status="Thinking Process" />
           </div>
         )}
 

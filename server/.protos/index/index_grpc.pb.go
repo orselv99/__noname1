@@ -23,6 +23,7 @@ const (
 	IndexService_SearchDocuments_FullMethodName   = "/index.IndexService/SearchDocuments"
 	IndexService_SyncDocuments_FullMethodName     = "/index.IndexService/SyncDocuments"
 	IndexService_GenerateEmbedding_FullMethodName = "/index.IndexService/GenerateEmbedding"
+	IndexService_GenerateDraft_FullMethodName     = "/index.IndexService/GenerateDraft"
 )
 
 // IndexServiceClient is the client API for IndexService service.
@@ -40,6 +41,9 @@ type IndexServiceClient interface {
 	SyncDocuments(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SyncRequest, SyncResponse], error)
 	// 임베딩 생성 (클라이언트 Local RAG용)
 	GenerateEmbedding(ctx context.Context, in *GenerateEmbeddingRequest, opts ...grpc.CallOption) (*GenerateEmbeddingResponse, error)
+	// 문서 초안 생성 (AI Draft Generation)
+	// 사용자가 제공한 메타데이터와 참조 문서를 바탕으로 새 문서의 초안을 작성합니다.
+	GenerateDraft(ctx context.Context, in *GenerateDraftRequest, opts ...grpc.CallOption) (*GenerateDraftResponse, error)
 }
 
 type indexServiceClient struct {
@@ -93,6 +97,16 @@ func (c *indexServiceClient) GenerateEmbedding(ctx context.Context, in *Generate
 	return out, nil
 }
 
+func (c *indexServiceClient) GenerateDraft(ctx context.Context, in *GenerateDraftRequest, opts ...grpc.CallOption) (*GenerateDraftResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GenerateDraftResponse)
+	err := c.cc.Invoke(ctx, IndexService_GenerateDraft_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IndexServiceServer is the server API for IndexService service.
 // All implementations must embed UnimplementedIndexServiceServer
 // for forward compatibility.
@@ -108,6 +122,9 @@ type IndexServiceServer interface {
 	SyncDocuments(grpc.BidiStreamingServer[SyncRequest, SyncResponse]) error
 	// 임베딩 생성 (클라이언트 Local RAG용)
 	GenerateEmbedding(context.Context, *GenerateEmbeddingRequest) (*GenerateEmbeddingResponse, error)
+	// 문서 초안 생성 (AI Draft Generation)
+	// 사용자가 제공한 메타데이터와 참조 문서를 바탕으로 새 문서의 초안을 작성합니다.
+	GenerateDraft(context.Context, *GenerateDraftRequest) (*GenerateDraftResponse, error)
 	mustEmbedUnimplementedIndexServiceServer()
 }
 
@@ -129,6 +146,9 @@ func (UnimplementedIndexServiceServer) SyncDocuments(grpc.BidiStreamingServer[Sy
 }
 func (UnimplementedIndexServiceServer) GenerateEmbedding(context.Context, *GenerateEmbeddingRequest) (*GenerateEmbeddingResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GenerateEmbedding not implemented")
+}
+func (UnimplementedIndexServiceServer) GenerateDraft(context.Context, *GenerateDraftRequest) (*GenerateDraftResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GenerateDraft not implemented")
 }
 func (UnimplementedIndexServiceServer) mustEmbedUnimplementedIndexServiceServer() {}
 func (UnimplementedIndexServiceServer) testEmbeddedByValue()                      {}
@@ -212,6 +232,24 @@ func _IndexService_GenerateEmbedding_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IndexService_GenerateDraft_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GenerateDraftRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndexServiceServer).GenerateDraft(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndexService_GenerateDraft_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndexServiceServer).GenerateDraft(ctx, req.(*GenerateDraftRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IndexService_ServiceDesc is the grpc.ServiceDesc for IndexService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -230,6 +268,10 @@ var IndexService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GenerateEmbedding",
 			Handler:    _IndexService_GenerateEmbedding_Handler,
+		},
+		{
+			MethodName: "GenerateDraft",
+			Handler:    _IndexService_GenerateDraft_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

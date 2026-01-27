@@ -18,6 +18,10 @@ service IndexService {
 
   // 임베딩 생성 (클라이언트 Local RAG용)
   rpc GenerateEmbedding(GenerateEmbeddingRequest) returns (GenerateEmbeddingResponse);
+
+  // 문서 초안 생성 (AI Draft Generation)
+  // 사용자가 제공한 메타데이터와 참조 문서를 바탕으로 새 문서의 초안을 작성합니다.
+  rpc GenerateDraft(GenerateDraftRequest) returns (GenerateDraftResponse);
 }
 
 // 태그와 증거(근거 문장) 쌍
@@ -95,4 +99,30 @@ message GenerateEmbeddingRequest {
 
 message GenerateEmbeddingResponse {
   repeated float embedding = 1;
+}
+
+// --- AI Draft Generation 관련 메시지 ---
+
+// 참조 문서 정보 (DraftReference)
+// 초안 생성 시 AI가 참고할 문서나 웹 검색 결과입니다.
+message DraftReference {
+  string title = 1;   // 참조 문서 제목
+  string content = 2; // 참조 내용 (요약본 혹은 발췌문)
+}
+
+// 초안 생성 요청 (GenerateDraftRequest)
+// 사용자가 입력한 정보를 바탕으로 AI에게 초안 작성을 요청하는 메시지입니다.
+message GenerateDraftRequest {
+  string title = 1;           // 작성할 문서의 제목
+  string tags = 2;            // 관련 태그 (콤마로 구분된 문자열, 선택 사항)
+  string summary = 3;         // 사용자가 작성한 요약 혹은 의도 (선택 사항)
+  string template = 4;        // 사용할 템플릿 이름 (예: "Technical Specs")
+  repeated DraftReference reference_docs = 5; // 사용자가 선택한 로컬 참조 문서 목록
+  repeated DraftReference web_results = 6;    // 웹 검색 결과 목록
+}
+
+// 초안 생성 응답 (GenerateDraftResponse)
+// AI가 작성한 마크다운 형식의 문서 초안입니다.
+message GenerateDraftResponse {
+  string content = 1; // 생성된 마크다운 내용
 }

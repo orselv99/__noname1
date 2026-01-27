@@ -19,8 +19,8 @@
 import { useState } from 'react';
 import { safeInvoke } from '../../utils/safeInvoke';
 import { X, FileText, Sparkles, Loader2, Upload } from 'lucide-react';
-import { ThinkingState } from '../ui/ThinkingAccordion';
-import { FolderItem, WebSearchResult, RagSearchResult } from './types';
+import { DraftThinkingState } from './DraftThinkingAccordion';
+import { FolderItem, WebSearchResult, RagSearchResult, frequentTemplates } from './types';
 import { NewDocumentSidebar } from './NewDocumentSidebar';
 import { NewDocumentBlankMode } from './NewDocumentBlankMode';
 import { NewDocumentAiMode } from './NewDocumentAiMode';
@@ -94,7 +94,7 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSearchingWeb, setIsSearchingWeb] = useState(false);
   const [webSearchResults, setWebSearchResults] = useState<WebSearchResult[]>([]);
-  const [thinkingState, setThinkingState] = useState<ThinkingState | null>(null);
+  const [thinkingState, setThinkingState] = useState<DraftThinkingState | null>(null);
 
   // 아코디언 상태 (AI 모드) - title, template, docs, web, resources
   const [accordionState, setAccordionState] = useState({
@@ -219,36 +219,93 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   /**
    * AI 초안 생성 호출
    */
+  /**
+   * AI 초안 생성 호출
+   */
   const generateAiDraft = async (): Promise<string> => {
     setIsGenerating(true);
+
+    // 초기화: 모든 단계 Pending
     setThinkingState({
+      info: { status: 'pending', logs: [] },
+      template: { status: 'pending', logs: [] },
       local: { status: 'pending', logs: [] },
-      server: { status: 'pending', logs: [] },
-      web: { status: 'pending', logs: [] }
+      web: { status: 'pending', logs: [] },
+      resources: { status: 'pending', logs: [] },
+      drafting: { status: 'pending', logs: [] }
     });
 
-    // 1. 참조 문서 준비 (Thinking UI 업데이트)
+    // 1. 문서 정보 및 요약 확인
+    setThinkingState(prev => prev ? ({ ...prev, info: { status: 'running', logs: [{ message: '문서 메타데이터 분석 중...' }] } }) : null);
+    await new Promise(r => setTimeout(r, 600));
+    setThinkingState(prev => prev ? ({
+      ...prev,
+      info: {
+        status: 'done',
+        logs: [{
+          message: '문서 정보 확인 완료',
+          tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t) : ['태그 없음'],
+          subItems: [
+            `제목: ${title}`,
+            `요약: ${summary ? summary.substring(0, 30) + (summary.length > 30 ? '...' : '') : '요약 없음'}`
+          ]
+        }]
+      }
+    }) : null);
+
+    // 2. 템플릿 확인
+    setThinkingState(prev => prev ? ({ ...prev, template: { status: 'running', logs: [{ message: '템플릿 구조 로딩 중...' }] } }) : null);
+    await new Promise(r => setTimeout(r, 500));
+    const templateName = frequentTemplates.find(t => t.id === selectedTemplate)?.name || selectedTemplate;
+    setThinkingState(prev => prev ? ({
+      ...prev,
+      template: {
+        status: 'done',
+        logs: [{ message: '템플릿 준비 완료', subItems: [`선택된 템플릿: ${templateName}`] }]
+      }
+    }) : null);
+
+    // 3. 참조 문서 분석
     const selectedDocs = docSearchResults.filter(r => r.selected);
+    setThinkingState(prev => prev ? ({ ...prev, local: { status: 'running', logs: [{ message: `참조 문서 ${selectedDocs.length}건 분석 중...` }] } }) : null);
     if (selectedDocs.length > 0) {
-      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'running', logs: [{ message: `선택된 문서 ${selectedDocs.length}건 준비 중...` }] } }) : null);
-      await new Promise(r => setTimeout(r, 600)); // 시각적 딜레이
-      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'done', logs: [{ message: `참조 문서 준비 완료`, subItems: selectedDocs.map(d => d.title) }] } }) : null);
+      await new Promise(r => setTimeout(r, 800));
+      setThinkingState(prev => prev ? ({
+        ...prev,
+        local: {
+          status: 'done',
+          logs: [{ message: '참조 문서 분석 완료', subItems: selectedDocs.map(d => `${d.title} (유사도: ${d.score}%)`) }]
+        }
+      }) : null);
     } else {
-      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'idle', logs: [{ message: '참조 문서 없음' }] } }) : null);
+      await new Promise(r => setTimeout(r, 400));
+      setThinkingState(prev => prev ? ({ ...prev, local: { status: 'idle', logs: [{ message: '참조 문서 없음 (기본 지식 활용)' }] } }) : null);
     }
 
-    // 2. 웹 검색 결과 준비 (Thinking UI 업데이트)
+    // 4. 웹 검색 분석
     const selectedWebResults = webSearchResults.filter(r => r.selected);
+    setThinkingState(prev => prev ? ({ ...prev, web: { status: 'running', logs: [{ message: `웹 검색 결과 ${selectedWebResults.length}건 분석 중...` }] } }) : null);
     if (selectedWebResults.length > 0) {
-      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'running', logs: [{ message: `웹 검색 결과 ${selectedWebResults.length}건 준비 중...` }] } }) : null);
-      await new Promise(r => setTimeout(r, 600));
-      setThinkingState(prev => prev ? ({ ...prev, web: { status: 'done', logs: [{ message: '웹 정보 준비 완료', subItems: selectedWebResults.map(r => r.title) }] } }) : null);
+      await new Promise(r => setTimeout(r, 800));
+      setThinkingState(prev => prev ? ({
+        ...prev,
+        web: {
+          status: 'done',
+          logs: [{ message: '웹 정보 분석 완료', subItems: selectedWebResults.map(r => r.title) }]
+        }
+      }) : null);
     } else {
+      await new Promise(r => setTimeout(r, 400));
       setThinkingState(prev => prev ? ({ ...prev, web: { status: 'idle', logs: [{ message: '웹 검색 결과 없음' }] } }) : null);
     }
 
-    // 3. AI 생성 요청
-    setThinkingState(prev => prev ? ({ ...prev, server: { status: 'running', logs: [{ message: 'Gemma 2 모델이 초안을 작성하고 있습니다... (약 10~30초 소요)' }] } }) : null);
+    // 5. 리소스 분석 (Placeholder)
+    setThinkingState(prev => prev ? ({ ...prev, resources: { status: 'running', logs: [{ message: '첨부 리소스 스캔 중...' }] } }) : null);
+    await new Promise(r => setTimeout(r, 500)); // 짧게 넘어감
+    setThinkingState(prev => prev ? ({ ...prev, resources: { status: 'idle', logs: [{ message: '첨부된 리소스 없음' }] } }) : null);
+
+    // 6. AI 생성 요청
+    setThinkingState(prev => prev ? ({ ...prev, drafting: { status: 'running', logs: [{ message: 'Gemma 2 모델이 초안을 작성하고 있습니다... (약 10~30초 소요)' }] } }) : null);
 
     try {
       const draftContent = await safeInvoke<string>('generate_draft', {
@@ -260,13 +317,12 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
         webResults: selectedWebResults.map(d => ({ title: d.title, content: d.snippet }))
       });
 
-      setThinkingState(prev => prev ? ({ ...prev, server: { status: 'done', logs: [{ message: '초안 생성 완료!' }] } }) : null);
+      setThinkingState(prev => prev ? ({ ...prev, drafting: { status: 'done', logs: [{ message: '초안 생성 완료!' }] } }) : null);
       return draftContent;
 
     } catch (error) {
       console.error("AI Generation failed:", error);
-      // 'error' status is not supported, so use 'idle' or 'done' with error message
-      setThinkingState(prev => prev ? ({ ...prev, server: { status: 'idle', logs: [{ message: '생성 실패: ' + String(error) }] } }) : null);
+      setThinkingState(prev => prev ? ({ ...prev, drafting: { status: 'error', logs: [{ message: '생성 실패: ' + String(error) }] } }) : null);
       throw error;
     } finally {
       setIsGenerating(false);
