@@ -781,7 +781,10 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
         isOpen={showNewDocDialog}
         onClose={() => setShowNewDocDialog(false)}
         onCreate={(data) => {
-          const gType = data.groupType === 'department' ? GroupType.Department : GroupType.Project;
+          let gType = GroupType.Project;
+          if (data.groupType === 'department') gType = GroupType.Department;
+          else if (data.groupType === 'private') gType = GroupType.Private;
+
           const tagArray = data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined;
           createDocument(data.title, data.groupId, gType, data.folderId, undefined, data.content, tagArray, data.summary);
         }}

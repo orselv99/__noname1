@@ -1,7 +1,7 @@
-
 import { useState, useEffect } from 'react';
 import { X, Calendar, Clock, AlignLeft, Palette, Flag } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { CalendarDateTimePicker } from './CalendarDateTimePicker';
 
 interface CalendarEventDialogProps {
   isOpen: boolean;
@@ -19,26 +19,18 @@ const COLORS = [
 export const CalendarEventDialog = ({ isOpen, onClose, startDate, endDate, onSave }: CalendarEventDialogProps) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [start, setStart] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [end, setEnd] = useState('');
-  const [endTime, setEndTime] = useState('');
+
+  // Date 객체 상태 관리 (기존 문자열 상태 대체)
+  const [startDateState, setStartDateState] = useState<Date>(new Date());
+  const [endDateState, setEndDateState] = useState<Date>(new Date());
+
   const [selectedColor, setSelectedColor] = useState(COLORS[0]);
   const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
 
   useEffect(() => {
     if (isOpen && startDate && endDate) {
-      // 입력 필드를 위해 날짜를 YYYY-MM-DD 형식으로 포맷
-      const formatDate = (date: Date) => {
-        const d = new Date(date);
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-      };
-
-      setStart(formatDate(startDate));
-      setStartTime(startDate.toTimeString().slice(0, 5));
-      setEnd(formatDate(endDate));
-      setEndTime(endDate.toTimeString().slice(0, 5));
+      setStartDateState(startDate);
+      setEndDateState(endDate);
       setTitle('');
       setDescription('');
       setSelectedColor(COLORS[0]);
@@ -49,15 +41,12 @@ export const CalendarEventDialog = ({ isOpen, onClose, startDate, endDate, onSav
   if (!isOpen) return null;
 
   const handleSave = () => {
-    if (!title.trim() || !start || !end) return;
-
-    const s = new Date(`${start}T${startTime || '00:00'}`);
-    const e = new Date(`${end}T${endTime || '23:59'}`);
+    if (!title.trim()) return;
 
     onSave({
       title,
-      startDate: s,
-      endDate: e,
+      startDate: startDateState,
+      endDate: endDateState,
       description,
       color: selectedColor,
       priority
@@ -90,44 +79,23 @@ export const CalendarEventDialog = ({ isOpen, onClose, startDate, endDate, onSav
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            {/* 시작 날짜 및 시간 선택 섹션 */}
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1 flex items-center gap-1">
-                <Calendar size={12} /> 시작
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={start}
-                  onChange={e => setStart(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-md px-2 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
-                />
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={e => setStartTime(e.target.value)}
-                  className="w-24 bg-zinc-950 border border-zinc-700 rounded-md px-2 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
+              <CalendarDateTimePicker
+                label="Start"
+                value={startDateState}
+                onChange={setStartDateState}
+              />
             </div>
+
+            {/* 종료 날짜 및 시간 선택 섹션 */}
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1 flex items-center gap-1">
-                <Clock size={12} /> 종료
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={end}
-                  onChange={e => setEnd(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-700 rounded-md px-2 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
-                  min={start}
-                />
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={e => setEndTime(e.target.value)}
-                  className="w-24 bg-zinc-950 border border-zinc-700 rounded-md px-2 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
+              <CalendarDateTimePicker
+                label="End"
+                value={endDateState}
+                onChange={setEndDateState}
+                minDate={startDateState}
+              />
             </div>
           </div>
 

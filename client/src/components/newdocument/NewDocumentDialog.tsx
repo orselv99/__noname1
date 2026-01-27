@@ -16,7 +16,7 @@
  * ==========================================================================
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { safeInvoke } from '../../utils/safeInvoke';
 import { X, FileText, Sparkles, Loader2, Upload, PenLine } from 'lucide-react';
 import { marked } from 'marked';
@@ -38,7 +38,7 @@ interface NewDocumentDialogProps {
   /** 생성 핸들러 */
   onCreate?: (data: {
     groupId: string;
-    groupType: 'department' | 'project';
+    groupType: 'department' | 'project' | 'private';
     folderId?: string;
     template: string;
     title: string;
@@ -97,6 +97,9 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   const [webSearchResults, setWebSearchResults] = useState<WebSearchResult[]>([]);
   const [thinkingState, setThinkingState] = useState<DraftThinkingState | null>(null);
 
+  // Scroll helper
+  const contentRef = useRef<HTMLDivElement>(null);
+
   // 아코디언 상태 (AI 모드) - title, template, docs, web, resources
   const [accordionState, setAccordionState] = useState({
     title: true,
@@ -105,6 +108,16 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
     web: true,
     resources: true // 리소스 첨부 섹션 추가
   });
+
+  useEffect(() => {
+    if (creationMode === 'ai' && contentRef.current) {
+      setTimeout(() => {
+        if (contentRef.current) {
+          contentRef.current.scrollTop = contentRef.current.scrollHeight;
+        }
+      }, 50);
+    }
+  }, [thinkingState, accordionState, creationMode]);
 
   /** 아코디언 토글 함수 */
   const toggleAccordion = (section: 'title' | 'template' | 'docs' | 'web' | 'resources') => {
@@ -320,8 +333,6 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
 
       setThinkingState(prev => prev ? ({ ...prev, drafting: { status: 'done', logs: [{ message: '초안 생성 완료!' }] } }) : null);
 
-      console.log('draftContent', draftContent);
-
       return draftContent;
 
     } catch (error) {
@@ -505,7 +516,10 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
           {/* 우측 콘텐츠: 입력 폼 */}
           <div className="flex-1 flex flex-col min-h-0 bg-white/5">
             {/* 스크롤 가능한 메인 입력 영역 */}
-            <div className={`flex-1 overflow-y-scroll custom-scrollbar ${creationMode === 'import' ? '' : 'p-5'}`}>
+            <div
+              ref={contentRef}
+              className={`flex-1 overflow-y-scroll custom-scrollbar ${creationMode === 'import' ? '' : 'p-5'}`}
+            >
 
               {/* 모드별 콘텐츠 렌더링 */}
               {creationMode === 'blank' && (
