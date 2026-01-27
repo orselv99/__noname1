@@ -86,6 +86,7 @@ export interface ContentStore {
   markTabDirty: (tabId: string, isDirty: boolean) => void;
   moveDocument: (docId: string, targetId: string, position: 'top' | 'bottom' | 'inside') => Promise<void>;
   emptyRecycleBin: () => Promise<void>;
+  clearState: () => void;
 }
 
 export const useContentStore = create<ContentStore>()(
@@ -187,11 +188,13 @@ export const useContentStore = create<ContentStore>()(
             };
           });
 
-          // 탭이 없으면 첫 번째 문서를 자동으로 열기
+          // 탭이 없으면 첫 번째 문서를 자동으로 열기 기능 제거 (사용자 요청: 모든 탭 종료 시 빈 탭 상태 유지)
+          /*
           const state = get();
           if (state.tabs.length === 0 && state.documents.length > 0) {
             get().addTab(state.documents[0]);
           }
+          */
         } catch (error) {
           console.error('Failed to fetch documents:', error);
           set({ error: String(error), isLoading: false });
@@ -671,6 +674,18 @@ export const useContentStore = create<ContentStore>()(
         set((state) => ({
           tabs: state.tabs.map(t => t.id === tabId ? { ...t, isDirty } : t)
         }));
+      },
+
+      clearState: () => {
+        set({
+          documents: [],
+          tabs: [],
+          activeTabId: null,
+          highlightedEvidence: null,
+          liveEditorContent: null,
+          calendarEvents: [],
+          calendarSelectedEventId: null
+        });
       },
 
       currentUser: null,

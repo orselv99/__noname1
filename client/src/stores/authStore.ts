@@ -2,6 +2,7 @@ import { signalingService } from '../services/SignalingService';
 import { create } from 'zustand';
 import { UserInfo, LoginResponse, CrewMember, ListUsersResponse } from '../types';
 import { invoke } from '@tauri-apps/api/core';
+import { useContentStore } from './contentStore';
 
 interface AuthState {
   user: UserInfo | null;
@@ -86,6 +87,9 @@ export const useAuthStore = create<AuthState>()(
     logout: () => {
       // 명시적으로 Signaling 연결 해제
       signalingService.disconnect();
+
+      // 컨텐츠 스토어 초기화 (탭, 문서 목록 등)
+      useContentStore.getState().clearState();
 
       set({
         user: null,

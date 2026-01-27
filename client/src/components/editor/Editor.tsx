@@ -452,7 +452,8 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
         group_id: doc.group_id,
         parent_id: doc.parent_id,
         document_state: doc.document_state !== undefined ? doc.document_state : 1,
-        visibility_level: doc.visibility_level !== undefined ? doc.visibility_level : 1,
+        visibility_level: doc.visibility_level !== undefined ? doc.visibility_level :
+          ((doc.group_type === 2 || (doc.group_type === undefined)) ? 2 : 4), // Default: Private(2) -> Metadata(2), Dept/Project -> Public(4)
         is_favorite: doc.is_favorite || false,
         version: doc.version || 0,
         summary: doc.summary,

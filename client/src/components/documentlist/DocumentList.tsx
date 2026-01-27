@@ -12,37 +12,30 @@
  */
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { createPortal } from 'react-dom';
-import { Trash2, Edit2, Search, Share2, FileText, Star, ChevronsUpDown, FilePlus } from 'lucide-react';
-
 import { useContentStore } from '../../stores/contentStore';
 import { GroupType, SortOption, PRIVATE_GROUP_ID } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
 import { useConfirm } from '../ConfirmProvider';
-
-import { GroupLinkDialog } from '../dialogs/GroupLinkDialog';
-// import { GroupInfoDialog } from '../dialogs/GroupInfoDialog';
-import { NewDocumentDialog } from '../newdocument/NewDocumentDialog';
-
 import {
+  closestCenter,
   DndContext,
   DragEndEvent,
+  DragOverlay,
   DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
-  closestCenter,
-  DragOverlay,
 } from '@dnd-kit/core';
-
-
 import { DocumentListSidebarMode, DocumentListItemType, DocumentListGroupType, DocumentListDropPosition } from './types';
+import { ChevronsUpDown, Edit2, FilePlus, FileText, Search, Share2, Star, Trash2 } from 'lucide-react';
 import { DocumentListGroup } from './DocumentListGroup';
+import { createPortal } from 'react-dom';
+import { NewDocumentDialog } from '../newdocument/NewDocumentDialog';
+import { GroupLinkDialog } from '../dialogs/GroupLinkDialog';
 
+// Constants
+const PRIVATE_GROUP_UI_ID = 'private_group';
 
-/**
- * DocumentList Props
- */
 export interface DocumentListProps {
   /** 문서 선택 핸들러 */
   onSelectDocument?: (id: string) => void;
@@ -83,6 +76,7 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
   // Optimized Selectors
   const documents = useContentStore(state => state.documents);
   const activeTabId = useContentStore(state => state.activeTabId);
+  const tabs = useContentStore(state => state.tabs);
   const currentUser = useContentStore(state => state.currentUser);
   const newDocTrigger = useContentStore(state => state.newDocTrigger);
 
@@ -106,7 +100,7 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
 
   // 확장 상태 지속성을 위한 Refs
   const expandedIdsRef = useRef<Set<string>>(new Set());
-  const expandedGroupsRef = useRef<Set<string>>(new Set(['private_group'])); // 기본 확장 그룹
+  const expandedGroupsRef = useRef<Set<string>>(new Set()); // 기본 확장 그룹 없음
 
   // 컨텍스트 메뉴 상태
   const [contextMenu, setContextMenu] = useState<{ id: string, x: number, y: number } | null>(null);
@@ -146,6 +140,61 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
     return () => window.removeEventListener('click', handleClick);
   }, []);
 
+  // Force update helper
+  const [, forceUpdate] = useState(0);
+
+  // Auto-expand paths for ALL open tabs
+  useEffect(() => {
+    if (tabs.length === 0) return;
+
+    let changed = false;
+
+    // Collect all document IDs from open tabs
+    const openDocIds = tabs
+      .filter(t => t.type === 'document')
+      .map(t => t.id);
+
+    // Also include activeTabId if it's not in the list for some reason (though it should be)
+    if (activeTabId && !openDocIds.includes(activeTabId)) {
+      openDocIds.push(activeTabId);
+    }
+
+    openDocIds.forEach(docId => {
+      const doc = documents.find(d => d.id === docId);
+      if (!doc) return;
+
+      // 1. Expand parent folders
+      let curr = doc;
+      while (curr.parent_id) {
+        if (!expandedIdsRef.current.has(curr.parent_id)) {
+          expandedIdsRef.current.add(curr.parent_id);
+          changed = true;
+        }
+        const parent = documents.find(d => d.id === curr.parent_id);
+        if (!parent) break;
+        curr = parent;
+      }
+
+      // 2. Expand Group
+      let groupIdToExpand: string | undefined;
+      if (doc.group_type === GroupType.Private) {
+        groupIdToExpand = PRIVATE_GROUP_UI_ID;
+      } else if (doc.group_type === GroupType.Department && doc.group_id) {
+        groupIdToExpand = doc.group_id;
+      } else if (doc.group_type === GroupType.Project && doc.group_id) {
+        groupIdToExpand = doc.group_id;
+      }
+
+      if (groupIdToExpand && !expandedGroupsRef.current.has(groupIdToExpand)) {
+        expandedGroupsRef.current.add(groupIdToExpand);
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      forceUpdate(n => n + 1);
+    }
+  }, [tabs, activeTabId, documents]); // Re-run when tabs or docs change
   // 모드 변경에 따라 필터 업데이트
   useEffect(() => {
     setIsFavoriteFilter(mode === 'star');
@@ -339,8 +388,6 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
     };
 
     const newGroups: DocumentListGroupType[] = [];
-    const PRIVATE_GROUP_UI_ID = 'private_group';
-
     // 1. 개인 그룹 (Private)
     const privateDocs = effectiveDocuments.filter(
       d => d.group_type === GroupType.Private && (!d.group_id || d.group_id === PRIVATE_GROUP_ID)
