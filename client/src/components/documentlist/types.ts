@@ -35,6 +35,8 @@ export interface DocumentListItemType {
   children?: DocumentListItemType[];
   /** 확장 여부 (UI 상태) */
   expanded?: boolean;
+  /** 가시성 수준 */
+  visibility_level?: number;
 }
 
 /**

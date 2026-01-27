@@ -13,6 +13,7 @@ import { FileText, ChevronDown, ChevronRight, MoreHorizontal, Plus } from 'lucid
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { DocumentListItemType, DocumentListDropPosition } from './types';
+import { VisibilityLevel } from '../../types';
 
 /**
  * 아이템 콘텐츠 Props
@@ -69,12 +70,13 @@ function DocumentListItemContent({
 
   // 'Inside' 드롭 시각적 피드백
   const isDropTargetInside = dragOverInfo?.position === 'inside';
+  const isHidden = item.visibility_level === VisibilityLevel.Hidden;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`group relative rounded-md transition-colors ${isDragging ? 'opacity-30 z-0' : 'opacity-100 z-10'} ${isDropTargetInside ? 'bg-blue-500/20' : 'hover:bg-zinc-900'}`}
+      className={`group relative rounded-md transition-colors ${isDragging ? 'opacity-30 z-0' : (isHidden ? 'opacity-50 z-10' : 'opacity-100 z-10')} ${isDropTargetInside ? 'bg-blue-500/20' : 'hover:bg-zinc-900'}`}
       {...attributes}
       {...listeners}
       onMouseMove={(e) => onMouseMove?.(e, item)}

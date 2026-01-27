@@ -10,7 +10,7 @@
 
 import { useState, useRef, useEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { EyeOff, Eye, Globe, ChevronDown as ChevronDownIcon } from 'lucide-react';
+import { EyeOff, Eye, Globe, ChevronDown as ChevronDownIcon, FileText } from 'lucide-react';
 import { VisibilityLevel } from '../../types';
 
 /**
@@ -23,6 +23,13 @@ export const VISIBILITY_LEVELS = [
     icon: EyeOff,
     color: 'bg-zinc-700 text-zinc-300',
     hoverColor: 'hover:bg-zinc-600'
+  },
+  {
+    value: VisibilityLevel.Metadata,
+    label: 'Metadata',  // 메타데이터만 공개
+    icon: FileText,
+    color: 'bg-blue-900/50 text-blue-300',
+    hoverColor: 'hover:bg-blue-800/50'
   },
   {
     value: VisibilityLevel.Snippet,

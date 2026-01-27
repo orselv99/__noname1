@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'; // createJSONSt
 import { safeInvoke } from '../utils/safeInvoke';
 import { Document, GroupType, SaveDocumentRequest, DocumentState, VisibilityLevel, ListDocumentsResponse, UserInfo } from '../types';
 import { sqliteContentStorage } from '../utils/sqliteContentStorage'; // Adapter 임포트
+import { useAuthStore } from './authStore';
 
 export interface Tab {
   id: string; // usually document id or 'calendar'
@@ -454,7 +455,28 @@ export const useContentStore = create<ContentStore>()(
         }
       },
 
-      createDocument: async (title = 'Untitled', groupId, groupType = GroupType.Private, parentId, defaultVisibility = VisibilityLevel.Hidden, content?: string, tags?: string[], summary?: string) => {
+      createDocument: async (title = 'Untitled', groupId, groupType = GroupType.Private, parentId, defaultVisibility, content?: string, tags?: string[], summary?: string) => {
+        // 기본 가시성 결정 로직:
+        // 1. 인자로 전달된 값이 있으면 사용
+        // 2. 그룹(부서/프로젝트) 설정이 있으면 그 값을 사용
+        // 3. 없으면 Hidden(1)
+        let visibility = defaultVisibility;
+
+        if (visibility === undefined && groupId && groupType !== GroupType.Private) {
+          const authState = useAuthStore.getState();
+          if (groupType === GroupType.Department) {
+            const dept = authState.departments[groupId];
+            if (dept) visibility = dept.visibility;
+          } else if (groupType === GroupType.Project) {
+            const proj = authState.projects[groupId];
+            if (proj) visibility = proj.visibility;
+          }
+        }
+
+        if (visibility === undefined) {
+          visibility = VisibilityLevel.Hidden;
+        }
+
         const req: SaveDocumentRequest = {
           title,
           content: content || '',
@@ -462,7 +484,7 @@ export const useContentStore = create<ContentStore>()(
           group_id: groupId || undefined, // Ensure explicit undefined for optional
           parent_id: parentId || undefined,
           document_state: DocumentState.Draft,
-          visibility_level: defaultVisibility,
+          visibility_level: visibility,
           tags: tags ? tags.map(tag => ({ tag })) : undefined,
           summary: summary || undefined,
         };
