@@ -32,7 +32,7 @@ export interface FolderItem {
 export interface GroupItem {
   id: string;
   name: string;
-  type: 'department' | 'project';
+  type: 'department' | 'project' | 'private';
   expanded: boolean;
   folders: FolderItem[];
 }

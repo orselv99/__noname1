@@ -349,7 +349,7 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
     newGroups.push({
       id: PRIVATE_GROUP_UI_ID,
       name: 'Private',
-      type: 'department',
+      type: 'private',
       expanded: expandedGroupsRef.current.has(PRIVATE_GROUP_UI_ID),
       items: buildTree(privateDocs, groupSortOptions[PRIVATE_GROUP_UI_ID])
     });
@@ -724,9 +724,12 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
                 onAddSubPage={(gId, pId) => {
                   // Quick Create implementation
                   const gType = group.type === 'project' ? GroupType.Project :
-                    (group.type === 'department' && group.id === 'private_group') ? GroupType.Private : GroupType.Department;
+                    (group.type === 'private' || (group.type === 'department' && group.id === 'private_group')) ? GroupType.Private : GroupType.Department;
 
-                  createDocument("제목 없음", gId, gType, pId);
+                  // Private 그룹일 경우 groupId를 undefined로 설정하여 서버가 올바르게 처리하도록 함
+                  const actualGroupId = gType === GroupType.Private ? undefined : gId;
+
+                  createDocument("제목 없음", actualGroupId, gType, pId);
                 }}
                 dragState={{ activeId, overId, position: dropPosition }}
                 onItemMouseMove={handleItemMouseMove}
@@ -786,7 +789,11 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
           else if (data.groupType === 'private') gType = GroupType.Private;
 
           const tagArray = data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined;
-          createDocument(data.title, data.groupId, gType, data.folderId, undefined, data.content, tagArray, data.summary);
+
+          // Private 그룹은 ID가 없어야 함 (undefined)
+          const finalGroupId = gType === GroupType.Private ? undefined : data.groupId;
+
+          createDocument(data.title, finalGroupId, gType, data.folderId, undefined, data.content, tagArray, data.summary);
         }}
         // Initialize group/folder selection for New Document Dialog
         // Note: NewDocumentDialog currently expects a recursive FolderItem structure.

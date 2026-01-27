@@ -448,11 +448,11 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
         id: docId,
         title: title,
         content: content,
-        group_type: doc.group_type || 2,
+        group_type: doc.group_type !== undefined ? doc.group_type : 2,
         group_id: doc.group_id,
         parent_id: doc.parent_id,
-        document_state: doc.document_state || 1,
-        visibility_level: doc.visibility_level || 1,
+        document_state: doc.document_state !== undefined ? doc.document_state : 1,
+        visibility_level: doc.visibility_level !== undefined ? doc.visibility_level : 1,
         is_favorite: doc.is_favorite || false,
         version: doc.version || 0,
         summary: doc.summary,
@@ -463,7 +463,10 @@ export const Editor = memo(({ docId, isActive }: SingleTabEditorProps) => {
         ...savedDoc,
         summary: doc.summary,
         tags: doc.tags,
-        creator_name: doc.creator_name
+        creator_name: doc.creator_name,
+        // Preserve group metadata if backend response is partial
+        group_type: savedDoc.group_type !== undefined ? savedDoc.group_type : doc.group_type,
+        group_id: savedDoc.group_id || doc.group_id,
       };
 
       updateDocument(mergedDoc);

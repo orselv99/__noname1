@@ -46,7 +46,7 @@ export interface DocumentListGroupType {
   /** 그룹 이름 */
   name: string;
   /** 그룹 유형 */
-  type: 'department' | 'project';
+  type: 'department' | 'project' | 'private';
   /** 포함된 문서 아이템 목록 */
   items: DocumentListItemType[];
   /** 그룹 확장 여부 */

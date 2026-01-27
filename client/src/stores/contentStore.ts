@@ -258,6 +258,9 @@ export const useContentStore = create<ContentStore>()(
             creator_name: savedDoc.creator_name || doc.creator_name,
             // Preserve parent_id if backend doesn't return it
             parent_id: savedDoc.parent_id !== undefined ? savedDoc.parent_id : doc.parent_id,
+            // Preserve group metadata to prevent disappearance from lists if backend response is partial
+            group_type: savedDoc.group_type !== undefined ? savedDoc.group_type : doc.group_type,
+            group_id: savedDoc.group_id || doc.group_id,
           };
 
           get().updateDocument(mergedDoc);

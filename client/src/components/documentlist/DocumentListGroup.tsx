@@ -92,9 +92,9 @@ export const DocumentListGroup = memo(({
   // 그룹 타입에 따른 아이콘 결정
   let GroupIcon = Folder;
   if (group.type === 'project') GroupIcon = Briefcase;
+  else if (group.type === 'private') GroupIcon = Lock; // Private 타입 명시적 처리
   else if (group.type === 'department') {
-    if (group.id === 'private_group') GroupIcon = Lock;
-    else GroupIcon = Building2;
+    GroupIcon = Building2;
   }
 
   return (

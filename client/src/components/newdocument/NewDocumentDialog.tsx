@@ -18,7 +18,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { safeInvoke } from '../../utils/safeInvoke';
-import { X, FileText, Sparkles, Loader2, Upload, PenLine } from 'lucide-react';
+import { X, FileText, Sparkles, Loader2, Upload } from 'lucide-react';
 import { marked } from 'marked';
 import { DraftThinkingState } from './DraftThinkingAccordion';
 import { FolderItem, WebSearchResult, RagSearchResult, frequentTemplates } from './types';
@@ -57,7 +57,7 @@ interface NewDocumentDialogProps {
   groups: {
     id: string;
     name: string;
-    type: 'department' | 'project';
+    type: 'department' | 'project' | 'private';
     expanded: boolean;
     folders: FolderItem[];
   }[];
