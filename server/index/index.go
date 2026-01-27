@@ -819,7 +819,7 @@ func (s *server) GenerateEmbedding(ctx context.Context, req *pb.GenerateEmbeddin
 // GenerateDraftRequest 구조체 (LLM 요청용)
 type DraftCompletionRequest struct {
 	Prompt      string   `json:"prompt"`
-	NPredict    int      `json:"n_predict"`
+	MaxTokens   int      `json:"max_tokens"`
 	Temperature float32  `json:"temperature"`
 	TopK        int      `json:"top_k"`
 	TopP        float32  `json:"top_p"`
@@ -845,11 +845,12 @@ func (s *server) GenerateDraft(ctx context.Context, req *pb.GenerateDraftRequest
 	// 1. 프롬프트 구성 (Korean)
 	// 역할 부여: 전문 테크니컬 라이터
 	var promptContent strings.Builder
-	promptContent.WriteString("당신은 전문적인 테크니컬 라이터입니다. \n")
-	promptContent.WriteString("다음 정보를 바탕으로 체계적이고 전문적인 문서 초안을 작성해주세요.\n\n")
+	promptContent.WriteString("### System Role \n")
+	promptContent.WriteString("당신은 전문적인 문서 작성을 돕는 유능한 비즈니스 라이터입니다. \n")
+	promptContent.WriteString("제공된 참고 자료와 검색 결과를 바탕으로, 사용자가 요청한 템플릿에 맞춰 논리적이고 명확한 문서 초안을 작성합니다.\n\n")
 
 	// 1-1. 문서 메타데이터
-	promptContent.WriteString(fmt.Sprintf("## 문서 정보\n- 제목: %s\n", req.Title))
+	promptContent.WriteString(fmt.Sprintf("### Context\n- 제목: %s\n", req.Title))
 	if req.Tags != "" {
 		promptContent.WriteString(fmt.Sprintf("- 태그: %s\n", req.Tags))
 	}
@@ -877,13 +878,19 @@ func (s *server) GenerateDraft(ctx context.Context, req *pb.GenerateDraftRequest
 	}
 
 	// 1-4. 작성 지침 (Instructions)
-	promptContent.WriteString("## 작성 지침\n")
+	promptContent.WriteString("## Instructions\n")
 	promptContent.WriteString("1. **마크다운 형식 준수**: 명확한 헤더 구조(#, ## 등)를 사용하세요.\n")
 	promptContent.WriteString("2. **전문적 어조**: 간결하고 명확하며 비즈니스 친화적인 어투를 사용하세요.\n")
 	promptContent.WriteString("3. **내용 통합**: 제공된 메타데이터, 로컬 참조 문서, 웹 정보를 논리적으로 종합하세요.\n")
 	promptContent.WriteString("4. **완결성**: 서론, 본론, 결론 혹은 템플릿에 맞는 완결된 구조를 갖추세요.\n")
 	promptContent.WriteString("5. **언어**: 문서는 한국어로 작성해야 합니다.\n")
-	promptContent.WriteString(fmt.Sprintf("6. **템플릿 적용**: '%s' 템플릿의 일반적인 구조(개요, 상세 내용, 결론 등)를 따르세요.\n\n", req.Template))
+	promptContent.WriteString(fmt.Sprintf("6. **템플릿 적용**: '%s' 템플릿의 일반적인 구조(개요, 상세 내용, 결론 등)를 따르세요.\n", req.Template))
+	promptContent.WriteString("7. **검토**: 문장이 매끄러운지, 템플릿의 모든 요구사항이 반영되었는지 확인하세요.\n\n")
+
+	promptContent.WriteString("### Output Format\n")
+	promptContent.WriteString("1. 마크다운(Markdown) 형식을 사용하세요.\n")
+	promptContent.WriteString("2. 각 섹션은 헤더(##, ###)로 구분하세요.\n")
+	promptContent.WriteString("4. 불필요한 서론(예: '네, 초안을 작성해 드립니다')은 생략하고 바로 본론부터 작성하세요.\n\n")
 
 	promptContent.WriteString("위 지침에 따라 문서 초안을 지금 바로 작성해주세요.")
 
@@ -916,7 +923,7 @@ func generateDraftCompletion(prompt string) (string, error) {
 
 	reqBody := DraftCompletionRequest{
 		Prompt:      prompt,
-		NPredict:    4096, // 긴 문서 생성을 위해 충분한 토큰 확보
+		MaxTokens:   1500, // 긴 문서 생성을 위해 충분한 토큰 확보
 		Temperature: 0.7,  // 창의적인 초안 작성을 위해 약간 높임
 		TopK:        40,
 		TopP:        0.9,
@@ -974,5 +981,5 @@ func generateDraftCompletion(prompt string) (string, error) {
 
 	fmt.Printf("DEBUG: Full JSON to parse: [%s]\n", responseText)
 
-	return completionResp.Content, nil
+	return responseText, nil
 }

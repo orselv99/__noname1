@@ -782,7 +782,8 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
         onClose={() => setShowNewDocDialog(false)}
         onCreate={(data) => {
           const gType = data.groupType === 'department' ? GroupType.Department : GroupType.Project;
-          createDocument(data.title, data.groupId, gType, data.folderId);
+          const tagArray = data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined;
+          createDocument(data.title, data.groupId, gType, data.folderId, undefined, data.content, tagArray, data.summary);
         }}
         // Initialize group/folder selection for New Document Dialog
         // Note: NewDocumentDialog currently expects a recursive FolderItem structure.

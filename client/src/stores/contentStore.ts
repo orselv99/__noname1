@@ -62,7 +62,7 @@ export interface ContentStore {
   updateDocument: (doc: Document) => void;
   saveDocument: (doc: Document) => Promise<void>;
   toggleFavorite: (docId: string) => Promise<void>;
-  createDocument: (title?: string, groupId?: string, groupType?: GroupType, parentId?: string, defaultVisibility?: number) => Promise<void>;
+  createDocument: (title?: string, groupId?: string, groupType?: GroupType, parentId?: string, defaultVisibility?: number, content?: string, tags?: string[], summary?: string) => Promise<void>;
   deleteDocument: (docId: string) => Promise<void>;
   restoreDocument: (docId: string) => Promise<void>;
   renameDocument: (docId: string, newTitle: string) => Promise<void>;
@@ -448,15 +448,17 @@ export const useContentStore = create<ContentStore>()(
         }
       },
 
-      createDocument: async (title = 'Untitled', groupId, groupType = GroupType.Private, parentId, defaultVisibility = VisibilityLevel.Hidden) => {
+      createDocument: async (title = 'Untitled', groupId, groupType = GroupType.Private, parentId, defaultVisibility = VisibilityLevel.Hidden, content?: string, tags?: string[], summary?: string) => {
         const req: SaveDocumentRequest = {
           title,
-          content: '',
+          content: content || '',
           group_type: groupType,
           group_id: groupId || undefined, // Ensure explicit undefined for optional
           parent_id: parentId || undefined,
           document_state: DocumentState.Draft,
           visibility_level: defaultVisibility,
+          tags: tags ? tags.map(tag => ({ tag })) : undefined,
+          summary: summary || undefined,
         };
 
         try {

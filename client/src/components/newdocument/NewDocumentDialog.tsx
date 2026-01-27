@@ -18,7 +18,8 @@
 
 import { useState } from 'react';
 import { safeInvoke } from '../../utils/safeInvoke';
-import { X, FileText, Sparkles, Loader2, Upload } from 'lucide-react';
+import { X, FileText, Sparkles, Loader2, Upload, PenLine } from 'lucide-react';
+import { marked } from 'marked';
 import { DraftThinkingState } from './DraftThinkingAccordion';
 import { FolderItem, WebSearchResult, RagSearchResult, frequentTemplates } from './types';
 import { NewDocumentSidebar } from './NewDocumentSidebar';
@@ -318,6 +319,9 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
       });
 
       setThinkingState(prev => prev ? ({ ...prev, drafting: { status: 'done', logs: [{ message: '초안 생성 완료!' }] } }) : null);
+
+      console.log('draftContent', draftContent);
+
       return draftContent;
 
     } catch (error) {
@@ -348,6 +352,9 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
     if (creationMode === 'ai') {
       try {
         generatedContent = await generateAiDraft();
+        // Convert Markdown to HTML for Tiptap
+        const htmlContent = await marked.parse(generatedContent);
+        generatedContent = htmlContent;
       } catch (e) {
         alert("AI 초안 생성에 실패했습니다. 다시 시도해주세요.");
         return; // 생성 중단
