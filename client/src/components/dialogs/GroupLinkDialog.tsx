@@ -1,15 +1,10 @@
 import { useState } from 'react';
 import { X, Link2, Check, Clock, Building2, FolderKanban, Share2 } from 'lucide-react';
+import { useAuthStore } from '../../stores/authStore';
 
 interface GroupLinkDialogProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-interface ConnectedGroup {
-  id: string;
-  name: string;
-  type: 'department' | 'project';
 }
 
 interface AvailableGroup {
@@ -20,11 +15,7 @@ interface AvailableGroup {
 }
 
 export const GroupLinkDialog = ({ isOpen, onClose }: GroupLinkDialogProps) => {
-  const [connectedGroups] = useState<ConnectedGroup[]>([
-    { id: 'dept-1', name: '개발팀', type: 'department' },
-    { id: 'proj-1', name: 'Project Alpha', type: 'project' },
-    { id: 'proj-2', name: 'Project Beta', type: 'project' },
-  ]);
+  const { departments: deptStore, projects: projStore } = useAuthStore();
 
   const [availableGroups, setAvailableGroups] = useState<AvailableGroup[]>([
     { id: 'proj-3', name: 'Project Gamma', type: 'project', status: 'none' },
@@ -40,8 +31,17 @@ export const GroupLinkDialog = ({ isOpen, onClose }: GroupLinkDialogProps) => {
 
   if (!isOpen) return null;
 
-  const departments = connectedGroups.filter(g => g.type === 'department');
-  const myProjects = connectedGroups.filter(g => g.type === 'project');
+  const departments = Object.entries(deptStore).map(([id, info]) => ({
+    id,
+    name: info.name,
+    type: 'department' as const
+  }));
+
+  const myProjects = Object.entries(projStore).map(([id, info]) => ({
+    id,
+    name: info.name,
+    type: 'project' as const
+  }));
 
   return (
     <div
@@ -70,44 +70,43 @@ export const GroupLinkDialog = ({ isOpen, onClose }: GroupLinkDialogProps) => {
         <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
           {/* Connected Groups */}
           <div>
-            <h3 className="text-sm font-medium text-zinc-400 mb-2 flex items-center gap-2">
-              <Check size={14} className="text-green-500" />
-              연결된 그룹
-            </h3>
-
             {/* My Department */}
-            <div className="mb-3">
-              <p className="text-xs text-zinc-500 mb-1.5">내 부서</p>
-              <div className="space-y-1">
-                {departments.map(group => (
-                  <div
-                    key={group.id}
-                    className="flex items-center gap-2 px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300"
-                  >
-                    <Building2 size={14} className="text-blue-400" />
-                    <span>{group.name}</span>
-                    <span className="ml-auto text-xs text-green-500">연결됨</span>
-                  </div>
-                ))}
+            {departments.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs text-zinc-500 mb-1.5">내 부서</p>
+                <div className="space-y-1">
+                  {departments.map(group => (
+                    <div
+                      key={group.id}
+                      className="flex items-center gap-2 px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300"
+                    >
+                      <Building2 size={14} className="text-blue-400" />
+                      <span>{group.name}</span>
+                      <span className="ml-auto text-xs text-green-500">연결됨</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* My Projects */}
-            <div>
-              <p className="text-xs text-zinc-500 mb-1.5">내 프로젝트</p>
-              <div className="space-y-1">
-                {myProjects.map(group => (
-                  <div
-                    key={group.id}
-                    className="flex items-center gap-2 px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300"
-                  >
-                    <FolderKanban size={14} className="text-purple-400" />
-                    <span>{group.name}</span>
-                    <span className="ml-auto text-xs text-green-500">연결됨</span>
-                  </div>
-                ))}
+            {myProjects.length > 0 && (
+              <div>
+                <p className="text-xs text-zinc-500 mb-1.5">내 프로젝트</p>
+                <div className="space-y-1">
+                  {myProjects.map(group => (
+                    <div
+                      key={group.id}
+                      className="flex items-center gap-2 px-3 py-2 bg-zinc-800/50 rounded-lg text-sm text-zinc-300"
+                    >
+                      <FolderKanban size={14} className="text-purple-400" />
+                      <span>{group.name}</span>
+                      <span className="ml-auto text-xs text-green-500">연결됨</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Available Groups */}

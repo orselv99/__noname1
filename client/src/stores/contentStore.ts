@@ -21,6 +21,7 @@ export interface CalendarEvent {
   endDate: string;   // ISO string
   color?: string;
   priority?: 'High' | 'Medium' | 'Low';
+  attendees?: string;
 }
 
 export interface ContentStore {

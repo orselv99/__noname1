@@ -110,14 +110,17 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   });
 
   useEffect(() => {
-    if (creationMode === 'ai' && contentRef.current) {
+    if (creationMode === 'ai' && isGenerating && contentRef.current) {
       setTimeout(() => {
         if (contentRef.current) {
-          contentRef.current.scrollTop = contentRef.current.scrollHeight;
+          contentRef.current.scrollTo({
+            top: contentRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
         }
       }, 50);
     }
-  }, [thinkingState, accordionState, creationMode]);
+  }, [thinkingState, accordionState, creationMode, isGenerating]);
 
   /** 아코디언 토글 함수 */
   const toggleAccordion = (section: 'title' | 'template' | 'docs' | 'web' | 'resources') => {

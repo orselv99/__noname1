@@ -100,14 +100,15 @@ export const CalendarView = () => {
     // Maybe verify if event date is in view? already should be.
   };
 
-  const handleSaveEvent = (eventData: { title: string; startDate: Date; endDate: Date; description: string; color?: string; priority?: 'High' | 'Medium' | 'Low' }) => {
+  const handleSaveEvent = (eventData: { title: string; startDate: Date; endDate: Date; description: string; color?: string; priority?: 'High' | 'Medium' | 'Low'; attendees?: string }) => {
     addCalendarEvent({
       ...eventData,
       id: crypto.randomUUID(),
       startDate: eventData.startDate.toISOString(),
       endDate: eventData.endDate.toISOString(),
       color: eventData.color || 'bg-blue-500',
-      priority: eventData.priority || 'Medium'
+      priority: eventData.priority || 'Medium',
+      attendees: eventData.attendees
     });
     setShowEventDialog(false);
   };

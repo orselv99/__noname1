@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Clock, AlignLeft, Palette, Flag } from 'lucide-react';
+import { X, Calendar, Clock, AlignLeft, Palette, Flag, Users } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { CalendarDateTimePicker } from './CalendarDateTimePicker';
 
@@ -8,7 +8,7 @@ interface CalendarEventDialogProps {
   onClose: () => void;
   startDate: Date | null;
   endDate: Date | null;
-  onSave: (event: { title: string; startDate: Date; endDate: Date; description: string; color: string; priority: 'High' | 'Medium' | 'Low' }) => void;
+  onSave: (event: { title: string; startDate: Date; endDate: Date; description: string; color: string; priority: 'High' | 'Medium' | 'Low'; attendees: string }) => void;
 }
 
 const COLORS = [
@@ -19,6 +19,7 @@ const COLORS = [
 export const CalendarEventDialog = ({ isOpen, onClose, startDate, endDate, onSave }: CalendarEventDialogProps) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [attendees, setAttendees] = useState('');
 
   // Date 객체 상태 관리 (기존 문자열 상태 대체)
   const [startDateState, setStartDateState] = useState<Date>(new Date());
@@ -33,6 +34,7 @@ export const CalendarEventDialog = ({ isOpen, onClose, startDate, endDate, onSav
       setEndDateState(endDate);
       setTitle('');
       setDescription('');
+      setAttendees('');
       setSelectedColor(COLORS[0]);
       setPriority('Medium');
     }
@@ -49,7 +51,8 @@ export const CalendarEventDialog = ({ isOpen, onClose, startDate, endDate, onSav
       endDate: endDateState,
       description,
       color: selectedColor,
-      priority
+      priority,
+      attendees
     });
     onClose();
   };
@@ -140,6 +143,20 @@ export const CalendarEventDialog = ({ isOpen, onClose, startDate, endDate, onSav
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* 참석자 */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1 flex items-center gap-1">
+              <Users size={12} /> 참석자
+            </label>
+            <input
+              type="text"
+              value={attendees}
+              onChange={e => setAttendees(e.target.value)}
+              placeholder="참석자를 입력하세요 (예: 홍길동, 김철수)"
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+            />
           </div>
 
           {/* 설명 */}
