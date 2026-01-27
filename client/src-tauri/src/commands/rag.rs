@@ -958,7 +958,7 @@ pub async fn search_web(
   let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
   let html = res.text().await.map_err(|e| e.to_string())?;
 
-  // Collect raw results in a separate block so `document` is dropped before async operations
+  // 검색결과 parsing (duckduckgo)
   let raw_results: Vec<(String, String, String)> = {
     let document = scraper::Html::parse_document(&html);
     let result_selector = scraper::Selector::parse(".result").unwrap();

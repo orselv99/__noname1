@@ -38,7 +38,7 @@ import { EditorTabs } from './components/editor/EditorTabs';
 // Other
 import { ToastProvider, useToast } from './components/Toast';
 import { StatusBar } from './components/StatusBar';
-import { RagPanel } from './components/sidebar/RagPanel';
+import { RagPanel } from './components/rag/RagPanel';
 import { CrewPanel } from './components/sidebar/CrewPanel';
 import { CalendarPanel } from './components/calendar/CalendarPanel';
 
