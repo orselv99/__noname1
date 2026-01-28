@@ -39,9 +39,12 @@ pub mod config;
 pub mod crypto;
 /// crypto 모듈   : AES-GCM 암호화/복호화 유틸리티
 pub mod database;
+/// sidecar 모듈  : 외부 프로세스(llama-server) 관리 (현재 비활성화)
+
+/// import 모듈: 문서 변환 (Office, HWP -> Markdown)
+pub mod import;
 /// database 모듈 : SQLite 로컬 데이터베이스 관리
 pub mod sidecar;
-/// sidecar 모듈  : 외부 프로세스(llama-server) 관리 (현재 비활성화)
 
 // ============================================================================
 // Tauri 앱 초기화 및 실행
@@ -61,6 +64,9 @@ pub fn run() {
     // shell 플러그인: 외부 프로세스 실행 (sidecar 지원)
     // C++ 비교: CreateProcess() 또는 QProcess
     .plugin(tauri_plugin_shell::init())
+    // 다이얼로그 플러그인: 파일 열기/저장
+    // C++ 비교: QFileDialog
+    .plugin(tauri_plugin_dialog::init())
     // ====================================================================
     // 전역 상태 등록 (.manage)
     // ====================================================================
@@ -149,7 +155,12 @@ pub fn run() {
       commands::chat::get_chat_room,
       commands::chat::save_chat_message,
       commands::chat::get_chat_messages,
-      commands::chat::update_message_status // [읽음 처리용] 메시지 상태 업데이트
+      commands::chat::get_chat_messages,
+      commands::chat::update_message_status, // [읽음 처리용] 메시지 상태 업데이트
+      // ----------------------------------------------------------------
+      // 문서 가져오기 명령
+      // ----------------------------------------------------------------
+      commands::import::import_file
     ])
     // ====================================================================
     // 앱 초기화 콜백 (.setup)

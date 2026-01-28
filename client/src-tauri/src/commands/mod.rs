@@ -44,3 +44,6 @@ pub mod content;
 
 /// 채팅 커맨드: 저장, 목록, 조회
 pub mod chat;
+
+/// 문서 가져오기 커맨드
+pub mod import;

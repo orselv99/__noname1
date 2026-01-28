@@ -82,6 +82,7 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   // AI 모드 추가 정보 상태
   const [tags, setTags] = useState(''); // 태그 (콤마로 구분)
   const [summary, setSummary] = useState(''); // 문서 요약/개요
+  const [importedContent, setImportedContent] = useState(''); // 가져온 문서 내용
 
   // AI 모드 상태
   const [webSearchQuery, setWebSearchQuery] = useState('');
@@ -352,11 +353,6 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
    */
   const handleCreate = async () => {
     // 가져오기 모드일 때는 별도 로직 (아직 미구현이므로 리턴)
-    if (creationMode === 'import') {
-      alert("문서 가져오기 기능은 아직 준비 중입니다.");
-      return;
-    }
-
     if (!title.trim() || !selectedGroupId) return;
     const group = groups.find(g => g.id === selectedGroupId);
     if (!group) return;
@@ -373,13 +369,23 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
         alert("AI 초안 생성에 실패했습니다. 다시 시도해주세요.");
         return; // 생성 중단
       }
+    } else if (creationMode === 'import') {
+      // Import mode uses the content from backend directly (it's markdown, might need conversion if editor expects HTML)
+      // Tiptap handles markdown via storage, but here we might pass it as initial content.
+      // Usually the editor expects HTML or JSON.
+      // Let's assume the Markdown is acceptable or needing conversion. 
+      // If the onCreate handler expects HTML, we should convert.
+      // Let's convert MD to HTML for consistency
+      if (importedContent) {
+        generatedContent = await marked.parse(importedContent);
+      }
     }
 
     onCreate?.({
       groupId: group.id,
       groupType: group.type,
       folderId: selectedFolderId || undefined,
-      template: creationMode === 'ai' ? 'blank' : selectedTemplate,
+      template: (creationMode === 'ai' || creationMode === 'import') ? 'blank' : selectedTemplate,
       title: title.trim(),
       tags: tags,
       summary: summary,
@@ -390,6 +396,7 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
     setTitle('');
     setTags('');
     setSummary('');
+    setImportedContent(''); // Reset imported content
     setSelectedTemplate('blank');
     setTemplateSearch('');
     setCreationMode('blank');
@@ -571,12 +578,17 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
               )}
 
               {creationMode === 'import' && (
-                <NewDocumentImportMode />
+                <NewDocumentImportMode
+                  onImportComplete={(importedTitle, importedContent) => {
+                    setTitle(importedTitle);
+                    setImportedContent(importedContent);
+                  }}
+                />
               )}
             </div>
 
             {/* 기본 모드 하단 제목 입력 (고정) */}
-            {creationMode === 'blank' && (
+            {(creationMode === 'blank' || (creationMode === 'import' && title)) && (
               <div className="px-5 py-4 border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-sm z-10 shrink-0">
                 <label className="block text-sm font-medium text-zinc-400 mb-2">
                   문서 제목
@@ -632,10 +644,11 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
           {/* 가져오기 모드일 때 버튼 */}
           {creationMode === 'import' && (
             <button
-              onClick={() => alert("준비 중...")}
-              className="flex-1 py-2.5 px-4 rounded-lg text-white text-sm font-medium transition-colors bg-green-600 hover:bg-green-500 shadow-green-900/20 flex items-center justify-center gap-2"
+              onClick={handleCreate}
+              disabled={!title.trim()} // title is set by onImportComplete
+              className="flex-1 py-2.5 px-4 rounded-lg text-white text-sm font-medium transition-colors bg-green-600 hover:bg-green-500 shadow-green-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Upload size={16} /> 불러오기
+              <Upload size={16} /> 문서 추가
             </button>
           )}
         </div>

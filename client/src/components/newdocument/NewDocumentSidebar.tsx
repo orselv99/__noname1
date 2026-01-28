@@ -8,7 +8,7 @@
  * ==========================================================================
  */
 
-import { ChevronDown, ChevronRight, Building2, FolderKanban, Folder, FolderPlus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Building2, FileText, Files, Briefcase, Lock } from 'lucide-react';
 import { GroupItem, FolderItem } from './types';
 
 /**
@@ -22,7 +22,7 @@ interface NewDocumentSidebarProps {
   /** 현재 선택된 폴더 ID (없으면 null) */
   selectedFolderId: string | null;
   /** 현재 생성 모드 ('blank' 또는 'ai') - 선택 강조 색상 결정 */
-  creationMode: 'blank' | 'ai';
+  creationMode: 'blank' | 'ai' | 'import';
   /** 그룹 선택 핸들러 */
   onSelectGroup: (groupId: string) => void;
   /** 폴더 선택 핸들러 */
@@ -45,7 +45,6 @@ export const NewDocumentSidebar = ({
   creationMode,
   onSelectGroup,
   onSelectFolder,
-  onCreateFolder,
   onToggleGroup,
   onToggleFolder
 }: NewDocumentSidebarProps) => {
@@ -53,7 +52,11 @@ export const NewDocumentSidebar = ({
   /**
    * 확장/축소 토글 처리
    */
-  const toggleExpand = (id: string, e: React.MouseEvent, type: 'group' | 'folder', groupId?: string) => {
+  const toggleExpand = (
+    id: string,
+    e: React.MouseEvent,
+    type: 'group' | 'document',
+    groupId?: string) => {
     e.stopPropagation();
     if (type === 'group') {
       onToggleGroup?.(id);
@@ -63,66 +66,80 @@ export const NewDocumentSidebar = ({
   };
 
   /**
-   * 폴더 트리 재귀 렌더링
+   * 문서 트리 재귀 렌더링
    */
-  const renderFolders = (folders: FolderItem[], groupId: string, depth: number) => {
-    return folders.map(folder => (
-      <div key={folder.id}>
-        <div
-          className={`w-full flex items-center group/folder relative pr-2 py-1.5 text-sm transition-colors cursor-pointer ${selectedFolderId === folder.id && selectedGroupId === groupId
-            ? creationMode === 'ai'
-              ? 'bg-purple-500/20 text-purple-400'
-              : 'bg-blue-500/20 text-blue-400'
-            : 'text-zinc-400 hover:bg-zinc-800'
-            }`}
-          style={{ paddingLeft: `${depth * 16 + 28}px` }}
-          onClick={() => onSelectFolder(groupId, folder.id)}
-        >
-          {/* 폴더 확장/축소 버튼 */}
-          {folder.children && folder.children.length > 0 && (
-            <button
-              onClick={(e) => toggleExpand(folder.id, e, 'folder', groupId)}
-              className="absolute left-0 p-1 hover:text-zinc-200"
-              style={{ left: `${depth * 16 + 12}px` }}
-            >
-              {folder.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            </button>
-          )}
-          <Folder size={14} className="text-yellow-600 shrink-0 mr-2" />
-          <span className="truncate flex-1">{folder.name}</span>
+  const renderDocuments = (items: FolderItem[], groupId: string, depth: number) => {
+    return items.map(item => {
+      // 하위 문서가 있는지 확인 (아이콘 및 동작 결정용)
+      const hasChildren = item.children && item.children.length > 0;
 
-          {/* 하위 폴더 생성 버튼 (호버 시 표시) */}
-          <button
+      return (
+        <div key={item.id} className="flex flex-col">
+          <div
+            className={`w-full flex items-center group/item relative pr-2 py-1.5 text-sm transition-colors cursor-pointer 
+              ${selectedFolderId === item.id && selectedGroupId === groupId ?
+                creationMode === 'ai' ? 'bg-purple-500/20 text-purple-400' :
+                  creationMode === 'import' ? 'bg-green-500/20 text-green-400' :
+                    'bg-blue-500/20 text-blue-400'
+                : 'text-zinc-400 hover:bg-zinc-800'
+              }`}
+            style={{ paddingLeft: `${depth * 16 + 28}px` }}
             onClick={(e) => {
-              e.stopPropagation();
-              onCreateFolder?.(groupId, folder.id);
+              // 문서 선택
+              onSelectFolder(groupId, item.id);
+
+              // 하위 문서가 있으면 펼치기/접기 토글
+              if (hasChildren) {
+                console.log('toggleExpand', item.id, e, 'document', groupId);
+                // 상위로 이벤트 전파 방지
+                e.stopPropagation();
+
+                toggleExpand(item.id, e, 'document', groupId);
+              }
             }}
-            className="hidden group-hover/folder:flex p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 rounded"
-            title="Create Folder"
           >
-            <FolderPlus size={14} />
-          </button>
-        </div>
-        {/* 하위 폴더 렌더링 */}
-        {folder.expanded && folder.children && (
-          <div>
-            {renderFolders(folder.children, groupId, depth + 1)}
+            {/* 확장/축소 버튼 (하위 문서가 있을 때만 표시) */}
+            {hasChildren && (
+              <button
+                onClick={(e) => toggleExpand(item.id, e, 'document', groupId)}
+                className="absolute left-0 p-1 hover:text-zinc-200"
+                style={{ left: `${depth * 16 + 12}px` }}
+              >
+                {item.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              </button>
+            )}
+
+            {/* 아이콘: 하위 문서 유무에 따라 FileText(단일) / Files(모음) 구분 */}
+            {hasChildren ? (
+              <Files size={14} className="shrink-0 mr-2" />
+            ) : (
+              <FileText size={14} className="shrink-0 mr-2" />
+            )}
+
+            <span className="truncate flex-1">{item.name}</span>
           </div>
-        )}
-      </div>
-    ));
+
+          {/* 하위 문서 목록 렌더링 (Column 방향) */}
+          {item.expanded && hasChildren && (
+            <div className="flex flex-col">
+              {renderDocuments(item.children!, groupId, depth + 1)}
+            </div>
+          )}
+        </div>
+      );
+    });
   };
 
   return (
-    <div className="w-56 border-r border-zinc-800 overflow-y-auto shrink-0 bg-zinc-900/50">
+    <div className="w-56 border-r border-zinc-800 overflow-y-auto shrink-0 bg-zinc-900/50 flex flex-col">
       <div className="p-2 text-xs text-zinc-500 font-medium uppercase">위치 선택</div>
       {groups.map(group => (
-        <div key={group.id}>
+        <div key={group.id} className="flex flex-col">
           <div
             className={`w-full flex items-center group/group relative pr-2 py-1.5 text-sm transition-colors cursor-pointer ${selectedGroupId === group.id && !selectedFolderId
-              ? creationMode === 'ai'
-                ? 'bg-purple-500/20 text-purple-400'
-                : 'bg-blue-500/20 text-blue-400'
+              ? creationMode === 'ai' ? 'bg-purple-500/20 text-purple-400' :
+                creationMode === 'import' ? 'bg-green-500/20 text-green-400' :
+                  'bg-blue-500/20 text-blue-400'
               : 'text-zinc-400 hover:bg-zinc-800'
               }`}
             onClick={() => {
@@ -141,28 +158,30 @@ export const NewDocumentSidebar = ({
             </button>
 
             {/* 그룹 타입 아이콘 */}
-            {group.type === 'department' ? (
-              <Building2 size={14} className={` shrink-0 mr-2 ${creationMode === 'ai' ? 'text-purple-400' : 'text-blue-400'}`} />
-            ) : (
-              <FolderKanban size={14} className="text-purple-400 shrink-0 mr-2" />
-            )}
+            {group.type === 'department' ?
+              <Building2
+                size={14}
+                className={` shrink-0 mr-2 ${creationMode === 'ai' ? 'text-purple-400' :
+                  creationMode === 'import' ? 'text-green-400' : 'text-blue-400'}`} /> :
+              group.type === 'project' ?
+                <Briefcase
+                  size={14}
+                  className={` shrink-0 mr-2 ${creationMode === 'ai' ? 'text-purple-400' :
+                    creationMode === 'import' ? 'text-green-400' : 'text-blue-400'}`} /> :
+                <Lock
+                  size={14}
+                  className={` shrink-0 mr-2 ${creationMode === 'ai' ? 'text-purple-400' :
+                    creationMode === 'import' ? 'text-green-400' : 'text-blue-400'}`} />}
             <span className="truncate flex-1 font-medium">{group.name}</span>
 
-            {/* 최상위 폴더 생성 버튼 */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreateFolder?.(group.id);
-              }}
-              className="hidden group-hover/group:flex p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 rounded"
-              title="Create Folder"
-            >
-              <FolderPlus size={14} />
-            </button>
           </div>
 
-          {/* 그룹 내 폴더 목록 */}
-          {group.expanded && renderFolders(group.folders, group.id, 0)}
+          {/* 그룹 내 문서 목록 */}
+          {group.expanded && (
+            <div className="flex flex-col">
+              {renderDocuments(group.folders, group.id, 0)}
+            </div>
+          )}
         </div>
       ))}
     </div>

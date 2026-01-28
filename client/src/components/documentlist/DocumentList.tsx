@@ -842,6 +842,8 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
 
           createDocument(data.title, finalGroupId, gType, data.folderId, undefined, data.content, tagArray, data.summary);
         }}
+        onToggleGroup={handleToggleGroup}
+        onToggleFolder={handleToggleExpandInfo}
         // Initialize group/folder selection for New Document Dialog
         // Note: NewDocumentDialog currently expects a recursive FolderItem structure.
         // We map our flat DocumentListItemType to the expected structure.
