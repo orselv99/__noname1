@@ -28,13 +28,14 @@ const SortableTab = memo(({ title, type, isActive, isDirty, isRecycled, onSelect
 
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-1 text-xs h-full max-w-[200px] min-w-[120px] relative group cursor-pointer border-t-2 ${borderColor} ${textClass} hover:bg-zinc-800 transition-colors`}
+      className={`flex items-center gap-2 px-3 py-1 text-xs h-full w-40 shrink-0 relative group cursor-pointer border-t-2 ${borderColor} ${textClass} hover:bg-zinc-800 transition-colors`}
       onMouseDown={(e) => e.stopPropagation()} // Prevent window drag
       onClick={onSelect}
+      title={title}
     >
       <span className="truncate select-none flex-1 flex items-center gap-1.5">
         {type === 'calendar' ? <CalendarIcon size={12} className="shrink-0" /> : <FileText size={12} className="shrink-0 opacity-70" />}
-        {title}
+        <span className="truncate">{title}</span>
       </span>
 
       <div className="flex items-center justify-center w-4 h-4 ml-1 relative shrink-0">

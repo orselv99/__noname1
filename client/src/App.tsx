@@ -449,7 +449,7 @@ function AppContent() {
                     <div className="h-full flex items-center gap-1">
                       {/* Contextual Tabs */}
                       <button
-                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'metadata' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'metadata' || activeRightTab === 'calendar' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
                         onClick={() => setActiveRightTab(activeTabType === 'calendar' ? 'calendar' : 'metadata')}
                         title="Metadata"
                       >
