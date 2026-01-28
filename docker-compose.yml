@@ -58,10 +58,10 @@ services:
       - "50052:50052"
     environment:
       - DB_DSN=host=postgres user=postgres password=zzzzzzzz1! dbname=fiery_index port=5432 sslmode=disable
-      - LLAMA_COMPLETION_ADDR=http://llama-completion:8080
-      #- LLAMA_COMPLETION_ADDR=http://192.168.0.209:81/v1
-      - LLAMA_EMBEDDING_ADDR=http://llama-embedding:8080
-      #- LLAMA_EMBEDDING_ADDR=http://192.168.0.209:82/v1
+      #- LLAMA_COMPLETION_ADDR=http://llama-completion:8080
+      - LLAMA_COMPLETION_ADDR=http://192.168.0.209:81/v1
+      #- LLAMA_EMBEDDING_ADDR=http://llama-embedding:8080
+      - LLAMA_EMBEDDING_ADDR=http://192.168.0.209:82/v1
     depends_on:
       postgres:
         condition: service_healthy
