@@ -1,7 +1,7 @@
+use std::sync::Mutex;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Emitter};
 use serde::{Deserialize, Serialize};
 
 use tauri_plugin_shell::ShellExt;
@@ -84,6 +84,10 @@ pub async fn init_google_auth(app: AppHandle, state: tauri::State<'_, Mutex<Goog
     stream.flush().map_err(|e| e.to_string())?;
 
     // 7. 토큰 교환
+    // 이전 단계와 동일: Code -> Token
+    // finish_google_auth 로직을 여기서 바로 수행
+    // (TcpListener 방식은 한 흐름에서 완료되므로 별도 finish 커멘드 불필요)
+    
     let client = reqwest::Client::new();
     let params = [
         ("client_id", GOOGLE_CLIENT_ID),
@@ -105,7 +109,6 @@ pub async fn init_google_auth(app: AppHandle, state: tauri::State<'_, Mutex<Goog
 
     let token_data: TokenResponse = res.json().await.map_err(|e| e.to_string())?;
 
-    // 8. 상태 저장
     {
         let mut drive_state = state.lock().unwrap();
         drive_state.access_token = Some(token_data.access_token);
@@ -113,9 +116,20 @@ pub async fn init_google_auth(app: AppHandle, state: tauri::State<'_, Mutex<Goog
             drive_state.refresh_token = Some(rt);
         }
     }
+    
+    // 성공 이벤트 발송 (프론트엔드 UI 갱신용)
+    app.emit("google-auth-success", ()).map_err(|e| e.to_string())?;
 
     Ok("Authentication successful".to_string())
 }
+
+// finish_google_auth는 딥링크용이었으나, Loopback 방식에서는 init 내에서 완료되므로
+// 더 이상 사용하지 않음 (또는 딥링크를 고집할 경우를 위해 남겨두되, 호출되지 않음)
+// 하지만 컴파일 에러 방지를 위해 삭제하거나 더미로 남김.
+// 여기서는 삭제하고 lib.rs에서 등록을 해제하는 것이 깔끔함.
+
+
+
 
 #[tauri::command]
 pub async fn list_google_drive_files(

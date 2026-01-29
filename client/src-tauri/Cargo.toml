@@ -80,3 +80,5 @@ undoc = "0.1"                                       # MS Office -> Markdown
 
 hwpers = "0.5.0"                                      # HWP -> Markdown
 anyhow = "1.0"                                      # Error handling
+tauri-plugin-deep-link = { git = "https://github.com/FabianLars/tauri-plugin-deep-link", branch = "v2", version = "0.1.2" }
+url = "2.5.8"

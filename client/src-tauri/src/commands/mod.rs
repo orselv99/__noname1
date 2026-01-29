@@ -47,5 +47,6 @@ pub mod chat;
 /// 문서 가져오기 커맨드
 pub mod import;
 
+pub mod confluence;
 /// 구글 드라이브 연동 커맨드
 pub mod google_drive;

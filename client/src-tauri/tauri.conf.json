@@ -34,8 +34,6 @@
     }
   },
   "bundle": {
-    "externalBin": [],
-    "resources": [],
     "active": true,
     "targets": [
       "nsis"
@@ -46,6 +44,18 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": [],
+    "externalBin": [],
+    "shortDescription": "",
+    "longDescription": "",
+    "copyright": "",
+    "category": "DeveloperTool",
+    "publisher": "fiery-horizon",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
   }
 }

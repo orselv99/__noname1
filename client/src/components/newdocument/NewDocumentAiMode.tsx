@@ -125,8 +125,8 @@ export const NewDocumentAiMode = ({
           <div className="p-4 border-t border-zinc-800/50 bg-black/20 animate-in fade-in slide-in-from-top-1 space-y-4">
 
             {/* 섹션 설명 */}
-            <div className="bg-blue-500/5 p-3 rounded border border-blue-500/10 mb-2">
-              <p className="text-xs text-blue-400/90 leading-relaxed">
+            <div className="bg-purple-500/20 p-3 rounded border border-blue-500/10 mb-2">
+              <p className="text-xs text-purple-400 leading-relaxed">
                 문서의 기본 정보와 개요를 작성해주세요.<br />
                 이 내용은 AI가 문서의 방향성과 문맥을 이해하는 데 중요한 단서가 됩니다.
               </p>

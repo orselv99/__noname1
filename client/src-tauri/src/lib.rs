@@ -24,7 +24,7 @@
 // 표준 라이브러리 및 외부 크레이트 임포트
 // ============================================================================
 use std::sync::Mutex; // 스레드 안전한 상호 배제 락
-use tauri::Manager; // Tauri 앱 핸들 관리 트레이트
+use tauri::{Emitter, Manager}; // Tauri 앱 핸들 관리 트레이트 및 이벤트 발송 트레이트
 
 // ============================================================================
 // 모듈 선언 (pub mod = 외부에서 접근 가능)
@@ -53,6 +53,9 @@ pub mod sidecar;
 ///
 /// C++ 비교: QApplication 생성 + exec() 호출과 유사
 pub fn run() {
+  #[cfg(any(windows, target_os = "linux"))]
+  tauri_plugin_deep_link::prepare("client");
+
   tauri::Builder::default()
     // ====================================================================
     // 플러그인 등록
@@ -67,6 +70,8 @@ pub fn run() {
     // 다이얼로그 플러그인: 파일 열기/저장
     // C++ 비교: QFileDialog
     .plugin(tauri_plugin_dialog::init())
+    // 딥링크 플러그인 (외부 URL 스킴 처리) - Functional API 사용으로 .plugin() 호출 제거
+    // .plugin(tauri_plugin_deep_link::init())
     // ====================================================================
     // 전역 상태 등록 (.manage)
     // ====================================================================
@@ -166,7 +171,15 @@ pub fn run() {
       // ----------------------------------------------------------------
       commands::google_drive::init_google_auth,
       commands::google_drive::list_google_drive_files,
-      commands::google_drive::download_google_drive_file
+      commands::google_drive::download_google_drive_file,
+      // ----------------------------------------------------------------
+      // Confluence 커맨드
+      // ----------------------------------------------------------------
+      commands::confluence::init_confluence_auth,
+      commands::confluence::finish_confluence_auth,
+      commands::confluence::list_confluence_spaces,
+      commands::confluence::search_confluence_pages,
+      commands::confluence::import_confluence_page
     ])
     // ====================================================================
     // 앱 초기화 콜백 (.setup)
@@ -178,6 +191,9 @@ pub fn run() {
       app.manage(Mutex::new(
         commands::google_drive::GoogleDriveState::default(),
       ));
+
+      // Confluence State 초기화
+      app.manage(Mutex::new(commands::confluence::ConfluenceState::default()));
 
       // SQLite 데이터베이스 초기화 (오프라인 지원용)
       match database::init_database(&app.handle()) {
@@ -199,6 +215,40 @@ pub fn run() {
       }
 
       println!("Debug: 앱 시작됨. 서버 사이드 AI 활성화.");
+
+      #[cfg(any(windows, target_os = "linux"))]
+      {
+        let handle = app.handle().clone();
+        tauri_plugin_deep_link::register("fiery-horizon", move |request| {
+          println!("Deep Link Request: {}", request);
+          let handle = handle.clone();
+
+          // Handle URL in a way that doesn't block the listener thread too long
+          // Request: "fiery-horizon://google-auth?code=..."
+
+          if let Ok(url) = url::Url::parse(&request) {
+            let code_pair = url.query_pairs().find(|(key, _)| key == "code");
+            if let Some((_, code)) = code_pair {
+              let code_str = code.to_string();
+              if let Some(host) = url.host_str() {
+                if host == "google-auth" {
+                  let _ = handle.emit(
+                    "deep-link-auth",
+                    serde_json::json!({ "type": "google", "code": code_str }),
+                  );
+                } else if host == "callback" || host == "confluence-auth" || host == "auth" {
+                  let _ = handle.emit(
+                    "deep-link-auth",
+                    serde_json::json!({ "type": "confluence", "code": code_str }),
+                  );
+                }
+              }
+            }
+          }
+        })
+        .map_err(|e| e.to_string())?;
+      }
+
       Ok(()) // setup 성공
     })
     // ====================================================================

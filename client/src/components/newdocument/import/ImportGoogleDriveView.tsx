@@ -1,5 +1,5 @@
 import { useState, forwardRef, useImperativeHandle, useEffect } from 'react';
-import { Loader2, AlertCircle, Cloud, HardDrive, Folder, ChevronLeft, CheckSquare, Square, X, FileText } from 'lucide-react';
+import { Loader2, AlertCircle, Cloud, HardDrive, Folder, ChevronLeft, CheckSquare, Square, FileText, ChevronRight } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface GoogleFile {
@@ -221,137 +221,140 @@ export const ImportGoogleDriveView = forwardRef<ImportGoogleDriveViewHandle, Imp
 
     if (!isGoogleDriveOpen) {
       return (
-        <button
-          onClick={handleGoogleDriveAuth}
-          disabled={isGoogleAuthLoading}
-          className="flex items-center gap-4 p-4 rounded-xl border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-blue-500/50 transition-all text-left group w-full"
-        >
-          <div className="p-3 bg-zinc-700 rounded-full group-hover:bg-blue-900/30 transition-colors">
-            <HardDrive size={24} className="text-blue-400" />
+        <div className="flex flex-col items-center justify-center h-full space-y-6 animate-in fade-in slide-in-from-bottom-5">
+          <div className="text-center space-y-3">
+            <div className="bg-green-500/20 p-4 rounded-full w-20 h-20 mx-auto flex items-center justify-center">
+              <HardDrive className="w-10 h-10 text-green-400" />
+            </div>
+            <h3 className="text-xl font-bold text-white">Google Drive 연결</h3>
+            <p className="text-sm text-zinc-400 max-w-xs mx-auto">
+              Google 계정으로 로그인하여<br />Drive 문서를 바로 가져오세요.
+            </p>
           </div>
-          <div>
-            <div className="font-medium text-white">Google Drive</div>
-            <div className="text-xs text-zinc-400 mt-0.5">여러 파일을 한 번에 가져오기</div>
-          </div>
-          {isGoogleAuthLoading && <Loader2 size={16} className="ml-auto animate-spin text-zinc-500" />}
-        </button>
+          <button
+            onClick={handleGoogleDriveAuth}
+            disabled={isGoogleAuthLoading}
+            className="bg-green-600 hover:bg-green-500 text-white font-medium py-2.5 px-6 rounded-lg transition-colors flex items-center gap-2"
+          >
+            {isGoogleAuthLoading && <Loader2 className="animate-spin w-4 h-4" />}
+            {isGoogleAuthLoading ? '연결 중...' : 'Google 로그인'}
+          </button>
+        </div>
       );
     }
 
     return (
-      <div className="flex flex-col h-full animate-in fade-in duration-300 bg-zinc-950 absolute inset-0 z-20">
-
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800 shrink-0">
-          <div className="flex items-center gap-2 overflow-hidden">
+      <div className="flex flex-col h-full space-y-4 p-4 animate-in fade-in">
+        {/* Navigation Bar (Breadcrumbs style match Confluence Search bar height) */}
+        <div className="flex gap-2 items-center bg-zinc-800 border border-zinc-700 rounded-md p-1 pl-3">
+          <div className="flex-1 flex items-center overflow-hidden gap-1 text-sm">
+            <Cloud size={16} className="text-emerald-400 shrink-0 mr-1" />
+            {folderStack.map((folder, idx) => (
+              <div key={folder.id} className="flex items-center whitespace-nowrap">
+                {idx > 0 && <ChevronRight size={14} className="text-zinc-600 mx-1" />}
+                <button
+                  onClick={() => handleBreadcrumbClick(idx)}
+                  className={`${idx === folderStack.length - 1
+                    ? 'text-white font-medium cursor-default'
+                    : 'text-zinc-400 hover:text-emerald-400 transition-colors'
+                    }`}
+                  disabled={idx === folderStack.length - 1}
+                >
+                  {folder.name}
+                </button>
+              </div>
+            ))}
+          </div>
+          {folderStack.length > 1 && (
             <button
-              onClick={() => setIsGoogleDriveOpen(false)}
-              className="p-1.5 hover:bg-zinc-800 rounded-md text-zinc-400 hover:text-white transition-colors"
-              title="닫기"
+              onClick={handleBackClick}
+              className="p-1.5 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white transition-colors"
+              title="상위 폴더"
             >
-              <X size={20} />
+              <ChevronLeft size={16} />
             </button>
-            <div className="flex items-center gap-1 text-sm font-medium text-white overflow-hidden whitespace-nowrap">
-              <Cloud size={18} className="text-blue-400 shrink-0 mr-1" />
-              {/* Breadcrumbs */}
-              {folderStack.map((folder, idx) => (
-                <span key={folder.id} className="flex items-center">
-                  {idx > 0 && <span className="text-zinc-600 mx-1">/</span>}
-                  <button
-                    onClick={() => handleBreadcrumbClick(idx)}
-                    className={`${idx === folderStack.length - 1 ? 'text-white cursor-default' : 'text-zinc-500 hover:text-blue-400 hover:underline cursor-pointer'}`}
-                    disabled={idx === folderStack.length - 1}
-                  >
-                    {folder.name}
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Toolbar */}
-        <div className="flex items-center gap-2 p-3 bg-zinc-900/50 border-b border-zinc-800 shrink-0">
-          <button
-            onClick={handleBackClick}
-            disabled={folderStack.length <= 1}
-            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-            title="상위 폴더로"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <div className="text-xs text-zinc-500 flex-1 text-right">
-            {selectedFilesMap.size}개 선택됨
-          </div>
-        </div>
-
-        {/* File List */}
-        <div className="flex-1 overflow-y-auto p-2">
-          {isLoading && !error ? (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-500 gap-3">
-              <Loader2 size={32} className="animate-spin text-blue-500" />
-              <p className="text-sm">{statusMessage || "로딩 중..."}</p>
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-3">
-              <AlertCircle size={32} className="text-red-500" />
-              <p className="text-sm text-center px-4">{error}</p>
-              <button onClick={handleBackClick} className="text-xs underline hover:text-white">이전으로 돌아가기</button>
-            </div>
-          ) : googleFiles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-500">
-              <Folder size={48} className="mb-2 opacity-20" />
-              <p>폴더가 비어있습니다.</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {googleFiles.map(file => {
-                const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
-                const isSelected = selectedFilesMap.has(file.id);
-
-                return (
-                  <div
-                    key={file.id}
-                    onClick={() => handleItemClick(file)}
-                    className={`
-                        group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all select-none
-                        ${isSelected ? 'bg-blue-500/20 border border-blue-500/30' : 'hover:bg-zinc-800 border border-transparent'}
-                      `}
-                  >
-                    {!isFolder ? (
-                      <div
-                        onClick={(e) => { e.stopPropagation(); toggleFileSelection(file); }}
-                        className={`shrink-0 ${isSelected ? 'text-blue-400' : 'text-zinc-600 group-hover:text-zinc-500'}`}
-                      >
-                        {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
-                      </div>
-                    ) : (
-                      <div className="w-5 shrink-0" />
-                    )}
-
-                    <div className="shrink-0">
-                      {isFolder ? (
-                        <Folder size={20} className="text-yellow-500/80 fill-yellow-500/20" />
-                      ) : (
-                        <FileText size={20} className="text-blue-400" />
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0 flex flex-col">
-                      <span className={`text-sm truncate ${isSelected ? 'text-blue-100' : 'text-zinc-300'}`}>
-                        {file.name}
-                      </span>
-                    </div>
-
-                    {isFolder && <div className="text-zinc-600"><ChevronLeft size={16} className="rotate-180" /></div>}
-                  </div>
-                );
-              })}
-            </div>
           )}
         </div>
 
-        {/* Footer removed: Uses main dialog button */}
+        {/* File List */}
+        <div className="flex-1 border border-zinc-700 bg-zinc-900/50 rounded-md overflow-hidden relative">
+          <div className="absolute inset-0 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+            {isLoading && !error && (
+              <div className="flex flex-col items-center justify-center h-full text-zinc-500 gap-3">
+                <Loader2 size={32} className="animate-spin text-emerald-500" />
+                <p className="text-sm">{statusMessage || "로딩 중..."}</p>
+              </div>
+            )}
+
+            {error && (
+              <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-3">
+                <AlertCircle size={32} className="text-red-500" />
+                <p className="text-sm text-center px-4">{error}</p>
+                <button onClick={handleBackClick} className="text-xs underline hover:text-white">이전으로 돌아가기</button>
+              </div>
+            )}
+
+            {!isLoading && !error && googleFiles.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+                <Folder size={48} className="mb-2 opacity-20" />
+                <p>폴더가 비어있습니다.</p>
+              </div>
+            )}
+
+            {!isLoading && !error && googleFiles.length > 0 && (
+              <div className="space-y-1">
+                {googleFiles.map(file => {
+                  const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+                  const isSelected = selectedFilesMap.has(file.id);
+
+                  return (
+                    <div
+                      key={file.id}
+                      onClick={() => handleItemClick(file)}
+                      className={`
+                          flex items-center p-3 rounded-lg cursor-pointer transition-colors border
+                          ${isSelected
+                          ? 'bg-emerald-500/20 border-emerald-500/50'
+                          : 'hover:bg-zinc-800 border-transparent'}
+                        `}
+                    >
+                      <div className="shrink-0 mr-3">
+                        {isFolder ? (
+                          <Folder size={20} className="text-yellow-500/80 fill-yellow-500/20" />
+                        ) : (
+                          <FileText size={20} className={`${isSelected ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <span className={`text-sm truncate ${isSelected ? 'text-emerald-100' : 'text-zinc-300'}`}>
+                          {file.name}
+                        </span>
+                      </div>
+
+                      {!isFolder && (
+                        <div className={`shrink-0 ml-2 ${isSelected ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                          {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
+                        </div>
+                      )}
+
+                      {isFolder && <div className="text-zinc-600 ml-2"><ChevronRight size={16} /></div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer info similar to Confluence view */}
+        <div className="text-xs text-zinc-500 px-1">
+          {selectedFilesMap.size > 0 ? (
+            <span className="text-emerald-400">선택됨: {selectedFilesMap.size}개 파일</span>
+          ) : (
+            '가져올 파일을 선택하세요.'
+          )}
+        </div>
       </div>
     );
   }
