@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Trash2, ChevronUp, ChevronDown, RotateCcw, X, FileText, Search, Eraser } from 'lucide-react';
-import { useConfirm } from '../ConfirmProvider';
+import { useConfirm } from '../common/ConfirmProvider';
 import { useContentStore } from '../../stores/contentStore';
 
 export const DocumentListRecycleBin = () => {

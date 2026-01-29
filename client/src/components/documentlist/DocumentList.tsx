@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useContentStore } from '../../stores/contentStore';
 import { GroupType, SortOption, PRIVATE_GROUP_ID } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
-import { useConfirm } from '../ConfirmProvider';
+import { useConfirm } from '../common/ConfirmProvider';
 import {
   closestCenter,
   DndContext,
@@ -707,7 +707,7 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
           </button>
         </div>
         <div className="flex items-center gap-1">
-          <button
+          {/* <button
             className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${isFavoriteFilter ? 'text-zinc-500 hover:text-white hover:bg-zinc-800' : 'text-zinc-500 hover:text-yellow-400 hover:bg-zinc-800'}`}
             onClick={() => setIsFavoriteFilter(!isFavoriteFilter)}
             title={isFavoriteFilter ? "Show All Documents" : "Show Favorites Only"}
@@ -717,7 +717,7 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
             ) : (
               <Star size={18} />
             )}
-          </button>
+          </button> */}
 
           <button
             className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-800 rounded"

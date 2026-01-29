@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { Loader2, Sparkles, Plus, History } from 'lucide-react';
 import { useRagStore } from '../../stores/ragStore';
-import { ThinkingAccordion } from '../ui/ThinkingAccordion';
+import { ThinkingAccordion } from '../common/ThinkingAccordion';
 import { RagHistoryList } from './RagHistoryList';
 import { RagChatInput } from './RagChatInput';
 import { RagChatMessage } from './RagChatMessage';

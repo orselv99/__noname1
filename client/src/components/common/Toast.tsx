@@ -2,7 +2,7 @@
 
 import { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAlarmStore, AlarmType } from '../stores/alarmStore';
+import { useAlarmStore, AlarmType } from '../../stores/alarmStore';
 
 // Toast Context is deprecated in favor of global store, but we keep the Provider structure for compatibility if needed.
 // Actually, let's export a simple hook that wraps the store action for convenience.
@@ -57,7 +57,7 @@ const toastStyles: Record<AlarmType, { bg: string; icon: ReactNode; border: stri
   },
 };
 
-import { roomManager } from '../services/p2p/RoomManager';
+import { roomManager } from '../../services/p2p/RoomManager';
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const alarms = useAlarmStore(state => state.alarms);

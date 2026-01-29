@@ -25,7 +25,7 @@ import { LoginResponse } from './types';
 import { SearchDialog } from './components/dialogs/SearchDialog';
 import { SettingsDialog } from './components/dialogs/SettingsDialog';
 import { ConfirmDialog } from './components/dialogs/ConfirmDialog';
-import { ConfirmProvider } from './components/ConfirmProvider';
+import { ConfirmProvider } from './components/common/ConfirmProvider';
 
 // Auth Components
 import { AuthLoginForm } from './components/auth/AuthLoginForm';
@@ -36,10 +36,10 @@ import { EditorContainer } from './components/editor/EditorContainer';
 import { EditorTabs } from './components/editor/EditorTabs';
 
 // Other
-import { ToastProvider, useToast } from './components/Toast';
-import { StatusBar } from './components/StatusBar';
+import { ToastProvider, useToast } from './components/common/Toast';
+import { StatusBar } from './components/common/StatusBar';
 import { RagPanel } from './components/rag/RagPanel';
-import { CrewPanel } from './components/sidebar/CrewPanel';
+import { CrewPanel } from './components/chat/CrewPanel';
 import { CalendarPanel } from './components/calendar/CalendarPanel';
 
 // LoginResponse imported from types

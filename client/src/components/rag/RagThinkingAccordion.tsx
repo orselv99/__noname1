@@ -1,5 +1,5 @@
 import { FileText, Database, Globe } from 'lucide-react';
-import { ThinkingAccordion, ThinkingItem } from '../ui/ThinkingAccordion';
+import { ThinkingAccordion, ThinkingItem } from '../common/ThinkingAccordion';
 
 export interface RagThinkingState {
   local: { status: 'pending' | 'running' | 'done' | 'idle', logs: { message: string, subItems?: string[] }[] };

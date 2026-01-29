@@ -157,9 +157,9 @@ export const CalendarView = () => {
         </div>
 
         {/* View Content */}
-        <div className="flex-1 overflow-hidden rounded-lg bg-zinc-800/30 border border-zinc-800/50">
+        <div className="flex-1 overflow-hidden rounded-lg border border-zinc-800/50">
           {view === 'month' && (
-            <div className="h-full flex flex-col p-4 bg-zinc-800 rounded-lg overflow-hidden">
+            <div className="h-full flex flex-col p-4 rounded-lg overflow-hidden">
               <CalendarMonthView
                 currentDate={currentDate}
                 events={events}

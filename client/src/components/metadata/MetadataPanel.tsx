@@ -32,8 +32,8 @@ import {
 import { useContentStore } from '../../stores/contentStore';
 import { DocumentState, VisibilityLevel, GroupType, Document } from '../../types';
 import { useAuthStore } from '../../stores/authStore';
-import { useConfirm } from '../ConfirmProvider';
-import { useToast } from '../Toast';
+import { useConfirm } from '../common/ConfirmProvider';
+import { useToast } from '../common/Toast';
 
 // 컴포넌트 임포트
 import { MetadataDocumentStateDropdown } from './MetadataDocumentStateDropdown';

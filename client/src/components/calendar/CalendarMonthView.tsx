@@ -213,7 +213,7 @@ export const CalendarMonthView = ({
   return (
     <>
       {/* Day Names */}
-      <div className="grid grid-cols-7 mb-2 shrink-0 border-b border-zinc-800 pb-2">
+      <div className="grid grid-cols-7 mb-4 shrink-0 ">
         {dayNames.map((day, idx) => (
           <div key={day} className={`text-center text-sm font-semibold py-1 ${idx === 0 ? 'text-red-400' : idx === 6 ? 'text-blue-400' : 'text-zinc-500'
             }`}>

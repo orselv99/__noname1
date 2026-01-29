@@ -1,6 +1,6 @@
 import { Loader2, Bell } from 'lucide-react';
-import { useContentStore } from '../stores/contentStore';
-import { useAlarmStore } from '../stores/alarmStore';
+import { useContentStore } from '../../stores/contentStore';
+import { useAlarmStore } from '../../stores/alarmStore';
 
 export const StatusBar = () => {
   const { aiAnalysisStatus, autoSaveStatus } = useContentStore();

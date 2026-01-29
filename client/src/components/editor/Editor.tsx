@@ -22,7 +22,7 @@ import { EditorBreadcrumbs } from './EditorBreadcrumbs';
 import { EditorActions } from './EditorActions';
 import { EditorTOC } from './EditorTOC';
 import { Document, DocumentState } from '../../types';
-import { useToast } from '../Toast';
+import { useToast } from '../common/Toast';
 import { invoke } from '@tauri-apps/api/core';
 
 // Import extracted extensions
