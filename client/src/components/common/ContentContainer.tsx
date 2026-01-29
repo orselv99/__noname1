@@ -1,15 +1,16 @@
 import { memo } from 'react';
 import { useContentStore } from '../../stores/contentStore';
-import { Editor } from './Editor';
+import { Editor } from '../editor/Editor';
 import { CalendarView } from '../calendar/CalendarView';
+import { WorkflowView } from '../workflow/WorkflowView';
 import { FileText } from 'lucide-react';
 
 /**
- * EditorContainer - Manages multiple SingleTabEditor instances.
+ * ContentContainer - Manages multiple SingleTabEditor instances.
  * Each open tab has its own editor instance, enabling instant tab switching
  * by toggling visibility instead of re-loading content.
  */
-export const EditorContainer = memo(() => {
+export const ContentContainer = memo(() => {
   const tabs = useContentStore(state => state.tabs);
   const activeTabId = useContentStore(state => state.activeTabId);
 
@@ -28,6 +29,8 @@ export const EditorContainer = memo(() => {
         <div key={tab.id} className={`w-full h-full ${tab.id === activeTabId ? 'block' : 'hidden'}`}>
           {tab.type === 'calendar' ? (
             <CalendarView />
+          ) : tab.type === 'workflow' ? (
+            <WorkflowView />
           ) : (
             <Editor
               docId={tab.docId!}
@@ -40,6 +43,6 @@ export const EditorContainer = memo(() => {
   );
 });
 
-EditorContainer.displayName = 'EditorContainer';
+ContentContainer.displayName = 'ContentContainer';
 
-export default EditorContainer;
+export default ContentContainer;

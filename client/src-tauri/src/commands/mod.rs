@@ -33,7 +33,6 @@ pub mod documents;
 pub mod media;
 
 /// RAG 커맨드: AI 질의응답, 채팅 세션, 검색
-/// RAG 커맨드: AI 질의응답, 채팅 세션, 검색
 pub mod rag;
 
 /// 알람 커맨드: 추가, 목록 조회, 읽음 처리, 삭제
@@ -47,3 +46,6 @@ pub mod chat;
 
 /// 문서 가져오기 커맨드
 pub mod import;
+
+/// 구글 드라이브 연동 커맨드
+pub mod google_drive;

@@ -9,7 +9,7 @@ export interface Tab {
   id: string; // usually document id or 'calendar'
   docId?: string; // Optional for non-documents
   title: string;
-  type: 'document' | 'calendar';
+  type: 'document' | 'calendar' | 'workflow';
   isDirty?: boolean;
 }
 
@@ -74,7 +74,7 @@ export interface ContentStore {
   setCurrentUser: (user: UserInfo) => void;
 
   // Tab Actions
-  addTab: (item: { id: string; title: string; type?: 'document' | 'calendar' }) => void;
+  addTab: (item: { id: string; title: string; type?: 'document' | 'calendar' | 'workflow' }) => void;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   reorderTabs: (newTabs: Tab[]) => void;
@@ -317,7 +317,7 @@ export const useContentStore = create<ContentStore>()(
 
       // ...
 
-      addTab: (item: { id: string; title: string; type?: 'document' | 'calendar' }) => {
+      addTab: (item: { id: string; title: string; type?: 'document' | 'calendar' | 'workflow' }) => {
         set((state) => {
           const type = item.type || 'document';
           const existingTab = state.tabs.find((t) => t.id === item.id);

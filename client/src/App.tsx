@@ -32,7 +32,7 @@ import { AuthLoginForm } from './components/auth/AuthLoginForm';
 import { AuthChangePasswordForm } from './components/auth/AuthChangePasswordForm';
 
 // Editor Components
-import { EditorContainer } from './components/editor/EditorContainer';
+import { ContentContainer } from './components/common/ContentContainer';
 import { EditorTabs } from './components/editor/EditorTabs';
 
 // Other
@@ -41,6 +41,7 @@ import { StatusBar } from './components/common/StatusBar';
 import { RagPanel } from './components/rag/RagPanel';
 import { CrewPanel } from './components/chat/CrewPanel';
 import { CalendarPanel } from './components/calendar/CalendarPanel';
+import { WorkflowPanel } from './components/workflow/WorkflowPanel';
 
 // LoginResponse imported from types
 
@@ -128,7 +129,7 @@ function AppContent() {
   const [showTabMenu, setShowTabMenu] = useState(false);
 
   // Right Panel State
-  const [activeRightTab, setActiveRightTab] = useState<'metadata' | 'rag' | 'crew' | 'calendar'>('metadata');
+  const [activeRightTab, setActiveRightTab] = useState<'metadata' | 'rag' | 'crew' | 'calendar' | 'workflow'>('metadata');
 
   // Determine active tab type
   const activeTabId = useContentStore(state => state.activeTabId);
@@ -139,9 +140,11 @@ function AppContent() {
 
   // Effect to switch right panel content based on main tab type
   useEffect(() => {
-    if (activeRightTab === 'metadata' || activeRightTab === 'calendar') { // Only switch if in default/contextual mode
+    if (activeRightTab === 'metadata' || activeRightTab === 'calendar' || activeRightTab === 'workflow') { // Only switch if in default/contextual mode
       if (activeTabType === 'calendar') {
         setActiveRightTab('calendar');
+      } else if (activeTabType === 'workflow') {
+        setActiveRightTab('workflow');
       } else {
         setActiveRightTab('metadata');
       }
@@ -431,7 +434,7 @@ function AppContent() {
                 </div>
               </div>
               <div className="flex-1 bg-zinc-900 overflow-hidden">
-                <EditorContainer />
+                <ContentContainer />
               </div>
             </div>
 
@@ -449,8 +452,11 @@ function AppContent() {
                     <div className="h-full flex items-center gap-1">
                       {/* Contextual Tabs */}
                       <button
-                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'metadata' || activeRightTab === 'calendar' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
-                        onClick={() => setActiveRightTab(activeTabType === 'calendar' ? 'calendar' : 'metadata')}
+                        className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${activeRightTab === 'metadata' || activeRightTab === 'calendar' || activeRightTab === 'workflow' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+                        onClick={() => setActiveRightTab(
+                          activeTabType === 'calendar' ? 'calendar' :
+                            activeTabType === 'workflow' ? 'workflow' :
+                              'metadata')}
                         title="Metadata"
                       >
                         <List size={16} />
@@ -480,6 +486,7 @@ function AppContent() {
                 <div className="flex-1 overflow-hidden">
                   {activeRightTab === 'metadata' && <MetadataPanel />}
                   {activeRightTab === 'calendar' && <CalendarPanel />}
+                  {activeRightTab === 'workflow' && <WorkflowPanel />}
                   {activeRightTab === 'rag' && <RagPanel />}
                   {activeRightTab === 'crew' && <CrewPanel />}
                 </div>

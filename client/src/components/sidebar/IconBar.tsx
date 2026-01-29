@@ -1,4 +1,4 @@
-import { Search, Calendar, ListTodo, Settings } from 'lucide-react';
+import { Search, Calendar, ListTodo, Settings, Workflow } from 'lucide-react';
 import { useContentStore } from '../../stores/contentStore';
 
 interface IconBarProps {
@@ -34,6 +34,13 @@ export const IconBar = ({
         onClick={handleCalendarClick}
       >
         <Calendar size={18} />
+      </button>
+      <button
+        className={`${buttonClass} mb-1`}
+        title="Workflow"
+        onClick={() => addTab({ id: 'workflow-main', title: 'Workflow', type: 'workflow' })}
+      >
+        <Workflow size={18} />
       </button>
       <button
         className={`${buttonClass} mb-1`}

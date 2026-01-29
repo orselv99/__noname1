@@ -7,6 +7,7 @@
  * 두 가지 모드를 지원합니다:
  * 1. 기본 생성 (Blank Mode): 템플릿 선택 및 제목 입력
  * 2. AI 초안 작성 (AI Mode): 주제, 템플릿, 참조 문서, 웹 검색을 통한 AI 자동 생성
+ * 3. 외부 문서 추가 (Import Mode): Legacy, 외부 서비스의 문서를 가져오기
  * 
  * 주요 기능:
  * - 그룹 및 폴더 위치 선택 (Sidebar)
@@ -46,7 +47,7 @@ interface NewDocumentDialogProps {
     tags?: string;
     summary?: string;
     content?: string; // AI 생성된 본문 내용 추가
-  }) => void;
+  }) => Promise<void> | void;
   /** 폴더 생성 핸들러 */
   onCreateFolder?: (groupId: string, parentFolderId?: string) => void;
   /** 그룹 토글 핸들러 */
@@ -98,6 +99,11 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   const [webSearchResults, setWebSearchResults] = useState<WebSearchResult[]>([]);
   const [thinkingState, setThinkingState] = useState<DraftThinkingState | null>(null);
 
+  // Custom Action State (for Import Mode)
+  const [customAction, setCustomAction] = useState<(() => Promise<void>) | null>(null);
+  const [isCustomActionEnabled, setIsCustomActionEnabled] = useState(true);
+  const [customActionLabel, setCustomActionLabel] = useState("문서 추가");
+
   // Scroll helper
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -127,6 +133,23 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
   const toggleAccordion = (section: 'title' | 'template' | 'docs' | 'web' | 'resources') => {
     setAccordionState(prev => ({ ...prev, [section]: !prev[section] }));
   };
+
+  /**
+   * Import Mode용 Submit Handler 등록 콜백 (Memoized to prevent re-renders)
+   */
+  const handleRegisterSubmit = (fn: () => Promise<void>) => {
+    setCustomAction(() => fn);
+  };
+  // Note: We don't use useCallback here because setCustomAction is stable, 
+  // but passing (fn) => setCustomAction(() => fn) inline creates a new function every render.
+  // Actually, defining it outside render or using useCallback is better.
+  // However, since handleRegisterSubmit itself is used in render, for it to be stable reference, we NEED useCallback.
+  const stableRegisterSubmit = useRef((fn: () => Promise<void>) => setCustomAction(() => fn)).current;
+
+  // Wait, useRef or useCallback? useCallback with empty deps is standard for stable function.
+  const registerSubmitHandler = useState(() => (fn: () => Promise<void>) => setCustomAction(() => fn))[0];
+  // Or just useCallback.
+  // const registerSubmitHandler = useCallback((fn: () => Promise<void>) => setCustomAction(() => fn), []);
 
   /**
    * 문서 검색 핸들러
@@ -399,6 +422,10 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
     setImportedContent(''); // Reset imported content
     setSelectedTemplate('blank');
     setTemplateSearch('');
+    // Reset Custom Action
+    setCustomAction(null);
+    setIsCustomActionEnabled(true);
+    setCustomActionLabel("문서 추가");
     setCreationMode('blank');
     setWebSearchQuery('');
     setWebSearchResults([]);
@@ -579,16 +606,20 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
 
               {creationMode === 'import' && (
                 <NewDocumentImportMode
-                  onImportComplete={(importedTitle, importedContent) => {
-                    setTitle(importedTitle);
-                    setImportedContent(importedContent);
-                  }}
+                  onCreate={onCreate}
+                  groups={groups}
+                  selectedGroupId={selectedGroupId}
+                  selectedFolderId={selectedFolderId}
+                  onClose={onClose}
+                  registerSubmitHandler={registerSubmitHandler}
+                  setSubmitEnabled={setIsCustomActionEnabled}
+                  setSubmitLabel={setCustomActionLabel}
                 />
               )}
             </div>
 
             {/* 기본 모드 하단 제목 입력 (고정) */}
-            {(creationMode === 'blank' || (creationMode === 'import' && title)) && (
+            {creationMode === 'blank' && (
               <div className="px-5 py-4 border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-sm z-10 shrink-0">
                 <label className="block text-sm font-medium text-zinc-400 mb-2">
                   문서 제목
@@ -644,11 +675,21 @@ export const NewDocumentDialog = ({ isOpen, onClose, onCreate, onCreateFolder, o
           {/* 가져오기 모드일 때 버튼 */}
           {creationMode === 'import' && (
             <button
-              onClick={handleCreate}
-              disabled={!title.trim()} // title is set by onImportComplete
+              onClick={async () => {
+                if (customAction) {
+                  try {
+                    await customAction();
+                  } catch (e) {
+                    console.error("Import action failed", e);
+                  }
+                } else {
+                  handleCreate();
+                }
+              }}
+              disabled={customAction ? !isCustomActionEnabled : !title.trim()}
               className="flex-1 py-2.5 px-4 rounded-lg text-white text-sm font-medium transition-colors bg-green-600 hover:bg-green-500 shadow-green-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Upload size={16} /> 문서 추가
+              <Upload size={16} /> {customActionLabel}
             </button>
           )}
         </div>

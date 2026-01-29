@@ -1,23 +1,113 @@
-import { useState } from 'react';
-import { Upload, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Upload, Layout, Loader2 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
+import { marked } from 'marked';
+import { FolderItem } from './types';
+import { ImportGoogleDriveView, ImportGoogleDriveViewHandle } from './import/ImportGoogleDriveView';
 
+/**
+ * NewDocumentImportMode Props 정의
+ * 직접 생성을 위해 상위 컴포넌트의 onCreate와 컨텍스트 정보를 받습니다.
+ */
 interface NewDocumentImportModeProps {
-  onImportComplete?: (title: string, content: string) => void;
+  onCreate?: (data: {
+    groupId: string;
+    groupType: 'department' | 'project' | 'private';
+    folderId?: string;
+    template: string;
+    title: string;
+    content?: string;
+  }) => Promise<void> | void;
+  groups: {
+    id: string;
+    name: string;
+    type: 'department' | 'project' | 'private';
+    expanded: boolean;
+    folders: FolderItem[];
+  }[];
+  selectedGroupId: string;
+  selectedFolderId: string | null;
+  onClose: () => void;
+  // External Action Registration
+  registerSubmitHandler?: (handler: () => Promise<void>) => void;
+  setSubmitEnabled?: (enabled: boolean) => void;
+  setSubmitLabel?: (label: string) => void;
 }
 
 /**
  * NewDocumentImportMode 컴포넌트
  * 
- * 기존의 레거시 문서(워드, PDF, HWP 등)를 가져와서 시스템에 등록하는 화면입니다.
- * Tauri File Dialog를 통해 파일을 선택하고, 백엔드에서 Markdown으로 변환하여 메타데이터를 표시합니다.
+ * 기능:
+ * 1. 로컬 파일 가져오기
+ * 2. 외부 서비스(Google Drive) 가져오기 -> ImportGoogleDriveView 컴포넌트로 위임
  */
-export function NewDocumentImportMode({ onImportComplete }: NewDocumentImportModeProps) {
+export function NewDocumentImportMode({
+  onCreate,
+  groups,
+  selectedGroupId,
+  selectedFolderId,
+  onClose,
+  registerSubmitHandler,
+  setSubmitEnabled,
+  setSubmitLabel
+}: NewDocumentImportModeProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fileInfo, setFileInfo] = useState<{ name: string; size: number } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  const driveRef = useRef<ImportGoogleDriveViewHandle>(null);
+
+  // Initialize button state
+  useEffect(() => {
+    // Default state: disabled until selection
+    setSubmitEnabled?.(false);
+    setSubmitLabel?.("문서 가져오기");
+
+    // Register handler that delegates to drive view
+    registerSubmitHandler?.(async () => {
+      if (driveRef.current) {
+        await driveRef.current.executeImport();
+      }
+    });
+
+    // Cleanup: Reset on unmount
+    return () => {
+      setSubmitEnabled?.(true); // Reset to default true for other modes or safety
+      setSubmitLabel?.("문서 추가");
+    };
+  }, [registerSubmitHandler, setSubmitEnabled, setSubmitLabel]);
+
+  // --- Helper: 문서 생성 요청 ---
+  const createDocument = async (title: string, content: string) => {
+    if (!selectedGroupId || !onCreate) return;
+
+    const group = groups.find(g => g.id === selectedGroupId);
+    if (!group) {
+      console.error("Selected group not found");
+      return;
+    }
+
+    // Markdown을 HTML로 변환 (에디터 호환성)
+    let htmlContent = content;
+    try {
+      htmlContent = await marked.parse(content);
+    } catch (e) {
+      console.error("Markdown parsing failed", e);
+    }
+
+    // Await to ensure sequential execution mostly
+    await onCreate({
+      groupId: group.id,
+      groupType: group.type,
+      folderId: selectedFolderId || undefined,
+      template: 'blank',
+      title: title,
+      content: htmlContent
+    });
+  };
+
+  // --- 로컬 파일 핸들러 ---
   const handleFileSelect = async () => {
     try {
       const selected = await open({
@@ -29,127 +119,99 @@ export function NewDocumentImportMode({ onImportComplete }: NewDocumentImportMod
       });
 
       if (selected && typeof selected === 'string') {
-        setIsLoading(true);
-        setError(null);
-        setFileInfo(null);
-
-        try {
-          // 백엔드 import_file 커맨드 호출
-          const content = await invoke<string>('import_file', { path: selected });
-
-          const rawName = selected.split(/[\\/]/).pop() || selected;
-          const nameWithoutExt = rawName.replace(/\.[^/.]+$/, "");
-          // 텍스트 길이로 대략적인 크기 표시 (정확한 파일 크기는 아니지만 텍스트 양 가늠)
-          // media 크기는 현재 포함되지 않으나 요구사항에 맞춰 텍스트 길이 사용
-          const size = new TextEncoder().encode(content).length;
-
-          setFileInfo({
-            name: nameWithoutExt,
-            size: size
-          });
-
-          // 상위 컴포넌트로 데이터 전달 (생성 준비 완료)
-          onImportComplete?.(nameWithoutExt, content);
-
-        } catch (err) {
-          console.error("Import failed:", err);
-          setError(String(err));
-        } finally {
-          setIsLoading(false);
-        }
+        processLocalFile(selected);
       }
     } catch (err) {
       console.error("Failed to open dialog:", err);
-      setError("파일 선택 창을 열 수 없습니다. (플러그인 오류)");
+      setError("파일 선택 창을 열 수 없습니다.");
     }
   };
 
-  /** 파일 크기 포맷팅 유틸리티 */
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const processLocalFile = async (path: string) => {
+    setIsLoading(true);
+    setStatusMessage("문서를 변환하고 저장하는 중...");
+
+    try {
+      const content = await invoke<string>('import_file', { path });
+      const rawName = path.split(/[\\/]/).pop() || path;
+      const nameWithoutExt = rawName.replace(/\.[^/.]+$/, "");
+
+      await createDocument(nameWithoutExt, content);
+      onClose();
+
+    } catch (err) {
+      console.error("Import failed:", err);
+      setError(String(err));
+      setIsLoading(false);
+    }
   };
 
-  if (fileInfo) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full animate-in fade-in duration-300 p-6 space-y-6">
-        <div className="p-4 bg-green-500/20 rounded-full">
-          <FileText className="text-green-400" size={40} />
-        </div>
+  // --- Google Drive Handler (Delegated) ---
+  const handleGoogleImportSelected = async (files: { name: string, content: string }[]) => {
+    // Process creation sequentially
+    for (const file of files) {
+      await createDocument(file.name, file.content);
+    }
+  };
 
-        <div className="text-center space-y-2">
-          <h3 className="text-xl font-medium text-white">{fileInfo.name}</h3>
-          <p className="text-zinc-400">
-            변환된 크기: <span className="text-zinc-300">{formatSize(fileInfo.size)}</span>
-          </p>
-        </div>
+  const handleSelectionChange = (count: number) => {
+    setSubmitEnabled?.(count > 0);
+    setSubmitLabel?.(count > 0 ? `${count}개 가져오기` : "문서 가져오기");
+  };
 
-        <div className="p-4 bg-zinc-800/50 rounded-lg border border-zinc-700 max-w-sm w-full">
-          <p className="text-sm text-zinc-400 text-center">
-            문서 내용을 성공적으로 가져왔습니다.<br />
-            아래 <b>'문서 추가'</b> 버튼을 눌러 저장을 완료하세요.
-          </p>
-        </div>
-
-        <button
-          onClick={handleFileSelect}
-          className="text-sm text-zinc-500 hover:text-white underline underline-offset-4"
-        >
-          다른 파일 선택하기
-        </button>
-      </div>
-    );
-  }
-
+  // --- Render: 메인 메뉴 ---
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8 space-y-6 animate-in fade-in duration-300">
-
-      {/* 아이콘 및 안내 문구 영역 */}
-      <div className={`p-6 rounded-full transition-all ${isLoading ? 'bg-blue-500/20' : 'bg-zinc-800/50'}`}>
-        {isLoading ? (
-          <Loader2 size={48} className="text-blue-500 animate-spin" />
-        ) : error ? (
-          <AlertCircle size={48} className="text-red-500" />
-        ) : (
-          <Upload size={48} className="text-zinc-500" />
-        )}
+    <div className="flex flex-col h-full p-8 animate-in fade-in duration-300 overflow-y-auto relative">
+      <div className="text-center space-y-2 mb-8">
+        <h2 className="text-2xl font-bold text-white">문서 가져오기</h2>
+        <p className="text-zinc-400 text-sm">로컬 파일이나 클라우드에서 문서를 가져와 바로 저장합니다.</p>
       </div>
 
-      <div className="space-y-2">
-        <h3 className="text-xl font-semibold text-white">
-          {isLoading ? '문서 변환 중...' : '기존 문서 가져오기'}
-        </h3>
-        <p className="text-sm text-zinc-400 max-w-sm mx-auto leading-relaxed">
-          {error ? (
-            <span className="text-red-400">{error}</span>
-          ) : isLoading ? (
-            "문서의 내용을 분석하여 Markdown 형식으로 변환하고 있습니다.\n잠시만 기다려주세요."
-          ) : (
-            <>
-              Word, PPT, Excel 및 HWP 문서를 선택하여<br />
-              내용을 자동으로 추출하고 가져옵니다.
-            </>
-          )}
-        </p>
-      </div>
-
-      {/* 파일 선택 버튼 */}
-      {!isLoading && (
+      <div className="grid grid-cols-1 gap-6 max-w-md mx-auto w-full">
+        {/* Local File */}
         <button
           onClick={handleFileSelect}
-          className="w-full max-w-md border-2 border-dashed border-zinc-700 rounded-xl p-10 hover:border-blue-500/50 hover:bg-zinc-800/30 transition-all cursor-pointer group flex flex-col items-center gap-2 focus:outline-none"
+          disabled={isLoading}
+          className="flex items-center gap-4 p-4 rounded-xl border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-500 transition-all text-left group"
         >
-          <FileText size={32} className="text-zinc-600 group-hover:text-blue-400 transition-colors" />
-          <div className="text-sm font-medium text-zinc-500 group-hover:text-zinc-300">
-            여기를 클릭하여 파일 선택
+          <div className="p-3 bg-zinc-700 rounded-full group-hover:bg-zinc-600 transition-colors">
+            <Upload size={24} className="text-zinc-300" />
           </div>
-          <div className="text-xs text-zinc-600">
-            지원 형식: .docx, .pptx, .xlsx, .hwp
+          <div>
+            <div className="font-medium text-white">로컬 파일 선택</div>
+            <div className="text-xs text-zinc-400 mt-0.5">.docx, .hwp, .pptx 지원</div>
           </div>
+          {isLoading && <Loader2 size={16} className="ml-auto animate-spin text-zinc-500" />}
         </button>
+
+        {/* Google Drive View (Embedded Button inside) */}
+        <ImportGoogleDriveView
+          ref={driveRef}
+          onImportSelected={handleGoogleImportSelected}
+          onClose={onClose}
+          onSelectionChange={handleSelectionChange}
+        />
+
+        {/* Notions (Disabled) */}
+        <div className="flex items-center gap-4 p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 opacity-50 cursor-not-allowed">
+          <div className="p-3 bg-zinc-800 rounded-full">
+            <Layout size={24} className="text-zinc-600" />
+          </div>
+          <div>
+            <div className="font-medium text-zinc-500">Notion</div>
+            <div className="text-xs text-zinc-600 mt-0.5">준비 중입니다</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Error / Loading Overlay if needed for local */}
+      {statusMessage && (
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-50 rounded-xl">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 size={32} className="animate-spin text-blue-500" />
+            <p className="text-white font-medium">{statusMessage}</p>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,11 +1,11 @@
-import { X, Plus, MoreHorizontal, Calendar as CalendarIcon, FileText } from 'lucide-react';
+import { X, Plus, MoreHorizontal, Calendar as CalendarIcon, FileText, Workflow } from 'lucide-react';
 import { useContentStore, ContentStore } from '../../stores/contentStore';
 import { useRef, useState, useEffect, useMemo, memo, useCallback } from 'react';
 
 interface SortableTabProps {
   id: string;
   title: string;
-  type?: 'document' | 'calendar';
+  type?: 'document' | 'calendar' | 'workflow';
   isActive: boolean;
   isDirty?: boolean;
   isRecycled?: boolean;
@@ -34,7 +34,9 @@ const SortableTab = memo(({ title, type, isActive, isDirty, isRecycled, onSelect
       title={title}
     >
       <span className="truncate select-none flex-1 flex items-center gap-1.5">
-        {type === 'calendar' ? <CalendarIcon size={12} className="shrink-0" /> : <FileText size={12} className="shrink-0 opacity-70" />}
+        {type === 'calendar' ? <CalendarIcon size={12} className="shrink-0" /> :
+          type === 'workflow' ? <Workflow size={12} className="shrink-0" /> :
+            <FileText size={12} className="shrink-0 opacity-70" />}
         <span className="truncate">{title}</span>
       </span>
 

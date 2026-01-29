@@ -830,7 +830,7 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
       <NewDocumentDialog
         isOpen={showNewDocDialog}
         onClose={() => setShowNewDocDialog(false)}
-        onCreate={(data) => {
+        onCreate={async (data) => {
           let gType = GroupType.Project;
           if (data.groupType === 'department') gType = GroupType.Department;
           else if (data.groupType === 'private') gType = GroupType.Private;
@@ -840,7 +840,7 @@ export const DocumentList = memo(({ onSelectDocument, mode = 'folder' }: Documen
           // Private 그룹은 ID가 없어야 함 (undefined)
           const finalGroupId = gType === GroupType.Private ? undefined : data.groupId;
 
-          createDocument(data.title, finalGroupId, gType, data.folderId, undefined, data.content, tagArray, data.summary);
+          await createDocument(data.title, finalGroupId, gType, data.folderId, undefined, data.content, tagArray, data.summary);
         }}
         onToggleGroup={handleToggleGroup}
         onToggleFolder={handleToggleExpandInfo}

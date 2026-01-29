@@ -160,7 +160,13 @@ pub fn run() {
       // ----------------------------------------------------------------
       // 문서 가져오기 명령
       // ----------------------------------------------------------------
-      commands::import::import_file
+      commands::import::import_file,
+      // ----------------------------------------------------------------
+      // 구글 드라이브 커맨드
+      // ----------------------------------------------------------------
+      commands::google_drive::init_google_auth,
+      commands::google_drive::list_google_drive_files,
+      commands::google_drive::download_google_drive_file
     ])
     // ====================================================================
     // 앱 초기화 콜백 (.setup)
@@ -168,6 +174,11 @@ pub fn run() {
     // 앱이 시작될 때 한 번 실행되는 초기화 로직
     // C++ 비교: QApplication 생성 후, exec() 호출 전 초기화 코드
     .setup(|app| {
+      // Google Drive State 초기화
+      app.manage(Mutex::new(
+        commands::google_drive::GoogleDriveState::default(),
+      ));
+
       // SQLite 데이터베이스 초기화 (오프라인 지원용)
       match database::init_database(&app.handle()) {
         Ok(conn) => {
