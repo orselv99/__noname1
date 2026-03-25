@@ -2,7 +2,7 @@
 
 조직의 업무 효율성을 극대화하기 위해 설계된 멀티테넌트(Multi-tenant) 기반의 엔터프라이즈 협업 플랫폼 프로토타입입니다. 시스템 관리자(Super Admin), 고객사 관리자(Tenant Admin), 일반 사용자를 위한 3-Tier 아키텍처를 갖추고 있으며, 외부 AI 추론 서버와 연동하여 고객사별 맞춤형 AI 인프라를 제공합니다.
 
-## 🎯 Project Focus (Supercent AI Application Engineer 역량 증명)
+## 🎯 Project Focus
 - **AI Orchestration:** 특정 AI 모델에 종속되지 않고, Llama 3, Phi-3 등의 다양한 LLM과 Vector Embedding 모델을 독립된 AI 서빙 환경(Docker + llama.cpp, GPU 서버)에서 API로 연동 및 제어.
 - **Full-Stack Execution:** TypeScript, Go, Rust를 유연하게 조합하여 백엔드 인프라부터 데스크톱 클라이언트까지 엔드투엔드(E2E) 서비스를 빠르게 프로토타이핑.
 - **Scalable Architecture:** 서브도메인 기반의 테넌트 분리, 대규모 사용자 CSV 일괄 업로드 등 실제 B2B SaaS 프로덕트 레벨의 확장성 고려.
